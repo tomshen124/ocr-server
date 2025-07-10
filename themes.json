@@ -1,0 +1,46 @@
+{
+  "themes": [
+    {
+      "id": "theme_001",
+      "name": "工程渣土准运证核准",
+      "description": "杭州市工程渣土准运证核准申请材料预审",
+      "rule_file": "rules/theme_001.json",
+      "enabled": true
+    },
+    {
+      "id": "theme_002",
+      "name": "建筑工程施工许可",
+      "description": "建筑工程施工许可证申请材料预审",
+      "rule_file": "rules/theme_002.json",
+      "enabled": true
+    },
+    {
+      "id": "theme_003",
+      "name": "环境影响评价",
+      "description": "环境影响评价报告材料预审",
+      "rule_file": "rules/theme_003.json",
+      "enabled": true
+    },
+    {
+      "id": "theme_004",
+      "name": "安全生产许可",
+      "description": "安全生产许可证申请材料预审",
+      "rule_file": "rules/theme_004.json",
+      "enabled": true
+    },
+    {
+      "id": "theme_005",
+      "name": "消防验收备案",
+      "description": "消防验收备案申请材料预审",
+      "rule_file": "rules/theme_005.json",
+      "enabled": true
+    },
+    {
+      "id": "theme_006",
+      "name": "规划许可证",
+      "description": "建设工程规划许可证申请材料预审",
+      "rule_file": "rules/theme_006.json",
+      "enabled": true
+    }
+  ]
+}

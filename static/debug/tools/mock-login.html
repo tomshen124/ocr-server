@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模拟登录工具 - Debug环境</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 20px; color: #333;
+        }
+        
+        .container {
+            max-width: 900px; margin: 0 auto; background: white;
+            border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 30px; text-align: center;
+        }
+        .header h1 { font-size: 28px; margin-bottom: 10px; font-weight: 700; }
+        .header p { opacity: 0.9; font-size: 16px; }
+        
+        .warning-banner {
+            background: linear-gradient(135deg, #ffeaa7, #fdcb6e);
+            color: #2d3436; padding: 20px; text-align: center;
+            border-bottom: 3px solid #e17055;
+        }
+        .warning-banner strong { font-size: 18px; display: block; margin-bottom: 5px; }
+        
+        .content { padding: 40px; }
+        .two-column {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .section {
+            background: #f8f9fa; border-radius: 12px; padding: 25px;
+            border: 2px solid #e9ecef;
+        }
+        .section-title {
+            font-size: 20px; font-weight: 700; color: #2c3e50;
+            margin-bottom: 20px; display: flex; align-items: center;
+        }
+        .section-title .icon { margin-right: 10px; }
+        
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: block; margin-bottom: 8px; font-weight: 600;
+            color: #495057; font-size: 14px;
+        }
+        .form-group input, .form-group select {
+            width: 100%; padding: 12px; border: 2px solid #e9ecef;
+            border-radius: 8px; font-size: 14px; transition: all 0.3s ease;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            background: #667eea; color: white; border: none;
+            padding: 12px 24px; border-radius: 8px; font-size: 14px;
+            font-weight: 600; cursor: pointer; margin-right: 10px;
+            margin-bottom: 10px; transition: all 0.3s ease;
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn:hover { background: #5a67d8; transform: translateY(-2px); }
+        .btn:disabled {
+            background: #6c757d; cursor: not-allowed; transform: none;
+        }
+        .btn.success { background: #28a745; }
+        .btn.success:hover { background: #1e7e34; }
+        .btn.warning { background: #ffc107; color: #212529; }
+        .btn.warning:hover { background: #e0a800; }
+        .btn.danger { background: #dc3545; }
+        .btn.danger:hover { background: #c82333; }
+        
+        .status-panel {
+            background: white; border: 2px solid #e9ecef; border-radius: 12px;
+            padding: 25px; margin-top: 20px;
+        }
+        .status-indicator {
+            width: 12px; height: 12px; border-radius: 50%;
+            display: inline-block; margin-right: 8px;
+        }
+        .status-online { background: #28a745; }
+        .status-offline { background: #dc3545; }
+        .status-checking { background: #ffc107; animation: pulse 1.5s infinite; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .user-info {
+            background: #e9ecef; padding: 15px; border-radius: 8px;
+            margin-top: 15px; font-family: 'Courier New', monospace;
+            font-size: 13px; white-space: pre-wrap;
+        }
+        
+        .quick-users {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px; margin-top: 20px;
+        }
+        .quick-user {
+            background: white; border: 2px solid #e9ecef; border-radius: 8px;
+            padding: 15px; cursor: pointer; transition: all 0.3s ease;
+            text-align: center;
+        }
+        .quick-user:hover {
+            border-color: #667eea; transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+        }
+        .quick-user.active { border-color: #667eea; background: #f0f4ff; }
+        .quick-user-name { font-weight: 600; margin-bottom: 5px; }
+        .quick-user-id { font-size: 12px; color: #6c757d; }
+        
+        .message { padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .message.success {
+            background: #d4edda; color: #155724; border: 1px solid #c3e6cb;
+        }
+        .message.error {
+            background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+        }
+        .message.info {
+            background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb;
+        }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <h1>🔑 模拟登录工具</h1>
+            <p>快速模拟用户登录，支持多用户角色切换和实时状态监控</p>
+        </div>
+
+        <!-- 警告横幅 -->
+        <div class="warning-banner">
+            <strong>⚠️ 开发环境专用功能</strong>
+            <p>此工具仅用于开发调试，包含敏感的认证绕过功能，生产环境必须禁用！</p>
+        </div>
+
+        <div class="content">
+            <!-- 状态消息 -->
+            <div id="statusMessage"></div>
+
+            <!-- 主要内容区域 -->
+            <div class="two-column">
+                <!-- 左侧：用户信息表单 -->
+                <div class="section">
+                    <div class="section-title">
+                        <span class="icon">👤</span>
+                        用户信息配置
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="userId">用户ID *</label>
+                        <input type="text" id="userId" placeholder="输入用户ID">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="userName">用户姓名</label>
+                        <input type="text" id="userName" placeholder="输入用户姓名">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="certificateType">证件类型</label>
+                        <select id="certificateType">
+                            <option value="01">身份证</option>
+                            <option value="02">护照</option>
+                            <option value="03">港澳通行证</option>
+                            <option value="04">台胞证</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="certificateNumber">证件号码</label>
+                        <input type="text" id="certificateNumber" placeholder="输入证件号码">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phoneNumber">手机号码</label>
+                        <input type="text" id="phoneNumber" placeholder="输入手机号码">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">邮箱地址</label>
+                        <input type="email" id="email" placeholder="输入邮箱地址">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="organizationName">组织名称</label>
+                        <input type="text" id="organizationName" placeholder="输入组织名称">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="organizationCode">组织代码</label>
+                        <input type="text" id="organizationCode" placeholder="输入组织代码">
+                    </div>
+                    
+                    <button class="btn" onclick="performMockLogin()" id="loginBtn">
+                        🚀 执行模拟登录
+                    </button>
+                    <button class="btn warning" onclick="clearForm()">
+                        🧹 清空表单
+                    </button>
+                </div>
+
+                <!-- 右侧：快速用户选择 -->
+                <div class="section">
+                    <div class="section-title">
+                        <span class="icon">⚡</span>
+                        快速用户选择
+                    </div>
+                    <p style="color: #6c757d; margin-bottom: 15px; font-size: 14px;">
+                        点击预设用户快速填入信息
+                    </p>
+                    <div id="quickUsers" class="quick-users">
+                        <!-- 动态生成快速用户选项 -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 认证状态面板 -->
+            <div class="status-panel">
+                <div class="section-title">
+                    <span class="icon">🛡️</span>
+                    认证状态监控
+                </div>
+                
+                <p>
+                    当前状态：
+                    <span id="authStatusIndicator" class="status-indicator status-checking"></span>
+                    <span id="authStatusText">检查中...</span>
+                </p>
+                
+                <div id="userInfo" class="user-info hidden"></div>
+                
+                <div style="margin-top: 20px;">
+                    <button class="btn success" onclick="checkAuthStatus()">
+                        🔄 刷新状态
+                    </button>
+                    <button class="btn" onclick="openMainApp()">
+                        🏠 进入主应用
+                    </button>
+                    <button class="btn" onclick="openPreviewDemo()">
+                        📋 预审演示
+                    </button>
+                    <button class="btn" onclick="openApiTest()">
+                        🔌 API测试
+                    </button>
+                    <button class="btn danger" onclick="performLogout()">
+                        🚪 退出登录
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入配置文件 -->
+    <script src="../assets/test-config.js"></script>
+    <script>
+        // 全局状态
+        let currentUser = null;
+        let isAuthenticated = false;
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('🔑 模拟登录工具初始化...');
+            
+            // 初始化快速用户选项
+            initializeQuickUsers();
+            
+            // 检查当前认证状态
+            await checkAuthStatus();
+            
+            // 设置默认用户（如果没有认证）
+            if (!isAuthenticated) {
+                selectQuickUser('debug_user_001');
+            }
+            
+            showMessage('模拟登录工具已就绪', 'info');
+        });
+
+        // 初始化快速用户选项
+        function initializeQuickUsers() {
+            const quickUsersContainer = document.getElementById('quickUsers');
+            const users = DebugConfig.mockData.users;
+            
+            quickUsersContainer.innerHTML = '';
+            
+            users.forEach(user => {
+                const userElement = document.createElement('div');
+                userElement.className = 'quick-user';
+                userElement.onclick = () => selectQuickUser(user.userId);
+                userElement.innerHTML = `
+                    <div class="quick-user-name">${user.userName}</div>
+                    <div class="quick-user-id">${user.userId}</div>
+                `;
+                quickUsersContainer.appendChild(userElement);
+            });
+        }
+
+        // 选择快速用户
+        function selectQuickUser(userId) {
+            const user = DebugConfig.utils.getMockUser(userId);
+            
+            if (user) {
+                // 更新表单
+                document.getElementById('userId').value = user.userId;
+                document.getElementById('userName').value = user.userName;
+                document.getElementById('certificateType').value = user.certificateType || '01';
+                document.getElementById('certificateNumber').value = user.certificateNumber;
+                document.getElementById('phoneNumber').value = user.phoneNumber;
+                document.getElementById('email').value = user.email;
+                document.getElementById('organizationName').value = user.organizationName;
+                document.getElementById('organizationCode').value = user.organizationCode;
+                
+                // 更新选中状态
+                document.querySelectorAll('.quick-user').forEach(el => {
+                    el.classList.remove('active');
+                });
+                event.target.closest('.quick-user').classList.add('active');
+                
+                currentUser = user;
+                DebugConfig.utils.log(`已选择用户: ${user.userName} (${user.userId})`, 'info');
+            }
+        }
+
+        // 执行模拟登录
+        async function performMockLogin() {
+            const loginBtn = document.getElementById('loginBtn');
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '🔄 登录中...';
+            
+            try {
+                // 收集表单数据
+                const userData = {
+                    userId: document.getElementById('userId').value,
+                    userName: document.getElementById('userName').value,
+                    certificateType: document.getElementById('certificateType').value,
+                    certificateNumber: document.getElementById('certificateNumber').value,
+                    phoneNumber: document.getElementById('phoneNumber').value,
+                    email: document.getElementById('email').value,
+                    organizationName: document.getElementById('organizationName').value,
+                    organizationCode: document.getElementById('organizationCode').value
+                };
+                
+                // 验证必填字段
+                if (!userData.userId) {
+                    throw new Error('用户ID不能为空');
+                }
+                
+                DebugConfig.utils.log('执行模拟登录...', 'info', userData);
+                
+                // 调用模拟登录API
+                const response = await fetch('/api/dev/mock_login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(userData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    showMessage('✅ 模拟登录成功！', 'success');
+                    currentUser = userData;
+                    isAuthenticated = true;
+                    await checkAuthStatus();
+                } else {
+                    throw new Error(result.errorMsg || '登录失败');
+                }
+                
+            } catch (error) {
+                DebugConfig.utils.log('模拟登录失败', 'error', error);
+                showMessage(`❌ 登录失败: ${error.message}`, 'error');
+            } finally {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = '🚀 执行模拟登录';
+            }
+        }
+
+        // 检查认证状态
+        async function checkAuthStatus() {
+            const indicator = document.getElementById('authStatusIndicator');
+            const statusText = document.getElementById('authStatusText');
+            const userInfo = document.getElementById('userInfo');
+            
+            indicator.className = 'status-indicator status-checking';
+            statusText.textContent = '检查中...';
+            
+            try {
+                const response = await fetch('/api/auth/status', {
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success && result.data?.isAuthenticated) {
+                    // 已认证
+                    indicator.className = 'status-indicator status-online';
+                    statusText.textContent = '已认证';
+                    isAuthenticated = true;
+                    
+                    // 显示用户信息
+                    userInfo.textContent = JSON.stringify(result.data.user || result.data, null, 2);
+                    userInfo.classList.remove('hidden');
+                    
+                    DebugConfig.utils.log('用户已认证', 'info', result.data);
+                } else {
+                    // 未认证
+                    indicator.className = 'status-indicator status-offline';
+                    statusText.textContent = '未认证';
+                    isAuthenticated = false;
+                    userInfo.classList.add('hidden');
+                }
+                
+            } catch (error) {
+                indicator.className = 'status-indicator status-offline';
+                statusText.textContent = '检查失败';
+                userInfo.classList.add('hidden');
+                isAuthenticated = false;
+                
+                DebugConfig.utils.log('认证状态检查失败', 'error', error);
+            }
+        }
+
+        // 执行登出
+        async function performLogout() {
+            try {
+                const response = await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                showMessage('已退出登录', 'info');
+                isAuthenticated = false;
+                currentUser = null;
+                
+                // 刷新认证状态
+                await checkAuthStatus();
+                
+            } catch (error) {
+                DebugConfig.utils.log('退出登录失败', 'error', error);
+                showMessage('退出登录时发生错误', 'error');
+            }
+        }
+
+        // 清空表单
+        function clearForm() {
+            document.querySelectorAll('input').forEach(input => {
+                input.value = '';
+            });
+            document.getElementById('certificateType').value = '01';
+            
+            // 清除选中状态
+            document.querySelectorAll('.quick-user').forEach(el => {
+                el.classList.remove('active');
+            });
+            
+            currentUser = null;
+            showMessage('表单已清空', 'info');
+        }
+
+        // 显示消息
+        function showMessage(message, type = 'info') {
+            const messageContainer = document.getElementById('statusMessage');
+            messageContainer.innerHTML = `
+                <div class="message ${type}">
+                    ${message}
+                </div>
+            `;
+            
+            // 3秒后自动清除消息
+            setTimeout(() => {
+                messageContainer.innerHTML = '';
+            }, 3000);
+        }
+
+        // 导航功能
+        function openMainApp() {
+            window.open('/static/prod/', '_blank');
+        }
+
+        function openPreviewDemo() {
+            window.open('/static/debug/tools/preview-demo.html', '_blank');
+        }
+
+        function openApiTest() {
+            window.open('/static/debug/tools/api-test.html', '_blank');
+        }
+    </script>
+</body>
+</html> 

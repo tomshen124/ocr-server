@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数据管理工具 - Debug环境</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 20px; color: #333;
+        }
+        
+        .container {
+            max-width: 1200px; margin: 0 auto; background: white;
+            border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 30px; text-align: center;
+        }
+        .header h1 { font-size: 28px; margin-bottom: 10px; font-weight: 700; }
+        .header p { opacity: 0.9; font-size: 16px; }
+        
+        .content { padding: 30px; }
+        
+        .nav-tabs {
+            display: flex; background: #f8f9fa; border-bottom: 2px solid #e9ecef;
+            border-radius: 8px 8px 0 0; overflow: hidden;
+        }
+        .tab {
+            padding: 15px 25px; cursor: pointer; border: none; background: none;
+            font-size: 14px; font-weight: 600; color: #6c757d;
+            transition: all 0.3s ease; flex: 1; text-align: center;
+        }
+        .tab.active { color: white; background: #667eea; }
+        .tab:hover:not(.active) { background: #e9ecef; }
+        
+        .tab-content {
+            display: none; background: #f8f9fa; padding: 30px;
+            border-radius: 0 0 8px 8px; min-height: 500px;
+        }
+        .tab-content.active { display: block; }
+        
+        .section {
+            background: white; border-radius: 12px; padding: 25px;
+            margin-bottom: 20px; border: 2px solid #e9ecef;
+        }
+        .section-title {
+            font-size: 18px; font-weight: 700; color: #2c3e50;
+            margin-bottom: 20px; display: flex; align-items: center;
+        }
+        .section-title .icon { margin-right: 10px; }
+        
+        .btn {
+            background: #667eea; color: white; border: none;
+            padding: 10px 20px; border-radius: 6px; font-size: 14px;
+            font-weight: 600; cursor: pointer; margin-right: 10px;
+            margin-bottom: 10px; transition: all 0.3s ease;
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn:hover { background: #5a67d8; }
+        .btn:disabled { background: #6c757d; cursor: not-allowed; }
+        .btn.success { background: #28a745; }
+        .btn.warning { background: #ffc107; color: #212529; }
+        .btn.danger { background: #dc3545; }
+        
+        .data-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .data-card {
+            background: #f8f9fa; border: 2px solid #e9ecef; border-radius: 8px;
+            padding: 20px; transition: all 0.3s ease;
+        }
+        .data-card:hover {
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .data-preview {
+            background: #2d3748; color: #e2e8f0; border-radius: 6px;
+            padding: 15px; font-family: monospace; font-size: 12px;
+            max-height: 200px; overflow-y: auto; margin: 15px 0;
+        }
+        
+        .form-group { margin-bottom: 15px; }
+        .form-group label {
+            display: block; margin-bottom: 8px; font-weight: 600;
+            color: #495057; font-size: 14px;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 10px; border: 2px solid #e9ecef;
+            border-radius: 6px; font-size: 14px; transition: all 0.3s ease;
+        }
+        .form-group textarea { resize: vertical; min-height: 100px; }
+        
+        .message { padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .message.success {
+            background: #d4edda; color: #155724; border: 1px solid #c3e6cb;
+        }
+        .message.error {
+            background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+        }
+        .message.info {
+            background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb;
+        }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <h1>📊 数据管理工具</h1>
+            <p>管理测试数据、配置文件和模拟数据，支持导入导出</p>
+        </div>
+
+        <div class="content">
+            <!-- 状态消息 -->
+            <div id="statusMessage"></div>
+
+            <!-- 导航标签 -->
+            <div class="nav-tabs">
+                <button class="tab active" onclick="switchTab('mock-data')">模拟数据</button>
+                <button class="tab" onclick="switchTab('config-data')">配置数据</button>
+                <button class="tab" onclick="switchTab('test-data')">测试数据</button>
+                <button class="tab" onclick="switchTab('import-export')">导入导出</button>
+            </div>
+
+            <!-- 模拟数据标签 -->
+            <div id="mock-data" class="tab-content active">
+                <div class="section">
+                    <div class="section-title">
+                        <span class="icon">👥</span>
+                        用户数据管理
+                    </div>
+                    
+                    <div class="data-grid">
+                        <!-- 动态生成用户数据卡片 -->
+                    </div>
+                    
+                    <button class="btn" onclick="addMockUser()">➕ 添加用户</button>
+                    <button class="btn warning" onclick="resetMockUsers()">🔄 重置为默认</button>
+                </div>
+            </div>
+
+            <!-- 配置数据标签 -->
+            <div id="config-data" class="tab-content">
+                <div class="section">
+                    <div class="section-title">
+                        <span class="icon">⚙️</span>
+                        配置管理
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="configType">配置类型</label>
+                        <select id="configType" onchange="loadConfig()">
+                            <option value="debug">Debug配置</option>
+                            <option value="api">API配置</option>
+                            <option value="auth">认证配置</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="configEditor">配置内容 (JSON格式)</label>
+                        <textarea id="configEditor" placeholder="配置将在此显示..."></textarea>
+                    </div>
+                    
+                    <button class="btn" onclick="saveConfig()">💾 保存配置</button>
+                    <button class="btn warning" onclick="validateConfig()">✅ 验证格式</button>
+                    <button class="btn" onclick="formatConfig()">✨ 格式化</button>
+                </div>
+            </div>
+
+            <!-- 测试数据标签 -->
+            <div id="test-data" class="tab-content">
+                <div class="section">
+                    <div class="section-title">
+                        <span class="icon">🧪</span>
+                        测试数据管理
+                    </div>
+                    
+                    <div class="data-grid">
+                        <div class="data-card">
+                            <h4>预审测试数据</h4>
+                            <div class="data-preview" id="previewTestData"></div>
+                            <button class="btn" onclick="editTestData('preview')">编辑</button>
+                            <button class="btn warning" onclick="generateTestData('preview')">生成</button>
+                        </div>
+                        
+                        <div class="data-card">
+                            <h4>OCR测试数据</h4>
+                            <div class="data-preview" id="ocrTestData"></div>
+                            <button class="btn" onclick="editTestData('ocr')">编辑</button>
+                            <button class="btn warning" onclick="generateTestData('ocr')">生成</button>
+                        </div>
+                        
+                        <div class="data-card">
+                            <h4>API测试数据</h4>
+                            <div class="data-preview" id="apiTestData"></div>
+                            <button class="btn" onclick="editTestData('api')">编辑</button>
+                            <button class="btn warning" onclick="generateTestData('api')">生成</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 导入导出标签 -->
+            <div id="import-export" class="tab-content">
+                <div class="section">
+                    <div class="section-title">
+                        <span class="icon">📁</span>
+                        数据导入导出
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                        <div>
+                            <h4 style="margin-bottom: 15px;">导出数据</h4>
+                            <div class="form-group">
+                                <label>选择导出类型</label>
+                                <div style="margin-top: 10px;">
+                                    <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                        <input type="checkbox" id="exportUsers" checked style="margin-right: 8px;">
+                                        用户数据
+                                    </label>
+                                    <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                        <input type="checkbox" id="exportConfigs" checked style="margin-right: 8px;">
+                                        配置数据
+                                    </label>
+                                    <label style="display: flex; align-items: center;">
+                                        <input type="checkbox" id="exportTests" checked style="margin-right: 8px;">
+                                        测试数据
+                                    </label>
+                                </div>
+                            </div>
+                            <button class="btn" onclick="exportData()">📥 导出数据</button>
+                        </div>
+                        
+                        <div>
+                            <h4 style="margin-bottom: 15px;">导入数据</h4>
+                            <div class="form-group">
+                                <label for="importFile">选择文件</label>
+                                <input type="file" id="importFile" accept=".json" onchange="handleFileImport()">
+                            </div>
+                            <div class="form-group">
+                                <label>导入选项</label>
+                                <div style="margin-top: 10px;">
+                                    <label style="display: flex; align-items: center; margin-bottom: 10px;">
+                                        <input type="checkbox" id="overwriteData" style="margin-right: 8px;">
+                                        覆盖现有数据
+                                    </label>
+                                    <label style="display: flex; align-items: center;">
+                                        <input type="checkbox" id="backupBefore" checked style="margin-right: 8px;">
+                                        导入前备份
+                                    </label>
+                                </div>
+                            </div>
+                            <button class="btn" onclick="importData()" id="importBtn" disabled>📤 导入数据</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入配置文件 -->
+    <script src="../assets/test-config.js"></script>
+    <script>
+        // 全局状态
+        let currentTab = 'mock-data';
+        let pendingImportData = null;
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('📊 数据管理工具初始化...');
+            loadMockUsers();
+            loadTestData();
+            showMessage('数据管理工具已就绪', 'info');
+        });
+
+        // 标签切换
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+            
+            currentTab = tabName;
+            
+            if (tabName === 'config-data') {
+                loadConfig();
+            }
+        }
+
+        // 加载模拟用户
+        function loadMockUsers() {
+            const container = document.querySelector('#mock-data .data-grid');
+            const users = DebugConfig.mockData.users;
+            
+            container.innerHTML = users.map((user, index) => `
+                <div class="data-card">
+                    <h4>${user.userName} (${user.userId})</h4>
+                    <div class="data-preview">${JSON.stringify(user, null, 2)}</div>
+                    <button class="btn" onclick="editUser(${index})">编辑</button>
+                    <button class="btn danger" onclick="deleteUser(${index})">删除</button>
+                </div>
+            `).join('');
+        }
+
+        // 加载测试数据
+        function loadTestData() {
+            document.getElementById('previewTestData').textContent = 
+                JSON.stringify(DebugConfig.mockData.preview_request, null, 2);
+            document.getElementById('ocrTestData').textContent = 
+                JSON.stringify(DebugConfig.mockData.ocr_request || {}, null, 2);
+            document.getElementById('apiTestData').textContent = 
+                JSON.stringify(DebugConfig.apiTests.quickTests, null, 2);
+        }
+
+        // 加载配置
+        function loadConfig() {
+            const configType = document.getElementById('configType').value;
+            const editor = document.getElementById('configEditor');
+            
+            switch (configType) {
+                case 'debug':
+                    editor.value = JSON.stringify(DebugConfig.settings, null, 2);
+                    break;
+                case 'api':
+                    editor.value = JSON.stringify(DebugConfig.apiTests, null, 2);
+                    break;
+                default:
+                    editor.value = '{}';
+            }
+        }
+
+        // 添加模拟用户
+        function addMockUser() {
+            const newUser = {
+                userId: `debug_user_${Date.now()}`,
+                userName: '新用户',
+                certificateType: '01',
+                certificateNumber: '',
+                phoneNumber: '',
+                email: '',
+                organizationName: '',
+                organizationCode: ''
+            };
+            
+            DebugConfig.mockData.users.push(newUser);
+            loadMockUsers();
+            showMessage('已添加新用户', 'success');
+        }
+
+        // 重置模拟用户
+        function resetMockUsers() {
+            if (confirm('确定要重置为默认用户数据吗？')) {
+                // 这里可以重置为默认数据
+                showMessage('用户数据已重置', 'info');
+            }
+        }
+
+        // 保存配置
+        function saveConfig() {
+            try {
+                const configText = document.getElementById('configEditor').value;
+                const config = JSON.parse(configText);
+                showMessage('配置保存成功', 'success');
+            } catch (error) {
+                showMessage('配置格式错误: ' + error.message, 'error');
+            }
+        }
+
+        // 验证配置
+        function validateConfig() {
+            try {
+                const configText = document.getElementById('configEditor').value;
+                JSON.parse(configText);
+                showMessage('配置格式正确', 'success');
+            } catch (error) {
+                showMessage('配置格式错误: ' + error.message, 'error');
+            }
+        }
+
+        // 格式化配置
+        function formatConfig() {
+            try {
+                const configText = document.getElementById('configEditor').value;
+                const config = JSON.parse(configText);
+                document.getElementById('configEditor').value = JSON.stringify(config, null, 2);
+                showMessage('配置已格式化', 'success');
+            } catch (error) {
+                showMessage('无法格式化: ' + error.message, 'error');
+            }
+        }
+
+        // 导出数据
+        function exportData() {
+            const exportData = {};
+            
+            if (document.getElementById('exportUsers').checked) {
+                exportData.users = DebugConfig.mockData.users;
+            }
+            if (document.getElementById('exportConfigs').checked) {
+                exportData.configs = DebugConfig.settings;
+            }
+            if (document.getElementById('exportTests').checked) {
+                exportData.tests = DebugConfig.apiTests;
+            }
+            
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `debug-data-${new Date().getTime()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            showMessage('数据已导出', 'success');
+        }
+
+        // 处理文件导入
+        function handleFileImport() {
+            const file = document.getElementById('importFile').files[0];
+            const importBtn = document.getElementById('importBtn');
+            
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        pendingImportData = JSON.parse(e.target.result);
+                        importBtn.disabled = false;
+                        showMessage('文件读取成功，可以导入', 'success');
+                    } catch (error) {
+                        showMessage('文件格式错误: ' + error.message, 'error');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        // 导入数据
+        function importData() {
+            if (!pendingImportData) {
+                showMessage('请先选择要导入的文件', 'error');
+                return;
+            }
+            
+            if (document.getElementById('backupBefore').checked) {
+                // 这里可以创建备份
+            }
+            
+            try {
+                if (pendingImportData.users && document.getElementById('overwriteData').checked) {
+                    DebugConfig.mockData.users = pendingImportData.users;
+                    loadMockUsers();
+                }
+                
+                showMessage('数据导入成功', 'success');
+                pendingImportData = null;
+                document.getElementById('importFile').value = '';
+                document.getElementById('importBtn').disabled = true;
+                
+            } catch (error) {
+                showMessage('导入失败: ' + error.message, 'error');
+            }
+        }
+
+        // 显示消息
+        function showMessage(message, type = 'info') {
+            const messageContainer = document.getElementById('statusMessage');
+            messageContainer.innerHTML = `
+                <div class="message ${type}">
+                    ${message}
+                </div>
+            `;
+            
+            setTimeout(() => {
+                messageContainer.innerHTML = '';
+            }, 3000);
+        }
+    </script>
+</body>
+</html> 

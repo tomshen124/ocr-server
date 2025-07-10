@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 材料智能预审</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <h1>材料智能预审</h1>
+            <p class="login-hint">请登录以继续使用服务</p>
+
+            <div class="login-form">
+                <h2>单点登录</h2>
+                <p>您将被重定向到统一认证平台进行登录</p>
+                <button id="ssoLoginBtn" class="btn-primary btn-large">前往登录</button>
+            </div>
+
+            <div class="login-loading" id="loginLoading" style="display: none;">
+                <div class="loading-spinner"></div>
+                <p>正在验证登录状态...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug开发环境 - OCR预审系统</title>
+    <link rel="stylesheet" href="assets/debug.css">
+    <style>
+        /* 基础样式 */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; color: #333;
+        }
+        
+        /* 加载屏幕 */
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.95); z-index: 9999;
+            display: flex; justify-content: center; align-items: center;
+            flex-direction: column;
+        }
+        .loading-spinner {
+            width: 50px; height: 50px; border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea; border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* 主容器 */
+        .debug-container {
+            max-width: 1400px; margin: 20px auto; background: white;
+            border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            overflow: hidden; opacity: 0; transition: opacity 0.3s ease;
+        }
+        .debug-container.loaded { opacity: 1; }
+        
+        /* 头部 */
+        .debug-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 30px; text-align: center; position: relative;
+        }
+        .debug-header h1 { font-size: 32px; margin-bottom: 10px; font-weight: 700; }
+        .debug-header p { opacity: 0.9; font-size: 16px; margin-bottom: 20px; }
+        .debug-status {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(255,255,255,0.2); padding: 8px 15px;
+            border-radius: 20px; font-size: 14px;
+        }
+        
+        /* 警告区域 */
+        .warning-banner {
+            background: linear-gradient(135deg, #ffeaa7, #fdcb6e);
+            color: #2d3436; padding: 20px; text-align: center;
+            border-bottom: 3px solid #e17055;
+        }
+        .warning-banner strong { font-size: 18px; display: block; margin-bottom: 5px; }
+        
+        /* 禁用状态 */
+        .debug-disabled {
+            text-align: center; padding: 60px 40px;
+            background: #f8f9fa; border-radius: 12px; margin: 40px;
+        }
+        .debug-disabled .icon { font-size: 64px; color: #e74c3c; margin-bottom: 20px; }
+        .debug-disabled h2 { color: #2c3e50; margin-bottom: 15px; }
+        .debug-disabled p { color: #7f8c8d; margin-bottom: 30px; line-height: 1.6; }
+        .redirect-btn {
+            background: #667eea; color: white; border: none;
+            padding: 12px 30px; border-radius: 6px; font-size: 16px;
+            cursor: pointer; transition: all 0.3s ease;
+        }
+        .redirect-btn:hover { background: #5a67d8; transform: translateY(-2px); }
+        
+        /* 工具网格 */
+        .tools-section { padding: 40px; }
+        .section-title {
+            font-size: 24px; font-weight: 700; color: #2c3e50;
+            margin-bottom: 30px; display: flex; align-items: center;
+        }
+        .section-title .icon { margin-right: 10px; }
+        .tools-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px; margin-bottom: 40px;
+        }
+        .tool-card {
+            background: white; border: 2px solid #e9ecef; border-radius: 12px;
+            padding: 25px; transition: all 0.3s ease; cursor: pointer;
+            position: relative; overflow: hidden;
+        }
+        .tool-card:hover {
+            transform: translateY(-5px); box-shadow: 0 15px 40px rgba(102, 126, 234, 0.15);
+            border-color: #667eea;
+        }
+        .tool-card.disabled {
+            opacity: 0.5; cursor: not-allowed; background: #f8f9fa;
+        }
+        .tool-card.disabled:hover { transform: none; box-shadow: none; }
+        
+        .tool-header { display: flex; align-items: center; margin-bottom: 15px; }
+        .tool-icon { font-size: 32px; margin-right: 15px; }
+        .tool-title { font-size: 20px; font-weight: 700; color: #2c3e50; }
+        .tool-status {
+            position: absolute; top: 15px; right: 15px;
+            padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;
+        }
+        .tool-status.enabled { background: #d4edda; color: #155724; }
+        .tool-status.disabled { background: #f8d7da; color: #721c24; }
+        
+        .tool-description { color: #6c757d; line-height: 1.6; margin-bottom: 15px; }
+        .tool-features {
+            list-style: none; font-size: 14px;
+        }
+        .tool-features li {
+            padding: 3px 0; padding-left: 20px; position: relative; color: #495057;
+        }
+        .tool-features li::before {
+            content: "✨"; position: absolute; left: 0; font-size: 12px;
+        }
+        
+        /* 统计面板 */
+        .stats-panel {
+            background: #f8f9fa; border-radius: 12px; padding: 25px;
+            margin-bottom: 30px; display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;
+        }
+        .stat-item {
+            text-align: center; background: white; padding: 20px;
+            border-radius: 8px; border: 2px solid #e9ecef;
+        }
+        .stat-value { font-size: 32px; font-weight: 700; color: #667eea; }
+        .stat-label { font-size: 14px; color: #6c757d; margin-top: 5px; }
+        
+        /* 页脚 */
+        .debug-footer {
+            background: #f8f9fa; padding: 30px; text-align: center;
+            border-top: 1px solid #dee2e6; display: flex;
+            justify-content: center; gap: 20px; flex-wrap: wrap;
+        }
+        .footer-btn {
+            background: #6c757d; color: white; border: none;
+            padding: 10px 20px; border-radius: 6px; text-decoration: none;
+            display: inline-flex; align-items: center; gap: 8px;
+            transition: all 0.3s ease;
+        }
+        .footer-btn:hover { background: #5a6268; transform: translateY(-2px); }
+        .footer-btn.primary { background: #667eea; }
+        .footer-btn.primary:hover { background: #5a67d8; }
+        
+        /* 隐藏状态 */
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <!-- 加载屏幕 -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p>正在检查Debug配置...</p>
+    </div>
+
+    <!-- 主容器 -->
+    <div id="debug-container" class="debug-container">
+        <!-- 头部 -->
+        <div class="debug-header">
+            <div id="debug-status" class="debug-status">检查中...</div>
+            <h1>🐛 Debug开发环境</h1>
+            <p>OCR预审系统开发调试工具集 - 统一管理所有调试功能</p>
+        </div>
+
+        <!-- 警告横幅 -->
+        <div id="warning-banner" class="warning-banner">
+            <strong>⚠️ 开发环境警告</strong>
+            <p>此环境仅用于开发调试，包含敏感功能和测试数据，生产环境必须禁用！</p>
+        </div>
+
+        <!-- Debug禁用状态 -->
+        <div id="debug-disabled" class="debug-disabled hidden">
+            <div class="icon">🚫</div>
+            <h2>Debug模式已禁用</h2>
+            <p>系统管理员已禁用Debug功能，或当前运行在生产环境中。<br>
+               如需启用，请修改配置文件中的 <code>debug.enabled</code> 设置。</p>
+            <button class="redirect-btn" onclick="redirectToProduction()">
+                🏭 转到生产环境
+            </button>
+        </div>
+
+        <!-- 统计面板 -->
+        <div id="stats-panel" class="stats-panel hidden">
+            <div class="stat-item">
+                <div id="tools-count" class="stat-value">-</div>
+                <div class="stat-label">可用工具</div>
+            </div>
+            <div class="stat-item">
+                <div id="enabled-count" class="stat-value">-</div>
+                <div class="stat-label">已启用</div>
+            </div>
+            <div class="stat-item">
+                <div id="config-status" class="stat-value">-</div>
+                <div class="stat-label">配置状态</div>
+            </div>
+            <div class="stat-item">
+                <div id="last-update" class="stat-value">-</div>
+                <div class="stat-label">最后更新</div>
+            </div>
+        </div>
+
+        <!-- 工具区域 -->
+        <div id="tools-section" class="tools-section hidden">
+            <!-- 核心调试工具 -->
+            <div class="section-title">
+                <span class="icon">🔧</span>
+                核心调试工具
+            </div>
+            <div class="tools-grid">
+                <!-- 模拟登录工具 -->
+                <div class="tool-card" data-tool="mock_login" onclick="openTool('tools/mock-login.html')">
+                    <div class="tool-status">检查中</div>
+                    <div class="tool-header">
+                        <div class="tool-icon">🔑</div>
+                        <div class="tool-title">模拟登录工具</div>
+                    </div>
+                    <div class="tool-description">
+                        快速模拟用户登录，支持多用户角色切换，跳过正常认证流程。
+                    </div>
+                    <ul class="tool-features">
+                        <li>多用户角色模拟</li>
+                        <li>一键快速登录</li>
+                        <li>实时认证状态检查</li>
+                        <li>用户信息管理</li>
+                    </ul>
+                </div>
+
+                <!-- API测试工具 -->
+                <div class="tool-card" data-tool="api_test" onclick="openTool('tools/api-test.html')">
+                    <div class="tool-status">检查中</div>
+                    <div class="tool-header">
+                        <div class="tool-icon">🔌</div>
+                        <div class="tool-title">API测试工具</div>
+                    </div>
+                    <div class="tool-description">
+                        测试所有API接口，包含请求构建、响应查看、性能测试等功能。
+                    </div>
+                    <ul class="tool-features">
+                        <li>完整API接口测试</li>
+                        <li>请求/响应详情查看</li>
+                        <li>性能和响应时间测试</li>
+                        <li>批量接口测试</li>
+                    </ul>
+                </div>
+
+                <!-- 系统监控工具 -->
+                <div class="tool-card" data-tool="system_monitor" onclick="openTool('tools/system-monitor.html')">
+                    <div class="tool-status">检查中</div>
+                    <div class="tool-header">
+                        <div class="tool-icon">📊</div>
+                        <div class="tool-title">系统监控工具</div>
+                    </div>
+                    <div class="tool-description">
+                        实时监控系统状态，查看日志、性能指标和健康检查结果。
+                    </div>
+                    <ul class="tool-features">
+                        <li>实时系统监控</li>
+                        <li>日志查看和分析</li>
+                        <li>性能指标统计</li>
+                        <li>健康状态检查</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 业务测试工具 -->
+            <div class="section-title">
+                <span class="icon">🎯</span>
+                业务测试工具
+            </div>
+            <div class="tools-grid">
+                <!-- 预审演示工具 -->
+                <div class="tool-card" data-tool="preview_demo" onclick="openTool('tools/preview-demo.html')">
+                    <div class="tool-status">检查中</div>
+                    <div class="tool-header">
+                        <div class="tool-icon">📋</div>
+                        <div class="tool-title">预审演示工具</div>
+                    </div>
+                    <div class="tool-description">
+                        展示预审功能的各种状态和效果，包含完整的用户界面演示。
+                    </div>
+                    <ul class="tool-features">
+                        <li>预审状态演示</li>
+                        <li>用户界面效果展示</li>
+                        <li>交互功能测试</li>
+                        <li>样式兼容性验证</li>
+                    </ul>
+                </div>
+
+                <!-- 流程测试工具 -->
+                <div class="tool-card" data-tool="flow_test" onclick="openTool('tools/flow-test.html')">
+                    <div class="tool-status">检查中</div>
+                    <div class="tool-header">
+                        <div class="tool-icon">🔄</div>
+                        <div class="tool-title">流程测试工具</div>
+                    </div>
+                    <div class="tool-description">
+                        端到端的完整业务流程测试，包含登录、提交、查询、结果获取等。
+                    </div>
+                    <ul class="tool-features">
+                        <li>完整业务流程测试</li>
+                        <li>自动化测试流程</li>
+                        <li>实时进度跟踪</li>
+                        <li>错误处理验证</li>
+                    </ul>
+                </div>
+
+                <!-- 数据管理工具 -->
+                <div class="tool-card" data-tool="data_manager" onclick="openTool('tools/data-manager.html')">
+                    <div class="tool-status">检查中</div>
+                    <div class="tool-header">
+                        <div class="tool-icon">🗃️</div>
+                        <div class="tool-title">数据管理工具</div>
+                    </div>
+                    <div class="tool-description">
+                        管理测试数据，包含用户、事项、材料等数据的查看和编辑功能。
+                    </div>
+                    <ul class="tool-features">
+                        <li>测试数据管理</li>
+                        <li>模拟数据生成</li>
+                        <li>数据导入导出</li>
+                        <li>配置文件编辑</li>
+                    </ul>
+                </div>
+
+                <!-- SSO回调模式测试工具 -->
+                <div class="tool-card" onclick="openTool('tools/sso-test.html')">
+                    <div class="tool-icon">🔐</div>
+                    <div class="tool-title">SSO回调模式测试</div>
+                    <div class="tool-desc">测试和验证SSO回调模式配置</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <div id="debug-footer" class="debug-footer hidden">
+            <a href="/static/prod/" class="footer-btn primary">
+                🏭 生产环境
+            </a>
+            <a href="/static/login.html" class="footer-btn">
+                🔐 登录页面
+            </a>
+            <a href="/static/monitor.html" class="footer-btn">
+                📊 系统监控
+            </a>
+            <button class="footer-btn" onclick="refreshConfig()">
+                🔄 刷新配置
+            </button>
+            <button class="footer-btn" onclick="exportReport()">
+                📋 导出报告
+            </button>
+        </div>
+    </div>
+
+    <!-- 引入配置和脚本 -->
+    <script src="assets/test-config.js"></script>
+    <script>
+        // 全局状态
+        let debugConfig = null;
+        let initializationAttempts = 0;
+        const maxAttempts = 3;
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeDebugEnvironment();
+        });
+
+        // 初始化Debug环境
+        async function initializeDebugEnvironment() {
+            console.log('🐛 初始化Debug环境...');
+            
+            try {
+                // 检查Debug配置
+                debugConfig = await checkDebugConfig();
+                
+                if (!debugConfig.enabled) {
+                    showDebugDisabled();
+                    return;
+                }
+                
+                // 初始化成功，显示界面
+                await initializeInterface(debugConfig);
+                
+            } catch (error) {
+                console.error('Debug环境初始化失败:', error);
+                
+                if (initializationAttempts < maxAttempts) {
+                    initializationAttempts++;
+                    console.log(`重试初始化 (${initializationAttempts}/${maxAttempts})`);
+                    setTimeout(() => initializeDebugEnvironment(), 2000);
+                } else {
+                    showInitializationError(error);
+                }
+            }
+        }
+
+        // 检查Debug配置
+        async function checkDebugConfig() {
+            console.log('检查Debug配置...');
+            
+            try {
+                const response = await fetch('/api/config/debug');
+                
+                if (!response.ok) {
+                    throw new Error(`配置检查失败: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.errorMsg || '配置检查失败');
+                }
+                
+                console.log('Debug配置获取成功:', result.data);
+                return result.data;
+                
+            } catch (error) {
+                console.warn('无法获取Debug配置，使用默认配置:', error);
+                
+                // 返回默认配置（开发模式）
+                return {
+                    enabled: true,
+                    enable_mock_login: true,
+                    mock_login_warning: true,
+                    tools: {
+                        api_test: true,
+                        mock_login: true,
+                        preview_demo: true,
+                        flow_test: true,
+                        system_monitor: true,
+                        data_manager: true
+                    }
+                };
+            }
+        }
+
+        // 初始化界面
+        async function initializeInterface(config) {
+            console.log('初始化界面...');
+            
+            // 更新状态显示
+            updateDebugStatus(config.enabled);
+            
+            // 更新统计信息
+            updateStatistics(config);
+            
+            // 更新工具状态
+            updateToolStatus(config.tools);
+            
+            // 显示界面
+            showDebugInterface();
+            
+            // 隐藏加载屏幕
+            hideLoadingOverlay();
+            
+            console.log('✅ Debug环境初始化完成');
+        }
+
+        // 更新Debug状态
+        function updateDebugStatus(enabled) {
+            const statusElement = document.getElementById('debug-status');
+            statusElement.textContent = enabled ? '✅ 已启用' : '❌ 已禁用';
+            statusElement.style.background = enabled ? 
+                'rgba(40, 167, 69, 0.2)' : 'rgba(220, 53, 69, 0.2)';
+        }
+
+        // 更新统计信息
+        function updateStatistics(config) {
+            const tools = config.tools || {};
+            const toolsCount = Object.keys(tools).length;
+            const enabledCount = Object.values(tools).filter(enabled => enabled).length;
+            
+            document.getElementById('tools-count').textContent = toolsCount;
+            document.getElementById('enabled-count').textContent = enabledCount;
+            document.getElementById('config-status').textContent = config.enabled ? '正常' : '禁用';
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+        }
+
+        // 更新工具状态
+        function updateToolStatus(tools) {
+            document.querySelectorAll('.tool-card').forEach(card => {
+                const toolName = card.getAttribute('data-tool');
+                const enabled = tools[toolName] || false;
+                const statusElement = card.querySelector('.tool-status');
+                
+                statusElement.textContent = enabled ? '已启用' : '已禁用';
+                statusElement.className = `tool-status ${enabled ? 'enabled' : 'disabled'}`;
+                
+                if (!enabled) {
+                    card.classList.add('disabled');
+                    card.onclick = () => {
+                        alert(`工具 "${card.querySelector('.tool-title').textContent}" 已被配置禁用`);
+                    };
+                }
+            });
+        }
+
+        // 显示Debug界面
+        function showDebugInterface() {
+            document.getElementById('debug-disabled').classList.add('hidden');
+            document.getElementById('stats-panel').classList.remove('hidden');
+            document.getElementById('tools-section').classList.remove('hidden');
+            document.getElementById('debug-footer').classList.remove('hidden');
+            document.getElementById('debug-container').classList.add('loaded');
+        }
+
+        // 显示禁用状态
+        function showDebugDisabled() {
+            document.getElementById('debug-status').textContent = '❌ 已禁用';
+            document.getElementById('debug-status').style.background = 'rgba(220, 53, 69, 0.2)';
+            document.getElementById('debug-disabled').classList.remove('hidden');
+            document.getElementById('debug-container').classList.add('loaded');
+            hideLoadingOverlay();
+        }
+
+        // 显示初始化错误
+        function showInitializationError(error) {
+            document.getElementById('debug-status').textContent = '❌ 初始化失败';
+            document.getElementById('debug-status').style.background = 'rgba(220, 53, 69, 0.2)';
+            
+            const errorHtml = `
+                <div class="debug-disabled">
+                    <div class="icon">⚠️</div>
+                    <h2>初始化失败</h2>
+                    <p>Debug环境初始化时发生错误：<br><code>${error.message}</code></p>
+                    <button class="redirect-btn" onclick="location.reload()">🔄 重新加载</button>
+                    <button class="redirect-btn" onclick="redirectToProduction()">🏭 转到生产环境</button>
+                </div>
+            `;
+            
+            document.getElementById('debug-container').innerHTML = errorHtml;
+            document.getElementById('debug-container').classList.add('loaded');
+            hideLoadingOverlay();
+        }
+
+        // 隐藏加载屏幕
+        function hideLoadingOverlay() {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.remove(), 300);
+        }
+
+        // 打开工具
+        function openTool(toolPath) {
+            console.log('打开工具:', toolPath);
+            window.open(`/static/debug/${toolPath}`, '_blank');
+        }
+
+        // 重定向到生产环境
+        function redirectToProduction() {
+            console.log('重定向到生产环境');
+            window.location.href = '/static/prod/';
+        }
+
+        // 刷新配置
+        async function refreshConfig() {
+            console.log('刷新配置...');
+            location.reload();
+        }
+
+        // 导出报告
+        function exportReport() {
+            console.log('导出Debug报告...');
+            
+            const report = {
+                timestamp: new Date().toISOString(),
+                debugConfig: debugConfig,
+                userAgent: navigator.userAgent,
+                location: window.location.href,
+                statistics: {
+                    toolsCount: document.getElementById('tools-count').textContent,
+                    enabledCount: document.getElementById('enabled-count').textContent,
+                    configStatus: document.getElementById('config-status').textContent
+                }
+            };
+            
+            const blob = new Blob([JSON.stringify(report, null, 2)], {
+                type: 'application/json'
+            });
+            
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `debug-report-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html> 

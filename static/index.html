@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>材料智能预审</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script>
+        // 更严格的认证检查将在 auth.js 中进行
+        // 这里只做基本的页面标识
+        window.PAGE_TYPE = 'preview';
+    </script>
+</head>
+<body>
+    <div class="container">
+        <!-- 政府系统风格头部 -->
+        <header class="gov-header">
+            <h1>材料智能预审</h1>
+            <button class="elder-mode-btn">进入适老模式</button>
+        </header>
+
+        <main class="main-content">
+            <!-- 预审进度页面 -->
+            <div class="progress-section" id="progressSection">
+                <div class="scan-icon">
+                    <div class="scan-frame"></div>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                <div class="progress-text" id="progressText">正在进行材料预审，预计需要等待 3 分钟</div>
+
+                <!-- 文件上传区域 -->
+                <div class="upload-section">
+                    <h2>上传文件进行OCR识别</h2>
+                    
+                    <!-- 主题选择 -->
+                    <div class="theme-selector">
+                        <label for="themeSelect">选择预审主题：</label>
+                        <select id="themeSelect" class="theme-select">
+                            <option value="">加载中...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">📄</div>
+                        <p>拖拽文件到此处或点击选择文件</p>
+                        <p class="file-hint">支持PDF、JPG、PNG、BMP等格式</p>
+                        <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png,.bmp" multiple hidden>
+                    </div>
+                    <button id="uploadBtn" class="btn-primary" disabled>开始识别</button>
+                </div>
+                
+                <!-- 开发测试工具 -->
+                <div class="dev-tools-section" style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid #28a745;">
+                    <h3 style="color: #28a745; margin-bottom: 15px;">🔧 开发测试工具</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                        <a href="/static/debug/index-new.html" style="padding: 20px; background: white; border: 2px solid #667eea; border-radius: 8px; text-decoration: none; color: #495057; transition: all 0.2s; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);">
+                            <div style="font-weight: 700; margin-bottom: 8px; color: #667eea; font-size: 16px;">🐛 Debug开发环境</div>
+                            <div style="font-size: 14px; color: #6c757d; line-height: 1.4;">统一的调试工具集：模拟登录、API测试、流程测试、预审演示、系统监控、数据管理</div>
+                        </a>
+                        <a href="/static/prod/index.html" style="padding: 20px; background: white; border: 1px solid #dee2e6; border-radius: 8px; text-decoration: none; color: #495057; transition: all 0.2s;">
+                            <div style="font-weight: 600; margin-bottom: 8px;">🏭 生产环境预览</div>
+                            <div style="font-size: 14px; color: #6c757d;">精简的生产版本界面预览</div>
+                        </a>
+                        <a href="/static/monitor.html" style="padding: 20px; background: white; border: 1px solid #dee2e6; border-radius: 8px; text-decoration: none; color: #495057; transition: all 0.2s;">
+                            <div style="font-weight: 600; margin-bottom: 8px;">📊 系统监控</div>
+                            <div style="font-size: 14px; color: #6c757d;">实时系统状态和性能监控</div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 预审结果页面 -->
+            <div class="result-section" id="resultSection" style="display: none;">
+                <!-- 结果提示 -->
+                <div class="result-header">
+                    <h2>智能预审结果</h2>
+                    <p>以下为您的材料智能预审结果，请仔细核对相关信息，并根据提示完善相关材料。审批结果仅供参考，最终以人工审核为准。</p>
+                </div>
+
+                <!-- 基本信息 -->
+                <div class="basic-info">
+                    <div class="info-title">基本信息</div>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">申请人：</span>
+                            <span class="info-value" id="applicantName">加载中...</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">事项名称：</span>
+                            <span class="info-value" id="matterName">加载中...</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">事项类型：</span>
+                            <span class="info-value" id="matterType">加载中...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 需检查的材料 -->
+                <div class="material-section">
+                    <div class="material-header">
+                        <div class="info-title">需检查的材料</div>
+                        <div class="material-actions">
+                            <button class="btn-export" id="exportBtn">导出材料</button>
+                            <button class="btn-copy" id="copyResultBtn">复制检查结果</button>
+                        </div>
+                    </div>
+
+                    <div class="material-list" id="materialList">
+                        <!-- 材料项目将通过JavaScript动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 已通过材料 -->
+                <div class="material-section">
+                    <div class="info-title">已通过材料</div>
+                    <div class="material-list" id="passedMaterialList">
+                        <!-- 已通过的材料将通过JavaScript动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 预览文档区域 -->
+                <div class="preview-section" id="previewSection" style="display: none;">
+                    <div class="info-title">预览文档</div>
+                    <div class="preview-frame">
+                        <iframe id="previewFrame" src="" frameborder="0"></iframe>
+                    </div>
+                    <div class="preview-actions">
+                        <button class="btn-export" id="downloadPreviewBtn">下载预览文档</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 加载提示 -->
+        <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>处理中，请稍候...</p>
+        </div>
+
+        <!-- 消息提示 -->
+        <div class="toast" id="toast"></div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/config.js"></script>
+    <script src="/static/js/ocr.js"></script>
+    <script>
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('页面加载完成，开始初始化...');
+            
+            // 初始化材料预审模块
+            try {
+                await MaterialReview.init();
+                console.log('✅ 材料预审模块初始化成功');
+                
+                // 使用配置数据更新页面显示
+                const defaultUser = ConfigManager.getDefaultUser();
+                const matters = ConfigManager.getEnabledMatters();
+                
+                if (defaultUser.organizationName) {
+                    document.getElementById('applicantName').textContent = defaultUser.organizationName;
+                }
+                
+                if (matters.length > 0) {
+                    document.getElementById('matterName').textContent = matters[0].matterName;
+                    document.getElementById('matterType').textContent = matters[0].matterType;
+                }
+                
+            } catch (error) {
+                console.error('❌ 初始化失败:', error);
+                // 显示错误提示但不阻止页面使用
+            }
+        });
+    </script>
+</body>
+</html>

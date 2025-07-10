@@ -1,0 +1,107 @@
+/* 全局和基础样式 */
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    width: 100vw;
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    background-color: #f0f2f5;
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* 全局统一的头部 */
+.main-header {
+    height: 60px;
+    background-color: #0d6efd;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 30px;
+    flex-shrink: 0;
+    z-index: 10;
+}
+.header-title { font-size: 20px; font-weight: bold; }
+.header-button { background-color: #ffc107; color: #333; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+
+/* 主内容容器 */
+.main-container {
+    flex-grow: 1;
+    position: relative;
+    background-color: #fff;
+    overflow: hidden;
+}
+
+/* 屏幕切换样式 */
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+.hidden { display: none; }
+
+/* 加载和错误页面的容器 */
+.loading-container, .error-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    background-color: #fff;
+}
+
+/* 加载动画 */
+.icon-scanner { position: relative; margin-bottom: 40px; overflow: hidden; }
+.scan-line { position: absolute; fill: #4E83FD; opacity: 0.5; animation: scan 2s infinite linear; }
+@keyframes scan { 0% { transform: translateY(-10px); } 50% { transform: translateY(15px); } 100% { transform: translateY(-10px); } }
+.progress-bar-container { width: 400px; height: 20px; background-color: #e9ecef; border-radius: 10px; position: relative; overflow: hidden; }
+.progress-bar { height: 100%; background-color: #0d6efd; border-radius: 10px; transition: width 0.1s linear; }
+.progress-text { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #fff; font-size: 12px; }
+.loading-text { margin-top: 15px; color: #868e96; font-size: 14px; }
+
+/* 主界面布局 */
+.main-content {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* 左侧边栏 */
+.sidebar { width: 350px; background-color: #f8f9fa; padding: 20px; border-right: 1px solid #dee2e6; overflow-y: auto; }
+.sidebar-section { margin-bottom: 20px; }
+.info-title { font-size: 16px; font-weight: bold; border-left: 4px solid #0d6efd; padding-left: 10px; margin-bottom: 15px; }
+.info-item { font-size: 14px; margin-bottom: 8px; color: #666; }
+.info-item span { color: #333; display: inline-block; width: 70px; text-align: justify; text-align-last: justify; }
+.section-title { font-size: 16px; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; }
+.count-badge { background-color: #dc3545; color: white; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; justify-content: center; align-items: center; font-size: 12px; margin-left: 8px; }
+.sidebar ul { list-style-type: none; padding-left: 0; margin: 0; }
+.material-item-wrapper { margin-bottom: 5px; }
+.material-item { padding: 10px 15px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
+.sub-item-list { padding-left: 20px; }
+.sub-item { position: relative; padding: 8px 15px; font-size: 14px; cursor: pointer; border-radius: 4px; }
+.material-item:hover, .sub-item:hover { background-color: #e9ecef; }
+.material-item.active, .sub-item.active { background-color: #dbeaff; color: #0056b3; font-weight: bold; }
+.material-item.passed { color: #198754; }
+.tooltip { visibility: hidden; width: 220px; background-color: rgba(0,0,0,0.8); color: #fff; text-align: left; border-radius: 6px; padding: 10px; position: absolute; z-index: 10; bottom: 120%; left: 0; opacity: 0; transition: opacity 0.3s; font-weight: normal; font-size: 12px; line-height: 1.5; pointer-events: none; }
+.sub-item:hover .tooltip { visibility: visible; opacity: 1; }
+
+/* 右侧内容视图 */
+.content-view { flex-grow: 1; padding: 20px; display: flex; flex-direction: column; overflow: hidden; background-color: #fff; }
+.content-header { margin-bottom: 20px; flex-shrink: 0; }
+.content-btn { padding: 8px 16px; border: 1px solid #dee2e6; background-color: #fff; margin-right: 10px; border-radius: 4px; cursor: pointer; }
+.content-btn.primary { background-color: #e9ecef; border-color: #adb5bd; }
+.image-container { flex-grow: 1; background-color: #f1f3f5; border: 1px solid #e0e0e0; display: flex; justify-content: center; align-items: center; overflow: auto; position: relative; }
+.material-image { max-width: 100%; max-height: 100%; object-fit: contain; }
+.review-point { position: absolute; border: 2px solid red; box-sizing: border-box; }
+
+/* 错误界面 */
+.icon-error { margin-bottom: 20px; }
+.error-title { font-size: 18px; color: #333; margin: 10px 0; }
+.error-subtitle { font-size: 14px; color: #888; margin-bottom: 30px; }
+.retry-button { padding: 10px 40px; background-color: #0d6efd; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+.retry-button:hover { background-color: #0b5ed7; }
