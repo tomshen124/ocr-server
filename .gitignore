@@ -1,6 +1,8 @@
 # Rust编译产物
 /target/
 target/
+/build/
+build/
 Cargo.lock
 
 # 运行时文件
