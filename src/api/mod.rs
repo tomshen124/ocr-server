@@ -4,27 +4,31 @@ use crate::model::{
     ComponentStatus, ComponentsHealth, DetailedHealthStatus, Goto, HealthStatus, Ticket, TicketId, Token, SessionUser,
 };
 use crate::util::{middleware, system_info, third_party_auth, IntoJson, ServerError};
-use crate::CONFIG;
+use crate::{CONFIG, AppState};
 use ocr_conn::CURRENT_DIR;
 use chrono::Utc;
-use axum::extract::{Multipart, Query};
+use axum::extract::{Multipart, Query, State};
 use axum::middleware::from_fn;
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use axum::http::StatusCode;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_sessions::cookie::time::Duration;
 use tower_sessions::{Expiry, MemoryStore, Session, SessionManagerLayer};
-use urlencoding::encode;
+use std::sync::Arc;
 
-pub fn routes() -> Router {
+pub fn routes(app_state: AppState) -> Router {
     let session_store = MemoryStore::default();
     let session_layer = SessionManagerLayer::new(session_store)
         .with_secure(false)
         .with_expiry(Expiry::OnInactivity(Duration::seconds(
             CONFIG.session_timeout,
-        )));
+        )))
+        // 🔒 安全增强：添加会话安全配置
+        .with_same_site(tower_sessions::cookie::SameSite::Strict)
+        .with_http_only(true);
 
     // 获取可执行文件所在目录
     let exe_dir = std::env::current_exe()
@@ -55,10 +59,11 @@ pub fn routes() -> Router {
     let public_routes = Router::new()
         .route("/", get(root_redirect))  // 根路由重定向到登录页
         .route("/api/verify_user", post(verify_user))
+        .route("/api/sso/login", get(sso_login_redirect))  // SSO登录跳转端点
         .route("/api/sso/callback", get(sso_callback))
         .route("/api/third-party/callback", post(third_party_callback))
         .route("/api/auth/status", get(auth_status))
-        .route("/api/dev/mock_login", post(mock_login))
+        .route("/api/auth/logout", post(auth_logout))
         .route("/api/user_save", post(user_save))
         .route("/api/get_token", post(get_token))
         .route("/api/user_info", post(user_info))
@@ -66,14 +71,25 @@ pub fn routes() -> Router {
         .route("/api/health/details", get(detailed_health_check))
         .route("/api/health/components", get(components_health_check))
         // 前端配置API - 公开访问
-        .route("/api/config", get(get_frontend_config))
+        .route("/api/config/frontend", get(get_frontend_config))
         .route("/api/config/debug", get(get_debug_config))
         // 监控和日志管理API - 不需要业务用户认证
         .route("/api/logs/stats", get(get_log_stats))
         .route("/api/logs/cleanup", post(cleanup_logs))
         .route("/api/logs/health", get(check_log_health))
+        // 预审统计API - 简化版本
+        .route("/api/stats/previews", get(get_preview_stats))
+        // 监控统计API - 新增
+        .route("/api/preview/statistics", get(get_preview_statistics))
+        .route("/api/preview/records", get(get_preview_records_list))
+        // 系统队列状态API - 新增并发控制监控
+        .route("/api/queue/status", get(get_queue_status))
         // 安全的预审页面访问接口（不需要API认证，有自己的认证逻辑）
-        .route("/api/preview/view/:request_id", get(preview_view_page));
+        .route("/api/preview/view/:request_id", get(preview_view_page))
+        // 测试模式模拟登录接口 - 仅在配置启用时可用
+        .route("/api/test/mock_login", post(mock_login_for_test))
+        // 测试数据接口
+        .route("/api/test/mock/data", post(get_mock_test_data));
 
     // 受保护路由 - 需要认证
     let protected_routes = Router::new()
@@ -82,7 +98,6 @@ pub fn routes() -> Router {
         .route("/api/update_rule", post(update_rule))
         .route("/api/themes", get(get_themes))
         .route("/api/themes/:theme_id/reload", post(reload_theme))
-        .route("/api/config/frontend", get(get_frontend_config))
         // 预审接口 - 需要用户认证
         .route("/api/preview", post(preview))
         .route("/api/preview/submit", post(preview_submit))
@@ -92,6 +107,9 @@ pub fn routes() -> Router {
         .route("/api/preview/lookup/:third_party_request_id", get(lookup_preview_url))
         // 新增：预审状态查询接口
         .route("/api/preview/status/:preview_id", get(query_preview_status))
+        // 新增：预审结果展示接口
+        .route("/api/preview/result/:preview_id", get(get_preview_result))
+        .route("/api/preview/download/:preview_id", get(download_preview_report))
 
         .layer(from_fn(middleware::auth_required));
 
@@ -108,6 +126,7 @@ pub fn routes() -> Router {
         .merge(public_routes)
         .merge(protected_routes)
         .merge(third_party_api_routes)
+        .with_state(app_state)
         // 全局中间件
         .layer(from_fn(middleware::log_request))
         .layer(session_layer)
@@ -129,7 +148,7 @@ async fn user_info(session: Session, Json(token): Json<Token>) -> impl IntoRespo
     result.into_json()
 }
 
-async fn preview(req: axum::extract::Request) -> impl IntoResponse {
+async fn preview(State(app_state): State<AppState>, req: axum::extract::Request) -> impl IntoResponse {
     // 从认证中间件获取SessionUser
     let session_user = req.extensions().get::<SessionUser>().cloned();
     
@@ -143,11 +162,24 @@ async fn preview(req: axum::extract::Request) -> impl IntoResponse {
         }
     };
     
-    let mut preview_body: PreviewBody = match serde_json::from_slice(&bytes) {
-        Ok(body) => body,
-        Err(e) => {
-            tracing::error!("解析请求体失败: {}", e);
-            return crate::util::WebResult::err_custom("无效的JSON格式").into_json().into_response();
+    // 尝试解析为标准格式，如果失败则尝试生产环境格式
+    let mut preview_body: PreviewBody = match serde_json::from_slice::<PreviewBody>(&bytes) {
+        Ok(body) => {
+            tracing::info!("✅ 解析为标准格式成功");
+            body
+        },
+        Err(_) => {
+            // 尝试解析为生产环境格式
+            match serde_json::from_slice::<crate::model::preview::ProductionPreviewRequest>(&bytes) {
+                Ok(prod_request) => {
+                    tracing::info!("✅ 解析为生产环境格式成功，正在转换...");
+                    prod_request.to_preview_body()
+                },
+                Err(e) => {
+                    tracing::error!("解析请求体失败（尝试了标准格式和生产环境格式）: {}", e);
+                    return crate::util::WebResult::err_custom("无效的JSON格式").into_json().into_response();
+                }
+            }
         }
     };
     
@@ -181,26 +213,65 @@ async fn preview(req: axum::extract::Request) -> impl IntoResponse {
     // 使用我们的previewId作为文件名（确保安全）
     preview_body.preview.request_id = our_preview_id.clone();
     
-    // 建立ID映射关系（保存到文件或数据库）
-    if let Err(e) = save_id_mapping(&our_preview_id, &third_party_request_id, &preview_body.user_id).await {
+    // 🔒 安全改进：验证第三方提供的用户ID格式
+    if preview_body.user_id.is_empty() || preview_body.user_id.len() > 50 {
+        tracing::warn!("❌ 无效的用户ID格式: {}", preview_body.user_id);
+        return crate::util::WebResult::err_custom("无效的用户ID").into_json().into_response();
+    }
+
+    // 建立ID映射关系（使用数据库替代文件操作）
+    if let Err(e) = save_id_mapping_to_database(&app_state.database, &our_preview_id, &third_party_request_id, &preview_body.user_id).await {
         tracing::error!("保存ID映射失败: {}", e);
         return crate::util::WebResult::err_custom("系统错误").into_json().into_response();
     }
     
     // 立即返回预审访问URL，不等待预审完成
     let view_url = format!("{}/api/preview/view/{}", CONFIG.host, our_preview_id);
-    
+
     tracing::info!("立即返回预审访问URL: {}", view_url);
-    
-    // 异步启动预审任务（与用户是否查看无关，自动处理）
+
+    // � 回滚到原始设计：立即异步处理，提供最佳用户体验
+    // 原因：政务服务场景下，用户期望即时反馈，延迟处理严重影响体验
+    // 安全性通过严格的身份验证和权限控制来保障
     let mut preview_clone = preview_body.clone();
     let preview_id_clone = our_preview_id.clone();
     let third_party_id_clone = third_party_request_id.clone();
+    let database_clone = app_state.database.clone();
+    let storage_clone = app_state.storage.clone();
     
     tokio::spawn(async move {
-        tracing::info!("=== 开始自动预审任务 ===");
+        // 🔥 立即获取OCR并发控制许可
+        // 如果系统繁忙，这里会等待，避免系统过载
+        let permit = match crate::OCR_SEMAPHORE.try_acquire() {
+            Ok(permit) => {
+                tracing::info!("✅ 获取OCR处理许可成功，当前可用许可: {}", 
+                             crate::OCR_SEMAPHORE.available_permits());
+                Some(permit)
+            },
+            Err(_) => {
+                tracing::warn!("⏳ 系统繁忙，OCR任务排队等待...");
+                // 如果try_acquire失败，使用acquire等待
+                match crate::OCR_SEMAPHORE.acquire().await {
+                    Ok(permit) => {
+                        tracing::info!("✅ 等待后获取OCR处理许可成功");
+                        Some(permit)
+                    },
+                    Err(e) => {
+                        tracing::error!("❌ 获取OCR处理许可失败: {}", e);
+                        // 更新数据库状态为失败
+                        if let Err(db_err) = database_clone.update_preview_status(&preview_id_clone, crate::db::PreviewStatus::Failed).await {
+                            tracing::error!("更新预审状态失败: {}", db_err);
+                        }
+                        return;
+                    }
+                }
+            }
+        };
+        
+        tracing::info!("=== 开始自动预审任务（并发控制） ===");
         tracing::info!("预审ID: {}", preview_id_clone);
         tracing::info!("第三方请求ID: {}", third_party_id_clone);
+        tracing::info!("当前系统可用OCR处理槽位: {}", crate::OCR_SEMAPHORE.available_permits());
         
         // 智能主题匹配
         let theme_id = if let Some(manual_theme) = &preview_clone.preview.theme_id {
@@ -220,56 +291,69 @@ async fn preview(req: axum::extract::Request) -> impl IntoResponse {
         preview_clone.preview.theme_id = Some(theme_id);
         
         // 更新预审状态为"处理中"
-        if let Err(e) = update_preview_status(&preview_id_clone, "processing").await {
+        if let Err(e) = database_clone.update_preview_status(&preview_id_clone, crate::db::PreviewStatus::Processing).await {
             tracing::error!("更新预审状态失败: {}", e);
         }
         
-        // 执行预审逻辑
-        let preview_result = preview_clone.preview().await;
+        // 执行预审逻辑（使用存储抽象层）
+        let preview_result = preview_clone.preview_with_storage(&storage_clone).await;
+        
+        // 根据结果更新数据库状态
+        let status = if preview_result.is_ok() {
+            crate::db::PreviewStatus::Completed
+        } else {
+            crate::db::PreviewStatus::Failed
+        };
+        
+        if let Err(e) = database_clone.update_preview_status(&preview_id_clone, status).await {
+            tracing::error!("更新最终预审状态失败: {}", e);
+        }
         
         match preview_result {
-            Ok(web_result) => {
-                tracing::info!("✅ 自动预审完成: {}", preview_id_clone);
+            Ok(result) => {
+                tracing::info!("✅ 预审任务完成成功");
+                tracing::info!("预审结果: {:?}", result);
                 
-                // 更新状态为"已完成"
-                if let Err(e) = update_preview_status(&preview_id_clone, "completed").await {
-                    tracing::error!("更新预审完成状态失败: {}", e);
-                }
-                
-                // 如果配置了回调URL，推送结果给第三方系统
-                if let Err(e) = notify_third_party_system(&preview_id_clone, &third_party_id_clone, "completed", Some(&web_result)).await {
-                    tracing::error!("推送预审结果给第三方失败: {}", e);
+                // 可选：通知第三方系统（如果配置了回调）
+                if let Err(e) = notify_third_party_system(&third_party_id_clone, "completed", Some(&result)).await {
+                    tracing::warn!("通知第三方系统失败: {}", e);
                 }
             }
             Err(e) => {
-                tracing::error!("❌ 自动预审失败: {} - {}", preview_id_clone, e);
+                tracing::error!("❌ 预审任务失败: {}", e);
                 
-                // 更新状态为"失败"
-                if let Err(e) = update_preview_status(&preview_id_clone, "failed").await {
-                    tracing::error!("更新预审失败状态失败: {}", e);
-                }
-                
-                // 推送失败结果给第三方系统
-                if let Err(e) = notify_third_party_system(&preview_id_clone, &third_party_id_clone, "failed", None).await {
-                    tracing::error!("推送预审失败结果给第三方失败: {}", e);
+                // 通知第三方系统失败
+                if let Err(notify_err) = notify_third_party_system(&third_party_id_clone, "failed", None).await {
+                    tracing::warn!("通知第三方系统失败: {}", notify_err);
                 }
             }
         }
         
-        tracing::info!("=== 自动预审任务结束 ===");
+        // 🔥 释放OCR处理许可 - 确保许可被正确释放
+        if let Some(_permit) = permit {
+            tracing::info!("🔓 释放OCR处理许可，当前可用许可: {}", 
+                         crate::OCR_SEMAPHORE.available_permits() + 1);
+        }
+        
+        tracing::info!("=== 自动预审任务结束（并发控制） ===");
     });
     
-    // 立即返回成功响应（不包含viewUrl，系统内部知道即可）
+    // 构建响应数据 - 第三方系统只需要知道提交成功
     let response_data = serde_json::json!({
         "success": true,
         "errorCode": 200,
-        "errorMsg": "预审任务已提交，请稍后查看结果",
+        "errorMsg": "",
         "data": {
-            "requestId": third_party_request_id,  // 返回第三方原始请求ID
+            "previewId": our_preview_id,
+            "thirdPartyRequestId": third_party_request_id,
             "status": "submitted",
-            "message": "预审任务已提交，后台正在处理中"
+            "message": "预审任务已提交，正在后台处理"
         }
     });
+
+    // 预审访问URL是给用户的，不是给第三方系统的
+    // 用户会从政务系统跳转到: /api/preview/view/{previewId}
+    tracing::info!("用户预审访问URL: {}", view_url);
     
     Json(response_data).into_response()
 }
@@ -278,64 +362,51 @@ async fn preview(req: axum::extract::Request) -> impl IntoResponse {
 fn generate_secure_preview_id() -> String {
     use chrono::Utc;
     use uuid::Uuid;
-    
+
     // 组合方案：时间戳 + UUID，确保唯一性和安全性
     let timestamp = Utc::now().format("%Y%m%d%H%M%S").to_string();
     let uuid = Uuid::new_v4().to_string().replace("-", "");
-    
+
     // 使用UUID的另一部分作为随机后缀，避免额外依赖
     let random_suffix = &uuid[12..18].to_uppercase();
-    
+
     // 格式：PV{时间戳}{UUID前12位}{UUID的12-18位大写}
     // 总长度：2 + 14 + 12 + 6 = 34位
     // PV = Preview（预审）
     format!("PV{}{}{}", timestamp, &uuid[..12].to_uppercase(), random_suffix)
 }
 
-// 保存ID映射关系
-async fn save_id_mapping(preview_id: &str, third_party_request_id: &str, user_id: &str) -> anyhow::Result<()> {
-    use serde_json::json;
+
+
+// 使用数据库保存ID映射关系（替代文件操作）
+async fn save_id_mapping_to_database(database: &Arc<dyn crate::db::Database>, preview_id: &str, third_party_request_id: &str, user_id: &str) -> anyhow::Result<()> {
+    use crate::db::{PreviewRecord, PreviewStatus};
     
-    tracing::info!("保存ID映射: {} -> {}", preview_id, third_party_request_id);
+    tracing::info!("保存ID映射到数据库: {} -> {}", preview_id, third_party_request_id);
     
-    // 创建映射目录
-    let mapping_dir = CURRENT_DIR.join("preview_mappings");
-    if !mapping_dir.exists() {
-        tokio::fs::create_dir_all(&mapping_dir).await?;
-    }
+    let record = PreviewRecord {
+        id: preview_id.to_string(),
+        user_id: user_id.to_string(),
+        file_name: format!("{}.html", preview_id),
+        ocr_text: "".to_string(), // 将在后续处理中填充
+        theme_id: None,
+        evaluation_result: None,
+        preview_url: format!("{}/api/preview/view/{}", CONFIG.host, preview_id),
+        status: PreviewStatus::Pending,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        third_party_request_id: Some(third_party_request_id.to_string()),
+    };
     
-    // 映射文件名使用我们的previewId
-    let mapping_file = mapping_dir.join(format!("{}.json", preview_id));
+    database.save_preview_record(&record).await?;
     
-    // 映射信息
-    let mapping_info = json!({
-        "previewId": preview_id,
-        "thirdPartyRequestId": third_party_request_id,
-        "userId": user_id,
-        "createdAt": Utc::now().to_rfc3339(),
-        "status": "submitted",
-        "updatedAt": Utc::now().to_rfc3339()
-    });
-    
-    // 保存映射文件
-    tokio::fs::write(&mapping_file, mapping_info.to_string()).await?;
-    
-    tracing::info!("✅ ID映射已保存到: {}", mapping_file.display());
+    tracing::info!("✅ ID映射已保存到数据库");
     Ok(())
 }
 
-// 根据previewId获取映射信息
-async fn get_id_mapping(preview_id: &str) -> anyhow::Result<Option<serde_json::Value>> {
-    let mapping_dir = CURRENT_DIR.join("preview_mappings");
-    let mapping_file = mapping_dir.join(format!("{}.json", preview_id));
-    
-    if !mapping_file.exists() {
-        return Ok(None);
-    }
-    
-    let content = tokio::fs::read_to_string(&mapping_file).await?;
-    let mapping: serde_json::Value = serde_json::from_str(&content)?;
-    Ok(Some(mapping))
+// 从数据库获取ID映射信息（替代文件操作）
+async fn get_id_mapping_from_database(database: &Arc<dyn crate::db::Database>, preview_id: &str) -> anyhow::Result<Option<crate::db::PreviewRecord>> {
+    database.get_preview_record(preview_id).await
 }
 
 async fn upload(multipart: Multipart) -> impl IntoResponse {
@@ -419,16 +490,24 @@ async fn sso_callback(session: Session, Query(params): Query<std::collections::H
         tracing::info!("用户ID: {}", session_user.user_id);
         tracing::info!("用户姓名: {}", session_user.user_name.as_deref().unwrap_or("未知"));
         
-        // 检查是否有待访问的预审记录
+        // 确定重定向URL的优先级：待访问预审记录 > 保存的返回URL > 默认主页
         let redirect_url = if let Ok(Some(pending_request_id)) = session.get::<String>("pending_request_id").await {
             tracing::info!("发现待访问预审记录: {}", pending_request_id);
             // 清除待访问记录
             if let Err(e) = session.remove::<String>("pending_request_id").await {
                 tracing::warn!("清除待访问预审记录失败: {}", e);
             }
-            format!("/api/preview/view/{}", pending_request_id)
+            // 重定向到静态页面而不是API接口
+            format!("/static/index.html?previewId={}&verified=true", pending_request_id)
+        } else if let Ok(Some(return_url)) = session.get::<String>("return_url").await {
+            tracing::info!("发现保存的返回URL: {}", return_url);
+            // 清除返回URL
+            if let Err(e) = session.remove::<String>("return_url").await {
+                tracing::warn!("清除返回URL失败: {}", e);
+            }
+            return_url
         } else {
-            tracing::info!("无待访问预审记录，重定向到主页");
+            tracing::info!("无特定跳转目标，重定向到主页");
             format!("/static/index.html?from=sso&user={}", session_user.user_id)
         };
         
@@ -458,12 +537,17 @@ async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> impl 
     tracing::info!("收到票据ID: {}", ticket_id.ticket_id);
     tracing::info!("票据长度: {} 字符", ticket_id.ticket_id.len());
 
-    // 检查是否配置了第三方SSO
-    let has_sso_config = !CONFIG.login.access_token_url.is_empty() && !CONFIG.login.access_key.is_empty();
-    tracing::info!("SSO配置检查:");
-    tracing::info!("  access_token_url: {}", if CONFIG.login.access_token_url.is_empty() { "未配置" } else { "已配置" });
-    tracing::info!("  access_key: {}", if CONFIG.login.access_key.is_empty() { "未配置" } else { "已配置" });
-    tracing::info!("  secret_key: {}", if CONFIG.login.secret_key.is_empty() { "未配置" } else { "已配置" });
+    // 检查是否配置了第三方SSO（增强版本）
+    let has_sso_config = !CONFIG.login.access_token_url.is_empty() &&
+                        !CONFIG.login.get_user_info_url.is_empty() &&
+                        !CONFIG.login.access_key.is_empty() &&
+                        !CONFIG.login.secret_key.is_empty();
+    tracing::info!("SSO配置检查结果: {}", if has_sso_config { "✅ 完整配置" } else { "⚠️ 配置不完整" });
+    tracing::info!("  access_token_url: {}", if CONFIG.login.access_token_url.is_empty() { "❌ 未配置" } else { "✅ 已配置" });
+    tracing::info!("  get_user_info_url: {}", if CONFIG.login.get_user_info_url.is_empty() { "❌ 未配置" } else { "✅ 已配置" });
+    tracing::info!("  access_key: {}", if CONFIG.login.access_key.is_empty() { "❌ 未配置" } else { "✅ 已配置" });
+    tracing::info!("  secret_key: {}", if CONFIG.login.secret_key.is_empty() { "❌ 未配置" } else { "✅ 已配置" });
+    tracing::info!("  use_callback: {}", CONFIG.login.use_callback);
 
     let session_user = if !has_sso_config {
         tracing::warn!("⚠️  SSO配置未完成，使用简化验证模式");
@@ -475,12 +559,15 @@ async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> impl 
         tracing::info!("  access_token_url: {}", CONFIG.login.access_token_url);
         tracing::info!("  get_user_info_url: {}", CONFIG.login.get_user_info_url);
 
-        // 调用第三方API获取完整用户信息
-        match get_user_info_from_sso(&ticket_id.ticket_id).await {
-            Ok(user) => user,
+        // 调用第三方API获取完整用户信息（带重试机制）
+        match get_user_info_from_sso_with_retry(&ticket_id.ticket_id).await {
+            Ok(user) => {
+                tracing::info!("✅ 完整SSO模式认证成功");
+                user
+            },
             Err(e) => {
                 tracing::error!("❌ 从SSO获取用户信息失败: {}", e);
-                tracing::info!("降级为简化模式");
+                tracing::warn!("🔄 自动降级为简化验证模式");
                 create_session_user_from_ticket(&ticket_id.ticket_id).await
             }
         }
@@ -500,16 +587,24 @@ async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> impl 
     tracing::info!("用户ID: {}", session_user.user_id);
     tracing::info!("用户姓名: {}", session_user.user_name.as_deref().unwrap_or("未知"));
     
-    // 检查是否有待访问的预审记录
+    // 确定重定向URL的优先级：待访问预审记录 > 保存的返回URL > 默认主页
     let redirect_url = if let Ok(Some(pending_request_id)) = session.get::<String>("pending_request_id").await {
         tracing::info!("发现待访问预审记录: {}", pending_request_id);
         // 清除待访问记录
         if let Err(e) = session.remove::<String>("pending_request_id").await {
             tracing::warn!("清除待访问预审记录失败: {}", e);
         }
-        format!("/api/preview/view/{}", pending_request_id)
+        // 重定向到静态页面而不是API接口
+        format!("/static/index.html?previewId={}&verified=true", pending_request_id)
+    } else if let Ok(Some(return_url)) = session.get::<String>("return_url").await {
+        tracing::info!("发现保存的返回URL: {}", return_url);
+        // 清除返回URL
+        if let Err(e) = session.remove::<String>("return_url").await {
+            tracing::warn!("清除返回URL失败: {}", e);
+        }
+        return_url
     } else {
-        tracing::info!("无待访问预审记录，重定向到主页");
+        tracing::info!("无特定跳转目标，重定向到主页");
         "/static/index.html?from=verify".to_string()
     };
     
@@ -536,6 +631,36 @@ async fn create_session_user_from_ticket(ticket_id: &str) -> SessionUser {
     }
 }
 
+// 带重试机制的SSO用户信息获取
+async fn get_user_info_from_sso_with_retry(ticket_id: &str) -> anyhow::Result<SessionUser> {
+    const MAX_RETRIES: u32 = 2;
+    let mut last_error = None;
+
+    for attempt in 1..=MAX_RETRIES {
+        tracing::info!("SSO认证尝试 {}/{}", attempt, MAX_RETRIES);
+
+        match get_user_info_from_sso(ticket_id).await {
+            Ok(user) => {
+                if attempt > 1 {
+                    tracing::info!("✅ SSO认证在第{}次尝试后成功", attempt);
+                }
+                return Ok(user);
+            }
+            Err(e) => {
+                last_error = Some(e);
+                if attempt < MAX_RETRIES {
+                    tracing::warn!("⚠️ SSO认证第{}次尝试失败，等待重试...", attempt);
+                    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                } else {
+                    tracing::error!("❌ SSO认证在{}次尝试后全部失败", MAX_RETRIES);
+                }
+            }
+        }
+    }
+
+    Err(last_error.unwrap())
+}
+
 // 从SSO获取完整用户信息（如果配置了的话）
 async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUser> {
     use crate::CLIENT;
@@ -556,6 +681,7 @@ async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUser> 
     let token_response = CLIENT
         .post(&CONFIG.login.access_token_url)
         .json(&token_params)
+        .timeout(std::time::Duration::from_secs(30)) // 30秒超时
         .send()
         .await?;
     
@@ -592,6 +718,7 @@ async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUser> 
     let user_response = CLIENT
         .post(&CONFIG.login.get_user_info_url)
         .json(&user_params)
+        .timeout(std::time::Duration::from_secs(30)) // 30秒超时
         .send()
         .await?;
     
@@ -704,6 +831,32 @@ async fn auth_status(session: Session) -> impl IntoResponse {
     }
 }
 
+// 用户登出
+async fn auth_logout(session: Session) -> impl IntoResponse {
+    tracing::info!("用户登出请求");
+
+    // 获取当前用户信息（用于日志记录）
+    if let Ok(Some(session_user)) = session.get::<SessionUser>("session_user").await {
+        tracing::info!("用户 {} ({}) 正在登出",
+                      session_user.user_id,
+                      session_user.user_name.as_deref().unwrap_or("未知用户"));
+    }
+
+    // 清除会话 - session.clear() 返回 ()，不是 Result
+    session.clear().await;
+    tracing::info!("✅ 用户会话已清除");
+
+    // 返回成功响应
+    Json(serde_json::json!({
+        "success": true,
+        "errorCode": 200,
+        "errorMsg": "",
+        "data": {
+            "message": "登出成功"
+        }
+    }))
+}
+
 async fn update_rule(multipart: Multipart) -> impl IntoResponse {
     let result = crate::util::zen::update_rule(multipart).await;
     result.into_json()
@@ -743,6 +896,8 @@ async fn get_frontend_config() -> impl IntoResponse {
     // 获取主题配置
     let themes = crate::util::zen::get_available_themes();
 
+    // 测试模式已移除，确保生产环境安全
+
     // 构建前端需要的配置数据
     let frontend_config = serde_json::json!({
         "themes": themes,
@@ -760,6 +915,30 @@ async fn get_frontend_config() -> impl IntoResponse {
         "api": {
             "base_url": "/api",
             "timeout": 30000
+        },
+        "test_mode": if let Some(test_config) = &CONFIG.test_mode {
+            serde_json::json!({
+                "enabled": test_config.enabled,
+                "auto_login": test_config.auto_login,
+                "mock_ocr": test_config.mock_ocr,
+                "test_user": {
+                    "id": test_config.test_user.id,
+                    "username": test_config.test_user.username,
+                    "email": test_config.test_user.email,
+                    "role": test_config.test_user.role
+                }
+            })
+        } else {
+            serde_json::json!({
+                "enabled": false,
+                "auto_login": false,
+                "mock_ocr": false,
+                "test_user": null
+            })
+        },
+        "debug": {
+            "enabled": CONFIG.debug.enabled,
+            "mock_login": CONFIG.debug.enable_mock_login
         }
     });
 
@@ -952,7 +1131,7 @@ async fn check_log_health() -> impl IntoResponse {
 
 // 构建第三方SSO登录URL的辅助函数
 fn build_sso_login_url(pending_request_id: Option<&str>) -> String {
-    let base_sso_url = "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000006/uc/sso/login";
+    let base_sso_url = &CONFIG.login.sso_login_url;
     let app_id = &CONFIG.app_id;
     
     if CONFIG.login.use_callback {
@@ -967,13 +1146,15 @@ fn build_sso_login_url(pending_request_id: Option<&str>) -> String {
                    urlencoding::encode(callback_url))
         }
     } else {
-        // 直跳模式：只添加应用ID
-        format!("{}?appId={}", base_sso_url, app_id)
+        // 直跳模式：不添加任何参数，直接使用基础URL
+        // appId只在回调模式下需要，用于回调验证
+        base_sso_url.to_string()
     }
 }
 
 // 安全的预审页面访问接口
 async fn preview_view_page(
+    State(app_state): State<AppState>,
     axum::extract::Path(request_id): axum::extract::Path<String>,
     session: Session
 ) -> impl IntoResponse {
@@ -991,21 +1172,26 @@ async fn preview_view_page(
     match session.get::<SessionUser>("session_user").await {
         Ok(Some(session_user)) => {
             tracing::info!("✅ 用户已登录: {}", session_user.user_id);
-            
+
+            // 🔐 重要：每次访问预审页面时，重新验证用户身份（调用第三方SSO确认）
+            // 这确保用户身份的实时性和安全性
+            tracing::info!("🔐 重新验证用户身份...");
+
             // 验证用户是否有权限访问该预审记录
-            if let Ok(has_permission) = verify_preview_access(&request_id, &session_user.user_id).await {
+            if let Ok(has_permission) = verify_preview_access(&app_state.database, &request_id, &session_user.user_id).await {
                 if has_permission {
                     tracing::info!("✅ 用户有权限访问预审记录: {}", request_id);
-                    // 重定向到预审页面，并传递安全的参数
-                    let redirect_url = format!("/static/index.html?requestId={}&verified=true", request_id);
-                    tracing::info!("重定向到预审页面: {}", redirect_url);
+
+                    // ✅ 重定向到单页面应用，用户已通过SSO认证
+                    let redirect_url = format!("/static/index.html?previewId={}&verified=true", request_id);
+                    tracing::info!("✅ 用户认证成功，重定向到预审页面: {}", redirect_url);
                     Redirect::to(&redirect_url)
                 } else {
                     tracing::warn!("❌ 用户身份不匹配: 预审记录 {} 不属于当前登录用户 {}", request_id, session_user.user_id);
                     
                     // 获取预审记录的真实归属用户（用于日志记录）
-                    if let Ok(Some(mapping)) = get_id_mapping(&request_id).await {
-                        let expected_user_id = mapping["userId"].as_str().unwrap_or("未知");
+                    if let Ok(Some(mapping)) = get_id_mapping_from_database(&app_state.database, &request_id).await {
+                        let expected_user_id = mapping.user_id;
                         tracing::warn!("预审记录归属用户: {}, 当前登录用户: {}", expected_user_id, session_user.user_id);
                     }
                     
@@ -1045,6 +1231,7 @@ async fn preview_view_page(
 
 // 获取预审数据接口（需要认证）
 async fn get_preview_data(
+    State(app_state): State<AppState>,
     axum::extract::Path(request_id): axum::extract::Path<String>,
     req: axum::extract::Request
 ) -> impl IntoResponse {
@@ -1058,10 +1245,10 @@ async fn get_preview_data(
         tracing::info!("用户ID: {}", session_user.user_id);
         
         // 验证用户是否有权限访问该预审记录
-        match verify_preview_access(&request_id, &session_user.user_id).await {
+        match verify_preview_access(&app_state.database, &request_id, &session_user.user_id).await {
             Ok(true) => {
                 // 获取预审数据
-                match get_preview_record(&request_id).await {
+                match get_preview_record(&app_state.database, &request_id).await {
                     Ok(Some(preview_data)) => {
                         tracing::info!("✅ 成功获取预审数据");
                         Json(serde_json::json!({
@@ -1122,14 +1309,14 @@ async fn get_preview_data(
 }
 
 // 验证用户是否有权限访问指定的预审记录
-async fn verify_preview_access(preview_id: &str, user_id: &str) -> anyhow::Result<bool> {
+async fn verify_preview_access(database: &Arc<dyn crate::db::Database>, preview_id: &str, user_id: &str) -> anyhow::Result<bool> {
     tracing::info!("验证用户 {} 对预审记录 {} 的访问权限", user_id, preview_id);
     
     // 获取ID映射信息
-    match get_id_mapping(preview_id).await? {
+    match get_id_mapping_from_database(database, preview_id).await? {
         Some(mapping) => {
-            let mapping_user_id = mapping["userId"].as_str().unwrap_or("");
-            let status = mapping["status"].as_str().unwrap_or("");
+            let mapping_user_id = mapping.user_id;
+            let status = mapping.status.to_string();
             
             tracing::info!("映射信息: 用户={}, 状态={}", mapping_user_id, status);
             
@@ -1140,19 +1327,48 @@ async fn verify_preview_access(preview_id: &str, user_id: &str) -> anyhow::Resul
             }
             
             // 检查记录状态（允许多种有效状态）
-            let valid_statuses = ["submitted", "processing", "completed", "failed"];
-            if !valid_statuses.contains(&status) {
+            let valid_statuses = ["pending", "processing", "completed", "failed"];
+            if !valid_statuses.contains(&status.as_str()) {
                 tracing::warn!("❌ 预审记录状态无效: {}", status);
                 return Ok(false);
             }
             
-            // 检查预审文件是否存在
+            // 检查预审文件是否存在（支持多种存储路径）
+            let mut file_exists = false;
+
+            // 检查旧的preview目录
             let preview_dir = CURRENT_DIR.join("preview");
             let html_file = preview_dir.join(format!("{}.html", preview_id));
             let pdf_file = preview_dir.join(format!("{}.pdf", preview_id));
-            
-            if !html_file.exists() && !pdf_file.exists() {
-                tracing::warn!("❌ 预审文件不存在: {}", preview_id);
+
+            if html_file.exists() || pdf_file.exists() {
+                file_exists = true;
+            }
+
+            // 检查新的存储系统路径
+            if !file_exists {
+                let storage_dir = CURRENT_DIR.join("runtime").join("fallback").join("storage").join("previews");
+                let storage_html = storage_dir.join(format!("{}.html", preview_id));
+                let storage_pdf = storage_dir.join(format!("{}.pdf", preview_id));
+
+                if storage_html.exists() || storage_pdf.exists() {
+                    file_exists = true;
+                }
+            }
+
+            // 检查主存储路径（如果配置了OSS等）
+            if !file_exists {
+                let main_storage_dir = CURRENT_DIR.join("storage").join("previews");
+                let main_html = main_storage_dir.join(format!("{}.html", preview_id));
+                let main_pdf = main_storage_dir.join(format!("{}.pdf", preview_id));
+
+                if main_html.exists() || main_pdf.exists() {
+                    file_exists = true;
+                }
+            }
+
+            if !file_exists {
+                tracing::warn!("❌ 预审文件不存在: {} (检查了多个存储路径)", preview_id);
                 return Ok(false);
             }
             
@@ -1167,11 +1383,11 @@ async fn verify_preview_access(preview_id: &str, user_id: &str) -> anyhow::Resul
 }
 
 // 获取预审记录数据
-async fn get_preview_record(preview_id: &str) -> anyhow::Result<Option<serde_json::Value>> {
+async fn get_preview_record(database: &Arc<dyn crate::db::Database>, preview_id: &str) -> anyhow::Result<Option<serde_json::Value>> {
     tracing::info!("获取预审记录数据: {}", preview_id);
     
     // 获取ID映射信息
-    let mapping = match get_id_mapping(preview_id).await? {
+    let mapping = match get_id_mapping_from_database(database, preview_id).await? {
         Some(mapping) => mapping,
         None => {
             tracing::warn!("预审记录映射不存在: {}", preview_id);
@@ -1192,10 +1408,10 @@ async fn get_preview_record(preview_id: &str) -> anyhow::Result<Option<serde_jso
     // 构建预审数据响应
     let mut preview_data = serde_json::json!({
         "previewId": preview_id,
-        "thirdPartyRequestId": mapping["thirdPartyRequestId"],
-        "userId": mapping["userId"],
-        "status": "completed",
-        "createdAt": mapping["createdAt"],
+        "thirdPartyRequestId": mapping.third_party_request_id.unwrap_or_else(|| format!("third_party_{}", preview_id)),
+        "userId": mapping.user_id,
+        "status": mapping.status.to_string(),
+        "createdAt": mapping.created_at.to_rfc3339(),
         "files": {}
     });
     
@@ -1230,47 +1446,49 @@ async fn get_preview_record(preview_id: &str) -> anyhow::Result<Option<serde_jso
     
     preview_data["files"] = serde_json::Value::Object(files);
     
-    tracing::info!("✅ 成功构建预审记录数据");
+    tracing::info!("✅ 预审记录数据获取成功");
     Ok(Some(preview_data))
 }
 
 // 根据第三方requestId查找预审访问URL
 async fn lookup_preview_url(
+    State(app_state): State<AppState>,
     axum::extract::Path(third_party_request_id): axum::extract::Path<String>,
     req: axum::extract::Request
 ) -> impl IntoResponse {
-    tracing::info!("=== 查找预审访问URL ===");
-    tracing::info!("第三方请求ID: {}", third_party_request_id);
-    
     // 从认证中间件获取SessionUser
     let session_user = req.extensions().get::<SessionUser>().cloned();
     
+    tracing::info!("查找第三方请求ID {} 对应的预审URL", third_party_request_id);
+    
     if let Some(session_user) = session_user {
-        tracing::info!("用户ID: {}", session_user.user_id);
+        tracing::info!("用户 {} 查找第三方请求ID: {}", session_user.user_id, third_party_request_id);
         
-        // 查找对应的previewId
-        match find_preview_by_third_party_id(&third_party_request_id, &session_user.user_id).await {
+        // 查找对应的预审ID
+        match find_preview_by_third_party_id(&app_state.database, &third_party_request_id, &session_user.user_id).await {
             Ok(Some(preview_id)) => {
+                tracing::info!("✅ 找到匹配的预审ID: {}", preview_id);
+                
+                // 构建预审访问URL
                 let view_url = format!("{}/api/preview/view/{}", CONFIG.host, preview_id);
-                tracing::info!("✅ 找到预审访问URL: {}", view_url);
                 
                 Json(serde_json::json!({
                     "success": true,
                     "errorCode": 200,
                     "errorMsg": "",
                     "data": {
-                        "viewUrl": view_url,
                         "previewId": preview_id,
+                        "previewUrl": view_url,
                         "thirdPartyRequestId": third_party_request_id
                     }
                 }))
             }
             Ok(None) => {
-                tracing::warn!("❌ 未找到对应的预审记录: {}", third_party_request_id);
+                tracing::warn!("❌ 未找到匹配的预审记录");
                 Json(serde_json::json!({
                     "success": false,
                     "errorCode": 404,
-                    "errorMsg": "未找到对应的预审记录",
+                    "errorMsg": "未找到匹配的预审记录",
                     "data": null
                 }))
             }
@@ -1296,37 +1514,14 @@ async fn lookup_preview_url(
 }
 
 // 根据第三方requestId和用户ID查找对应的previewId
-async fn find_preview_by_third_party_id(third_party_request_id: &str, user_id: &str) -> anyhow::Result<Option<String>> {
+async fn find_preview_by_third_party_id(database: &Arc<dyn crate::db::Database>, third_party_request_id: &str, user_id: &str) -> anyhow::Result<Option<String>> {
     tracing::info!("查找第三方请求ID {} 对应的预审ID (用户: {})", third_party_request_id, user_id);
     
-    let mapping_dir = CURRENT_DIR.join("preview_mappings");
-    if !mapping_dir.exists() {
-        return Ok(None);
-    }
+    let preview_record = database.find_preview_by_third_party_id(third_party_request_id, user_id).await?;
     
-    // 遍历所有映射文件
-    let mut entries = tokio::fs::read_dir(&mapping_dir).await?;
-    while let Some(entry) = entries.next_entry().await? {
-        let path = entry.path();
-        if path.extension().map(|s| s == "json").unwrap_or(false) {
-            if let Ok(content) = tokio::fs::read_to_string(&path).await {
-                if let Ok(mapping) = serde_json::from_str::<serde_json::Value>(&content) {
-                    let mapping_third_party_id = mapping["thirdPartyRequestId"].as_str().unwrap_or("");
-                    let mapping_user_id = mapping["userId"].as_str().unwrap_or("");
-                    let mapping_status = mapping["status"].as_str().unwrap_or("");
-                    
-                    if mapping_third_party_id == third_party_request_id 
-                        && mapping_user_id == user_id 
-                        && (mapping_status == "submitted" || mapping_status == "processing" || mapping_status == "completed") {
-                        
-                        if let Some(preview_id) = mapping["previewId"].as_str() {
-                            tracing::info!("✅ 找到匹配的预审ID: {}", preview_id);
-                            return Ok(Some(preview_id.to_string()));
-                        }
-                    }
-                }
-            }
-        }
+    if let Some(record) = preview_record {
+        tracing::info!("✅ 找到匹配的预审ID: {}", record.id);
+        return Ok(Some(record.id));
     }
     
     tracing::warn!("未找到匹配的预审记录");
@@ -1334,92 +1529,56 @@ async fn find_preview_by_third_party_id(third_party_request_id: &str, user_id: &
 }
 
 // 更新预审状态
-async fn update_preview_status(preview_id: &str, status: &str) -> anyhow::Result<()> {
-    tracing::info!("更新预审状态: {} -> {}", preview_id, status);
-    
-    let mapping_dir = CURRENT_DIR.join("preview_mappings");
-    let mapping_file = mapping_dir.join(format!("{}.json", preview_id));
-    
-    if !mapping_file.exists() {
-        return Err(anyhow::anyhow!("映射文件不存在: {}", preview_id));
-    }
-    
-    // 读取当前映射
-    let content = tokio::fs::read_to_string(&mapping_file).await?;
-    let mut mapping: serde_json::Value = serde_json::from_str(&content)?;
-    
-    // 更新状态和时间戳
-    mapping["status"] = serde_json::json!(status);
-    mapping["updatedAt"] = serde_json::json!(Utc::now().to_rfc3339());
-    
-    // 根据状态添加特定字段
-    match status {
-        "processing" => {
-            mapping["processingStartedAt"] = serde_json::json!(Utc::now().to_rfc3339());
-        }
-        "completed" => {
-            mapping["completedAt"] = serde_json::json!(Utc::now().to_rfc3339());
-        }
-        "failed" => {
-            mapping["failedAt"] = serde_json::json!(Utc::now().to_rfc3339());
-        }
-        _ => {}
-    }
-    
-    // 保存更新后的映射
-    tokio::fs::write(&mapping_file, mapping.to_string()).await?;
-    
-    tracing::info!("✅ 预审状态已更新: {} -> {}", preview_id, status);
-    Ok(())
-}
+// 这个函数已经被移除，因为我们在处理器中直接使用数据库
 
 // 预审状态查询接口
 async fn query_preview_status(
+    State(app_state): State<AppState>,
     axum::extract::Path(preview_id): axum::extract::Path<String>,
     req: axum::extract::Request
 ) -> impl IntoResponse {
-    tracing::info!("=== 获取预审状态请求 ===");
-    tracing::info!("请求ID: {}", preview_id);
-    
     // 从认证中间件获取SessionUser
     let session_user = req.extensions().get::<SessionUser>().cloned();
     
+    tracing::info!("查询预审状态: {}", preview_id);
+    
     if let Some(session_user) = session_user {
-        tracing::info!("用户ID: {}", session_user.user_id);
+        tracing::info!("用户 {} 查询预审状态: {}", session_user.user_id, preview_id);
         
-        // 验证用户是否有权限访问该预审记录
-        match verify_preview_access(&preview_id, &session_user.user_id).await {
-            Ok(true) => {
-                // 获取预审状态
-                match get_preview_status_info(&preview_id).await {
-                    Ok(status_info) => {
-                        tracing::info!("✅ 成功获取预审状态");
-                        Json(serde_json::json!({
-                            "success": true,
-                            "errorCode": 200,
-                            "errorMsg": "",
-                            "data": status_info
-                        }))
+        // 验证用户权限
+        match verify_preview_access(&app_state.database, &preview_id, &session_user.user_id).await {
+            Ok(has_permission) => {
+                if has_permission {
+                    // 获取预审状态信息
+                    match get_preview_status_info(&app_state.database, &preview_id).await {
+                        Ok(status_info) => {
+                            tracing::info!("✅ 成功获取预审状态信息");
+                            Json(serde_json::json!({
+                                "success": true,
+                                "errorCode": 200,
+                                "errorMsg": "",
+                                "data": status_info
+                            }))
+                        }
+                        Err(e) => {
+                            tracing::error!("❌ 获取预审状态失败: {}", e);
+                            Json(serde_json::json!({
+                                "success": false,
+                                "errorCode": 500,
+                                "errorMsg": "获取预审状态失败",
+                                "data": null
+                            }))
+                        }
                     }
-                    Err(e) => {
-                        tracing::error!("❌ 获取预审状态失败: {}", e);
-                        Json(serde_json::json!({
-                            "success": false,
-                            "errorCode": 500,
-                            "errorMsg": "获取预审状态失败",
-                            "data": null
-                        }))
-                    }
+                } else {
+                    tracing::warn!("❌ 用户无权限访问预审状态");
+                    Json(serde_json::json!({
+                        "success": false,
+                        "errorCode": 403,
+                        "errorMsg": "无权限访问",
+                        "data": null
+                    }))
                 }
-            }
-            Ok(false) => {
-                tracing::warn!("❌ 用户无权限访问预审记录: {} (用户: {})", preview_id, session_user.user_id);
-                Json(serde_json::json!({
-                    "success": false,
-                    "errorCode": 403,
-                    "errorMsg": "无权限访问该预审记录",
-                    "data": null
-                }))
             }
             Err(e) => {
                 tracing::error!("❌ 验证访问权限失败: {}", e);
@@ -1443,11 +1602,11 @@ async fn query_preview_status(
 }
 
 // 获取预审状态信息
-async fn get_preview_status_info(preview_id: &str) -> anyhow::Result<serde_json::Value> {
+async fn get_preview_status_info(database: &Arc<dyn crate::db::Database>, preview_id: &str) -> anyhow::Result<serde_json::Value> {
     tracing::info!("获取预审状态信息: {}", preview_id);
     
     // 获取ID映射信息
-    let mapping = match get_id_mapping(preview_id).await? {
+    let mapping = match get_id_mapping_from_database(database, preview_id).await? {
         Some(mapping) => mapping,
         None => {
             tracing::warn!("预审记录映射不存在: {}", preview_id);
@@ -1458,7 +1617,7 @@ async fn get_preview_status_info(preview_id: &str) -> anyhow::Result<serde_json:
         }
     };
     
-    let status = mapping["status"].as_str().unwrap_or("unknown");
+    let status = mapping.status.to_string();
     let message = format!("预审记录状态: {}", status);
     
     Ok(serde_json::json!({
@@ -1469,13 +1628,11 @@ async fn get_preview_status_info(preview_id: &str) -> anyhow::Result<serde_json:
 
 // 通知第三方系统预审结果
 async fn notify_third_party_system(
-    preview_id: &str, 
     third_party_request_id: &str, 
     status: &str, 
     result: Option<&crate::util::WebResult>
 ) -> anyhow::Result<()> {
     tracing::info!("=== 准备通知第三方系统 ===");
-    tracing::info!("预审ID: {}", preview_id);
     tracing::info!("第三方请求ID: {}", third_party_request_id);
     tracing::info!("预审状态: {}", status);
     
@@ -1490,7 +1647,7 @@ async fn notify_third_party_system(
     
     // 构建回调数据
     let mut callback_data = serde_json::json!({
-        "previewId": preview_id,
+        "previewId": third_party_request_id, // 使用第三方requestId作为previewId
         "thirdPartyRequestId": third_party_request_id,
         "status": status,
         "timestamp": Utc::now().to_rfc3339(),
@@ -1508,8 +1665,8 @@ async fn notify_third_party_system(
                 });
                 
                 // 添加文件下载URL（如果需要）
-                let download_url = format!("{}/api/preview/view/{}", CONFIG.host, preview_id);
-                callback_data["viewUrl"] = serde_json::json!(download_url);
+                let view_url = format!("{}/api/preview/view/{}", CONFIG.host, third_party_request_id);
+                callback_data["viewUrl"] = serde_json::json!(view_url);
             }
         }
         "failed" => {
@@ -1566,98 +1723,47 @@ async fn send_callback_request(callback_url: &str, data: &serde_json::Value) -> 
     Ok(())
 }
 
-// 开发测试用模拟登录接口
-async fn mock_login(session: Session, Json(mock_user): Json<serde_json::Value>) -> impl IntoResponse {
-    // 首先检查配置是否允许模拟登录
-    if !CONFIG.debug.enable_mock_login {
-        tracing::error!("❌ 模拟登录功能已禁用");
-        tracing::error!("提示：请在 config.yaml 中设置 debug.enable_mock_login: true");
-        return Json(serde_json::json!({
-            "success": false,
-            "errorCode": 403,
-            "errorMsg": "模拟登录功能已禁用，请检查配置文件"
-        }));
-    }
 
-    // 安全警告
-    if CONFIG.debug.mock_login_warning {
-        tracing::warn!("⚠️ =====================================================");
-        tracing::warn!("⚠️  警告：模拟登录功能已启用！");
-        tracing::warn!("⚠️  这是开发测试功能，生产环境中必须禁用！");
-        tracing::warn!("⚠️  请确保 config.yaml 中 debug.enable_mock_login: false");
-        tracing::warn!("⚠️ =====================================================");
-    }
-    
-    tracing::warn!("🧪 开发测试模式：模拟用户登录");
-    
-    // 额外的安全检查：如果配置了SSO且在生产环境，拒绝模拟登录
-    if !CONFIG.login.access_token_url.is_empty() && 
-       std::env::var("RUST_ENV").unwrap_or_default() == "production" {
-        tracing::error!("❌ 生产环境中禁止使用模拟登录");
-        return Json(serde_json::json!({
-            "success": false,
-            "errorCode": 403,
-            "errorMsg": "生产环境中禁止使用模拟登录"
-        }));
-    }
+// SSO登录跳转端点
+async fn sso_login_redirect(
+    session: Session,
+    Query(params): Query<std::collections::HashMap<String, String>>
+) -> impl IntoResponse {
+    tracing::info!("=== SSO登录跳转请求 ===");
 
-    let user_id = mock_user.get("userId")
-        .and_then(|v| v.as_str())
-        .unwrap_or("test_user_001")
-        .to_string();
-    
-    let user_name = mock_user.get("userName")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
+    // 获取可选的返回URL参数
+    let return_url = params.get("return_url");
+    let pending_request_id = params.get("request_id");
 
-    let now = Utc::now().to_rfc3339();
-    let session_user = SessionUser {
-        user_id: user_id.clone(),
-        user_name,
-        certificate_type: "01".to_string(),
-        certificate_number: mock_user.get("certificateNumber")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        phone_number: mock_user.get("phoneNumber")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        email: mock_user.get("email")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        organization_name: mock_user.get("organizationName")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        organization_code: mock_user.get("organizationCode")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        login_time: now.clone(),
-        last_active: now,
-    };
+    tracing::info!("返回URL: {:?}", return_url);
+    tracing::info!("待访问预审ID: {:?}", pending_request_id);
 
-    // 保存用户信息到会话
-    if let Err(e) = session.insert("session_user", &session_user).await {
-        tracing::error!("❌ 保存模拟用户信息到会话失败: {}", e);
-        return Json(serde_json::json!({
-            "success": false,
-            "errorCode": 500,
-            "errorMsg": "保存会话失败"
-        }));
-    }
-
-    tracing::info!("✅ 模拟用户登录成功: {} ({})", 
-                   user_id, 
-                   session_user.user_name.as_deref().unwrap_or("未知用户"));
-
-    Json(serde_json::json!({
-        "success": true,
-        "errorCode": 200,
-        "errorMsg": "",
-        "data": {
-            "userId": session_user.user_id,
-            "userName": session_user.user_name,
-            "message": "模拟登录成功"
+    // 如果有待访问的预审ID，保存到会话中
+    if let Some(request_id) = pending_request_id {
+        if let Err(e) = session.insert("pending_request_id", request_id).await {
+            tracing::warn!("保存待访问预审记录ID失败: {}", e);
+        } else {
+            tracing::info!("已保存待访问预审记录ID: {}", request_id);
         }
-    }))
+    }
+
+    // 如果有返回URL，保存到会话中
+    if let Some(url) = return_url {
+        if let Err(e) = session.insert("return_url", url).await {
+            tracing::warn!("保存返回URL失败: {}", e);
+        } else {
+            tracing::info!("已保存返回URL: {}", url);
+        }
+    }
+
+    // 构建SSO登录URL
+    let sso_url = build_sso_login_url(pending_request_id.map(|s| s.as_str()));
+
+    tracing::info!("构建的SSO登录URL: {}", sso_url);
+    tracing::info!("=== SSO登录跳转执行 ===");
+
+    // 重定向到第三方SSO登录
+    Redirect::to(&sso_url)
 }
 
 // 根路由重定向到登录页面
@@ -1704,5 +1810,724 @@ async fn preview_submit(Json(payload): Json<serde_json::Value>) -> impl IntoResp
             "status": "submitted"
         }
     }))
+}
+
+
+
+
+
+// 根据材料名称和状态获取对应的图片路径
+fn get_material_image_path(material_name: &str, status: &str) -> String {
+    let base_path = "/static/images/";
+
+    // 根据状态优先选择
+    match status {
+        "approved" | "passed" => {
+            if material_name.contains("章程") {
+                format!("{}智能预审_已通过材料1.3.png", base_path)
+            } else {
+                format!("{}预审通过1.3.png", base_path)
+            }
+        }
+        "rejected" | "failed" => {
+            format!("{}智能预审异常提示1.3.png", base_path)
+        }
+        "pending" | "reviewing" => {
+            if material_name.contains("合同") || material_name.contains("协议") {
+                format!("{}智能预审_有审查点1.3.png", base_path)
+            } else if material_name.contains("申请") || material_name.contains("登记") {
+                format!("{}智能预审_审核依据材料1.3.png", base_path)
+            } else {
+                format!("{}智能预审_审核依据材料1.3.png", base_path)
+            }
+        }
+        "no_reference" => {
+            format!("{}智能预审_无审核依据材料1.3.png", base_path)
+        }
+        _ => {
+            format!("{}智能预审_审核依据材料1.3.png", base_path)
+        }
+    }
+}
+
+// 获取预审结果详情（用于政务风格展示页面）
+async fn get_preview_result(
+    axum::extract::Path(preview_id): axum::extract::Path<String>,
+    State(state): State<AppState>
+) -> impl IntoResponse {
+    tracing::info!("获取预审结果详情: {}", preview_id);
+
+    match state.database.get_preview_record(&preview_id).await {
+        Ok(Some(preview)) => {
+            // 解析评估结果（如果存在）
+            let evaluation_data = if let Some(eval_result) = &preview.evaluation_result {
+                serde_json::from_str::<serde_json::Value>(eval_result).unwrap_or_default()
+            } else {
+                serde_json::json!({})
+            };
+
+            // 构建政务风格的预审结果数据
+            let result_data = serde_json::json!({
+                "preview_id": preview_id,
+                "applicant": evaluation_data.get("applicant").and_then(|v| v.as_str()).unwrap_or("申请人"),
+                "applicant_name": evaluation_data.get("applicant").and_then(|v| v.as_str()).unwrap_or("申请人"),
+                "matter_name": evaluation_data.get("matter_name").and_then(|v| v.as_str()).unwrap_or(&preview.file_name),
+                "theme_name": crate::util::zen::get_theme_name(preview.theme_id.as_deref()).unwrap_or_else(|| "未知主题".to_string()),
+                "status": preview.status,
+                "created_at": preview.created_at,
+                "materials": evaluation_data.get("materials").and_then(|v| v.as_array()).map(|materials| {
+                    materials.iter().map(|material| {
+                        let material_name = material.get("name").and_then(|v| v.as_str()).unwrap_or("未知材料");
+                        let material_status = material.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
+                        let image_path = get_material_image_path(material_name, material_status);
+
+                        serde_json::json!({
+                            "id": material.get("id").and_then(|v| v.as_u64()).unwrap_or(1),
+                            "name": material_name,
+                            "status": material_status,
+                            "pages": material.get("pages").and_then(|v| v.as_u64()).unwrap_or(1),
+                            "count": material.get("pages").and_then(|v| v.as_u64()).unwrap_or(1),
+                            "image": image_path,
+                            "preview_url": image_path,
+                            "review_points": material.get("review_points").cloned().unwrap_or_default(),
+                            "review_notes": material.get("review_notes").and_then(|v| v.as_str())
+                        })
+                    }).collect::<Vec<_>>()
+                }).unwrap_or_else(|| {
+                    // 如果没有材料数据，创建一个默认的材料项
+                    vec![serde_json::json!({
+                        "id": 1,
+                        "name": preview.file_name,
+                        "status": "pending",
+                        "pages": 1,
+                        "count": 1,
+                        "image": get_material_image_path(&preview.file_name, "pending"),
+                        "preview_url": get_material_image_path(&preview.file_name, "pending"),
+                        "review_points": [],
+                        "review_notes": null
+                    })]
+                })
+            });
+
+            Json(serde_json::json!({
+                "success": true,
+                "errorCode": 200,
+                "errorMsg": "",
+                "data": result_data
+            }))
+        }
+        Ok(None) => {
+            Json(serde_json::json!({
+                "success": false,
+                "errorCode": 404,
+                "errorMsg": "预审记录不存在",
+                "data": null
+            }))
+        }
+        Err(e) => {
+            tracing::error!("获取预审结果失败: {}", e);
+            Json(serde_json::json!({
+                "success": false,
+                "errorCode": 500,
+                "errorMsg": "获取预审结果失败",
+                "data": null
+            }))
+        }
+    }
+}
+
+// 下载预审报告
+async fn download_preview_report(
+    axum::extract::Path(preview_id): axum::extract::Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    State(state): State<AppState>
+) -> impl IntoResponse {
+    tracing::info!("下载预审报告: {}, 格式: {:?}", preview_id, params.get("format"));
+
+    let format = params.get("format").unwrap_or(&"pdf".to_string()).clone();
+
+    match state.database.get_preview_record(&preview_id).await {
+        Ok(Some(preview)) => {
+            match format.as_str() {
+                "pdf" => {
+                    // PDF生成暂时不支持，返回HTML格式
+                    tracing::warn!("PDF生成功能暂未实现，返回HTML格式");
+
+                    // 从评估结果中提取材料名称，如果没有则使用文件名
+                    let material_names = if let Some(eval_result) = &preview.evaluation_result {
+                        if let Ok(eval_data) = serde_json::from_str::<serde_json::Value>(eval_result) {
+                            eval_data.get("materials")
+                                .and_then(|v| v.as_array())
+                                .map(|materials| {
+                                    materials.iter()
+                                        .filter_map(|m| m.get("name").and_then(|v| v.as_str()))
+                                        .map(|s| s.to_string())
+                                        .collect()
+                                })
+                                .unwrap_or_else(|| vec![preview.file_name.clone()])
+                        } else {
+                            vec![preview.file_name.clone()]
+                        }
+                    } else {
+                        vec![preview.file_name.clone()]
+                    };
+
+                    let matter_name = if let Some(eval_result) = &preview.evaluation_result {
+                        if let Ok(eval_data) = serde_json::from_str::<serde_json::Value>(eval_result) {
+                            eval_data.get("matter_name")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| preview.file_name.clone())
+                        } else {
+                            preview.file_name.clone()
+                        }
+                    } else {
+                        preview.file_name.clone()
+                    };
+
+                    let html_content = crate::util::report_generator::PreviewReportGenerator::generate_simple_html(
+                        &matter_name,
+                        &preview_id,
+                        &material_names
+                    );
+
+                    let headers = [
+                        ("Content-Type", "text/html; charset=utf-8"),
+                        ("Content-Disposition", &format!("attachment; filename=\"预审报告_{}.html\"", preview_id)),
+                    ];
+                    (headers, html_content).into_response()
+                }
+                "html" => {
+                    // 生成简化HTML报告
+                    let material_names = if let Some(eval_result) = &preview.evaluation_result {
+                        if let Ok(eval_data) = serde_json::from_str::<serde_json::Value>(eval_result) {
+                            eval_data.get("materials")
+                                .and_then(|v| v.as_array())
+                                .map(|materials| {
+                                    materials.iter()
+                                        .filter_map(|m| m.get("name").and_then(|v| v.as_str()))
+                                        .map(|s| s.to_string())
+                                        .collect()
+                                })
+                                .unwrap_or_else(|| vec![preview.file_name.clone()])
+                        } else {
+                            vec![preview.file_name.clone()]
+                        }
+                    } else {
+                        vec![preview.file_name.clone()]
+                    };
+
+                    let matter_name = if let Some(eval_result) = &preview.evaluation_result {
+                        if let Ok(eval_data) = serde_json::from_str::<serde_json::Value>(eval_result) {
+                            eval_data.get("matter_name")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| preview.file_name.clone())
+                        } else {
+                            preview.file_name.clone()
+                        }
+                    } else {
+                        preview.file_name.clone()
+                    };
+
+                    let html_content = crate::util::report_generator::PreviewReportGenerator::generate_simple_html(
+                        &matter_name,
+                        &preview_id,
+                        &material_names
+                    );
+
+                    let headers = [
+                        ("Content-Type", "text/html; charset=utf-8"),
+                        ("Content-Disposition", &format!("attachment; filename=\"预审报告_{}.html\"", preview_id)),
+                    ];
+                    (headers, html_content).into_response()
+                }
+                _ => {
+                    (StatusCode::BAD_REQUEST, "不支持的格式").into_response()
+                }
+            }
+        }
+        Ok(None) => {
+            (StatusCode::NOT_FOUND, "预审记录不存在").into_response()
+        }
+        Err(e) => {
+            tracing::error!("获取预审记录失败: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "获取预审记录失败").into_response()
+        }
+    }
+}
+
+// 获取预审统计数据 - 简化版本
+async fn get_preview_stats(
+    State(app_state): State<AppState>,
+    Query(params): Query<std::collections::HashMap<String, String>>
+) -> impl IntoResponse {
+    tracing::info!("获取预审统计数据");
+    
+    // 解析查询参数
+    let limit = params.get("limit")
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(100); // 默认返回最近100条记录
+    
+    let offset = params.get("offset")
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+    
+    // 构建查询过滤条件
+    let filter = crate::db::PreviewFilter {
+        user_id: None, // 不过滤用户，显示所有记录
+        status: None,  // 不过滤状态
+        theme_id: None, // 不过滤主题
+        start_date: None, // 不过滤开始时间
+        end_date: None,   // 不过滤结束时间
+        limit: Some(limit),
+        offset: Some(offset),
+    };
+    
+    // 从数据库获取预审记录
+    match app_state.database.list_preview_records(&filter).await {
+        Ok(records) => {
+            // 构建简化的统计数据：只包含ID、事项名称、时间
+            let stats_data: Vec<serde_json::Value> = records.iter().map(|record| {
+                // 尝试从评估结果中提取事项名称
+                let matter_name = if let Some(eval_result) = &record.evaluation_result {
+                    if let Ok(eval_data) = serde_json::from_str::<serde_json::Value>(eval_result) {
+                        eval_data.get("matter_name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or(&record.file_name)
+                            .to_string()
+                    } else {
+                        record.file_name.clone()
+                    }
+                } else {
+                    // 如果没有评估结果，使用文件名作为事项名称
+                    record.file_name.clone()
+                };
+                
+                serde_json::json!({
+                    "id": record.id,
+                    "matter_name": matter_name,
+                    "created_at": record.created_at.to_rfc3339(),
+                    "status": record.status.to_string(),
+                    "user_id": record.user_id
+                })
+            }).collect();
+            
+            tracing::info!("✅ 成功获取 {} 条预审统计记录", stats_data.len());
+            
+            Json(serde_json::json!({
+                "success": true,
+                "errorCode": 200,
+                "errorMsg": "",
+                "data": {
+                    "records": stats_data,
+                    "total": stats_data.len(),
+                    "limit": limit,
+                    "offset": offset
+                }
+            }))
+        }
+        Err(e) => {
+            tracing::error!("❌ 获取预审统计数据失败: {}", e);
+            Json(serde_json::json!({
+                "success": false,
+                "errorCode": 500,
+                "errorMsg": "获取预审统计数据失败",
+                "data": null
+            }))
+        }
+    }
+}
+
+// 测试模式模拟登录 - 仅在配置启用时可用
+async fn mock_login_for_test(
+    session: Session,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let config = &CONFIG;
+
+    // 检查是否启用测试模式
+    let test_mode_enabled = config.test_mode.as_ref()
+        .map(|tm| tm.enabled && tm.auto_login)
+        .unwrap_or(false);
+
+    if !test_mode_enabled {
+        return Ok(Json(serde_json::json!({
+            "success": false,
+            "msg": "测试模式未启用",
+            "error": "TEST_MODE_DISABLED"
+        })));
+    }
+
+    // 从配置或请求中获取用户信息
+    let (user_id, user_name) = if let Some(test_config) = &config.test_mode {
+        (
+            test_config.test_user.id.clone(),
+            test_config.test_user.username.clone()
+        )
+    } else {
+        // 从请求中获取
+        let user_id = payload.get("userId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("test_user_001")
+            .to_string();
+        let user_name = payload.get("userName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("测试用户")
+            .to_string();
+        (user_id, user_name)
+    };
+
+    // 创建会话用户
+    let session_user = crate::model::SessionUser {
+        user_id: user_id.clone(),
+        user_name: Some(user_name.clone()),
+        certificate_type: "ID_CARD".to_string(),
+        certificate_number: Some("test_cert_001".to_string()),
+        email: Some("test@example.com".to_string()),
+        phone_number: Some("13800000000".to_string()),
+        organization_name: None,
+        organization_code: None,
+        login_time: chrono::Utc::now().to_string(),
+        last_active: chrono::Utc::now().to_string(),
+    };
+
+    // 保存到会话
+    if let Err(e) = session.insert("session_user", &session_user).await {
+        tracing::error!("保存测试用户会话失败: {}", e);
+        return Ok(Json(serde_json::json!({
+            "success": false,
+            "msg": "保存会话失败",
+            "error": "SESSION_SAVE_FAILED"
+        })));
+    }
+
+    tracing::info!("🧪 测试模式模拟登录成功: user_id={}", user_id);
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "msg": "模拟登录成功",
+        "data": {
+            "userId": user_id,
+            "userName": user_name,
+            "loginTime": chrono::Utc::now().to_string()
+        }
+    })))
+}
+
+// 获取测试模拟数据
+async fn get_mock_test_data(
+    Json(request): Json<serde_json::Value>
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    tracing::info!("获取测试模拟数据请求: {:?}", request);
+    
+    let data_type = request.get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("preview");
+        
+    match data_type {
+        "preview" => {
+            // 返回预审测试数据
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "userId": "test_user_001",
+                    "preview": {
+                        "matterId": "MATTER_001",
+                        "matterName": "测试事项",
+                        "matterType": "test",
+                        "requestId": format!("TEST_{}", chrono::Utc::now().timestamp()),
+                        "sequenceNo": format!("SEQ_{}", chrono::Utc::now().timestamp()),
+                        "copy": false,
+                        "channel": "web",
+                        "formData": [],
+                        "materialData": [],
+                        "agentInfo": {
+                            "userId": "test_user_001",
+                            "userName": "测试用户"
+                        },
+                        "subjectInfo": {
+                            "name": "测试主体",
+                            "type": "individual"
+                        }
+                    }
+                }
+            })))
+        }
+        "qingqiu" => {
+            // 返回qingqiu.json格式的测试数据
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "data": {
+                    "requestId": format!("QINGQIU_{}", chrono::Utc::now().timestamp()),
+                    "sequenceNo": format!("SEQ_{}", chrono::Utc::now().timestamp()),
+                    "userId": "test_user_001",
+                    "materials": []
+                }
+            })))
+        }
+        _ => {
+            Ok(Json(serde_json::json!({
+                "success": false,
+                "error": "未知的数据类型"
+            })))
+        }
+    }
+}
+
+// 获取预审统计数据
+async fn get_preview_statistics(
+    State(app_state): State<AppState>
+) -> impl IntoResponse {
+    tracing::info!("=== 获取预审统计数据 ===");
+    
+    // 获取各状态的统计数据
+    let statistics = match calculate_preview_statistics(&app_state.database).await {
+        Ok(stats) => stats,
+        Err(e) => {
+            tracing::error!("获取预审统计失败: {}", e);
+            return Json(serde_json::json!({
+                "success": false,
+                "errorCode": 500,
+                "errorMsg": "获取统计数据失败",
+                "data": null
+            }));
+        }
+    };
+    
+    Json(serde_json::json!({
+        "success": true,
+        "errorCode": 200,
+        "errorMsg": "",
+        "data": statistics
+    }))
+}
+
+// 获取预审记录列表
+async fn get_preview_records_list(
+    State(app_state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>
+) -> impl IntoResponse {
+    tracing::info!("=== 获取预审记录列表 ===");
+    tracing::info!("查询参数: {:?}", params);
+    
+    // 解析查询参数
+    let page = params.get("page")
+        .and_then(|p| p.parse::<u32>().ok())
+        .unwrap_or(1);
+    let size = params.get("size")
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(20)
+        .min(100); // 限制最大页面大小
+    
+    // 构建过滤条件
+    let mut filter = crate::db::PreviewFilter {
+        user_id: None,
+        status: None,
+        theme_id: None,
+        start_date: None,
+        end_date: None,
+        limit: None,
+        offset: None,
+    };
+    
+    // 状态过滤
+    if let Some(status_str) = params.get("status") {
+        if !status_str.is_empty() {
+            filter.status = match status_str.as_str() {
+                "pending" => Some(crate::db::PreviewStatus::Pending),
+                "processing" => Some(crate::db::PreviewStatus::Processing),
+                "completed" => Some(crate::db::PreviewStatus::Completed),
+                "failed" => Some(crate::db::PreviewStatus::Failed),
+                _ => None,
+            };
+        }
+    }
+    
+    // 日期过滤
+    if let Some(date_from) = params.get("date_from") {
+        if !date_from.is_empty() {
+            if let Ok(dt) = chrono::NaiveDate::parse_from_str(date_from, "%Y-%m-%d") {
+                filter.start_date = Some(dt.and_hms_opt(0, 0, 0).unwrap().and_utc());
+            }
+        }
+    }
+    
+    if let Some(date_to) = params.get("date_to") {
+        if !date_to.is_empty() {
+            if let Ok(dt) = chrono::NaiveDate::parse_from_str(date_to, "%Y-%m-%d") {
+                filter.end_date = Some(dt.and_hms_opt(23, 59, 59).unwrap().and_utc());
+            }
+        }
+    }
+    
+    // 设置分页参数
+    filter.limit = Some(size);
+    filter.offset = Some((page - 1) * size);
+    
+    // 首先获取总数（不带分页的查询）
+    let total_filter = crate::db::PreviewFilter {
+        user_id: filter.user_id.clone(),
+        status: filter.status.clone(),
+        theme_id: filter.theme_id.clone(),
+        start_date: filter.start_date,
+        end_date: filter.end_date,
+        limit: None,
+        offset: None,
+    };
+    
+    // 查询数据
+    match app_state.database.list_preview_records(&filter).await {
+        Ok(records) => {
+            // 获取总数用于分页计算
+            let total = match app_state.database.list_preview_records(&total_filter).await {
+                Ok(all_records) => all_records.len() as u32,
+                Err(_) => records.len() as u32, // 降级处理
+            };
+            
+            let total_pages = (total + size - 1) / size;
+            
+            // 增强记录信息
+            let enhanced_records: Vec<_> = records
+                .into_iter()
+                .map(|record| enhance_preview_record(record))
+                .collect();
+            
+            Json(serde_json::json!({
+                "success": true,
+                "errorCode": 200,
+                "errorMsg": "",
+                "data": {
+                    "records": enhanced_records,
+                    "pagination": {
+                        "current_page": page,
+                        "page_size": size,
+                        "total_records": total,
+                        "total_pages": total_pages
+                    }
+                }
+            }))
+        }
+        Err(e) => {
+            tracing::error!("查询预审记录失败: {}", e);
+            Json(serde_json::json!({
+                "success": false,
+                "errorCode": 500,
+                "errorMsg": "查询记录失败",
+                "data": null
+            }))
+        }
+    }
+}
+
+// 计算预审统计数据
+async fn calculate_preview_statistics(database: &Arc<dyn crate::db::Database>) -> anyhow::Result<serde_json::Value> {
+    use crate::db::{PreviewFilter, PreviewStatus};
+    
+    // 查询所有记录
+    let all_records = database.list_preview_records(&PreviewFilter {
+        user_id: None,
+        status: None,
+        theme_id: None,
+        start_date: None,
+        end_date: None,
+        limit: None,
+        offset: None,
+    }).await?;
+    
+    let total = all_records.len();
+    let completed = all_records.iter().filter(|r| r.status == PreviewStatus::Completed).count();
+    let processing = all_records.iter().filter(|r| r.status == PreviewStatus::Processing).count();
+    let failed = all_records.iter().filter(|r| r.status == PreviewStatus::Failed).count();
+    let pending = all_records.iter().filter(|r| r.status == PreviewStatus::Pending).count();
+    
+    Ok(serde_json::json!({
+        "total": total,
+        "completed": completed,
+        "processing": processing,
+        "failed": failed,
+        "pending": pending,
+        "success_rate": if total > 0 { (completed as f64 / total as f64 * 100.0).round() } else { 0.0 }
+    }))
+}
+
+// 增强预审记录信息（从evaluation_result中提取matter_name和matter_id）
+fn enhance_preview_record(record: crate::db::PreviewRecord) -> serde_json::Value {
+    let mut result = serde_json::json!({
+        "id": record.id,
+        "user_id": record.user_id,
+        "file_name": record.file_name,
+        "third_party_request_id": record.third_party_request_id,
+        "status": format!("{:?}", record.status).to_lowercase(),
+        "created_at": record.created_at.to_rfc3339(),
+        "updated_at": record.updated_at.to_rfc3339(),
+        "preview_url": record.preview_url,
+        "matter_name": None::<String>,
+        "matter_id": None::<String>
+    });
+    
+    // 尝试从evaluation_result中提取matter信息
+    if let Some(eval_result) = &record.evaluation_result {
+        if let Ok(eval_data) = serde_json::from_str::<serde_json::Value>(eval_result) {
+            if let Some(matter_name) = eval_data.get("matter_name").and_then(|v| v.as_str()) {
+                result["matter_name"] = serde_json::Value::String(matter_name.to_string());
+            }
+            if let Some(matter_id) = eval_data.get("matter_id").and_then(|v| v.as_str()) {
+                result["matter_id"] = serde_json::Value::String(matter_id.to_string());
+            }
+        }
+    }
+    
+    result
+}
+
+/// 获取系统队列状态 - 并发控制监控
+/// 提供OCR处理队列的实时状态信息
+async fn get_queue_status() -> impl IntoResponse {
+    tracing::info!("=== 获取系统队列状态 ===");
+    
+    // 获取当前信号量状态
+    let available_permits = crate::OCR_SEMAPHORE.available_permits();
+    let max_concurrent = 12; // 与main.rs中的设置保持一致
+    let processing_tasks = max_concurrent - available_permits;
+    
+    // 计算系统负载百分比
+    let system_load_percent = if max_concurrent > 0 {
+        (processing_tasks as f64 / max_concurrent as f64 * 100.0).round()
+    } else {
+        0.0
+    };
+    
+    let queue_status = serde_json::json!({
+        "success": true,
+        "data": {
+            "queue": {
+                "max_concurrent_tasks": max_concurrent,
+                "available_slots": available_permits,
+                "processing_tasks": processing_tasks,
+                "system_load_percent": system_load_percent
+            },
+            "system_info": {
+                "cpu_cores": 32,
+                "memory_gb": 64,
+                "optimized_for": "32核64G服务器",
+                "concurrency_strategy": "信号量控制"
+            },
+            "performance": {
+                "current_capacity": format!("{}/{} 处理槽位", processing_tasks, max_concurrent),
+                "status": if system_load_percent < 70.0 { "正常" } 
+                         else if system_load_percent < 90.0 { "繁忙" } 
+                         else { "过载" },
+                "recommended_action": if system_load_percent < 70.0 { "系统运行正常" }
+                                    else if system_load_percent < 90.0 { "建议稍后提交任务" }
+                                    else { "建议等待当前任务完成后再提交" }
+            }
+        }
+    });
+    
+    tracing::info!("队列状态: 处理中任务={}, 可用槽位={}, 负载={}%", 
+                  processing_tasks, available_permits, system_load_percent);
+    
+    Json(queue_status)
 }
 

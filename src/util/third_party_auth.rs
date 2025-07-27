@@ -4,7 +4,7 @@ use axum::{
     response::Response,
     http::{StatusCode, HeaderMap}
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;

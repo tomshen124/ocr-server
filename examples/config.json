@@ -1,0 +1,11 @@
+{
+  "api_url": "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220310000001/api/preview",
+  "access_key": "BCDSGA_b0d54f6f644c41717039b9b6da351dc7",
+  "secret_key": "BCDSGS_73f075e10214bfd18d12e2f4f9712664",
+  "log_file": "./counter.log",
+  "counts_file": "./counts.json",
+  "retry_count": 3,
+  "retry_delay": 5,
+  "interval_range_min": 1,
+  "interval_range_max": 5
+} 

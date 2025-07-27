@@ -9,16 +9,13 @@ use crate::util::WebResult;
 
 // 规则引擎相关导入
 use zen_engine::model::DecisionContent;
-use zen_engine::DecisionEngine;
-use zen_engine::DecisionGraphResponse;
 use serde_json::{json, Value};
 use tracing::{info, warn, error};
 
 // OCR和文档处理相关导入
 use ocr_conn::ocr::Extractor;
 use ocr_conn::CURRENT_DIR;
-use build_html::{Html, HtmlContainer, HtmlPage, Table};
-use chrono::Local;
+use build_html::{Html, Table};
 use shiva::core::{Element, TransformerTrait};
 
 // 预审相关结构
@@ -459,6 +456,46 @@ fn normalize_matter_id(id: &str) -> String {
     id.chars().filter(|c| c.is_ascii_digit()).collect()
 }
 
+// 根据用户ID获取用户名
+async fn get_user_name_by_id(user_id: &str) -> Option<String> {
+    tracing::info!("尝试获取用户ID {} 对应的用户名", user_id);
+
+    // 方案1: 从模拟用户数据获取（开发环境）
+    if let Some(name) = get_mock_user_name(user_id) {
+        tracing::info!("✅ 从模拟数据获取用户名: {} -> {}", user_id, name);
+        return Some(name);
+    }
+
+    // 方案2: 从SSO系统获取（生产环境）
+    // TODO: 实现从SSO系统根据userId获取userName的逻辑
+    // 这需要调用第三方API或查询用户数据库
+
+    // 方案3: 从本地用户缓存获取
+    // TODO: 实现本地用户信息缓存查询
+
+    tracing::warn!("⚠️  无法获取用户ID {} 对应的用户名", user_id);
+    None
+}
+
+// 模拟用户数据（开发环境使用）
+fn get_mock_user_name(user_id: &str) -> Option<String> {
+    // 基于qingqiu.json中的真实userId创建模拟映射
+    let mock_users = std::collections::HashMap::from([
+        ("1472176", "张三"),
+        ("8afac0cc580b07c701581aefd2435265", "李四"),
+        ("8afac0cc616afee401619d053b14004d", "王五"),
+        ("8218536", "赵六"),
+        ("17814278", "钱七"),
+        ("2872696", "孙八"),
+        ("3088716", "周九"),
+        ("16187126", "吴十"),
+        ("14563191", "郑十一"),
+        // 可以根据需要添加更多映射
+    ]);
+
+    mock_users.get(user_id).map(|name| name.to_string())
+}
+
 // 检查两个数字ID是否有显著的数字重叠
 fn has_significant_digit_overlap(id1: &str, id2: &str) -> bool {
     if id1.is_empty() || id2.is_empty() || id1.len() < 6 || id2.len() < 6 {
@@ -540,11 +577,31 @@ impl Preview {
         info!("事项名称: {}", self.matter_name);
         info!("材料数量: {}", self.material_data.len());
 
-        // 构建基础信息
+        // 构建基础信息 - 如果用户名为空，尝试从userId获取
+        let applicant_name = if let Some(name) = &self.subject_info.user_name {
+            if !name.is_empty() {
+                name.clone()
+            } else {
+                get_user_name_by_id(&self.subject_info.user_id).await.unwrap_or_else(|| format!("用户{}", &self.subject_info.user_id))
+            }
+        } else {
+            get_user_name_by_id(&self.subject_info.user_id).await.unwrap_or_else(|| format!("用户{}", &self.subject_info.user_id))
+        };
+
+        let agent_name = if let Some(name) = &self.agent_info.user_name {
+            if !name.is_empty() {
+                name.clone()
+            } else {
+                get_user_name_by_id(&self.agent_info.user_id).await.unwrap_or_else(|| format!("用户{}", &self.agent_info.user_id))
+            }
+        } else {
+            get_user_name_by_id(&self.agent_info.user_id).await.unwrap_or_else(|| format!("用户{}", &self.agent_info.user_id))
+        };
+
         let basic_info = BasicInfo {
-            applicant_name: self.subject_info.user_name.clone().unwrap_or_default(),
+            applicant_name,
             applicant_id: self.subject_info.user_id.clone(),
-            agent_name: self.agent_info.user_name.clone().unwrap_or_default(),
+            agent_name,
             agent_id: self.agent_info.user_id.clone(),
             matter_name: self.matter_name.clone(),
             matter_id: self.matter_id.clone(),
@@ -567,14 +624,32 @@ impl Preview {
             let mut attachment_infos = vec![];
 
             for attachment in material.attachment_list {
-                info!("处理附件: {}", attachment.attach_name);
+                info!("📎 处理附件: {} (URL: {})", attachment.attach_name, 
+                     if attachment.attach_url.len() > 100 { 
+                         format!("{}...", &attachment.attach_url[..97]) 
+                     } else { 
+                         attachment.attach_url.clone() 
+                     });
 
                 // 下载文件内容
                 let bytes = match download_file_content(&attachment.attach_url).await {
-                    Ok(data) => data,
+                    Ok(data) => {
+                        info!("✅ 文件下载成功: {} (大小: {} bytes)", attachment.attach_name, data.len());
+                        data
+                    },
                     Err(e) => {
-                        warn!("下载文件失败: {} - {}", attachment.attach_url, e);
-                        // 记录失败的附件信息
+                        warn!("❌ 文件下载失败: {} - {}", attachment.attach_url, e);
+                        
+                        // 根据错误类型提供更详细的信息
+                        let error_detail = if attachment.attach_url.starts_with("data:") {
+                            "Data URL解析失败"
+                        } else if attachment.attach_url.starts_with("http") {
+                            "网络文件下载失败"
+                        } else {
+                            "本地文件读取失败"
+                        };
+                        
+                        // 记录失败的附件信息，但继续处理其他附件
                         attachment_infos.push(AttachmentInfo {
                             file_name: attachment.attach_name.clone(),
                             file_url: attachment.attach_url.clone(),
@@ -582,6 +657,8 @@ impl Preview {
                             file_size: None,
                             ocr_success: false,
                         });
+                        
+                        warn!("⚠️  附件处理失败详情: {} - {}", error_detail, e);
                         continue;
                     }
                 };
@@ -595,54 +672,69 @@ impl Preview {
 
                 let mut ocr_success = true;
                 let file_size = bytes.len() as u64;
+                
+                info!("🔍 开始OCR处理: {} (类型: {}, 大小: {} bytes)", 
+                     attachment.attach_name, file_extension, file_size);
 
                 match file_extension.as_str() {
                     "pdf" => {
                         // PDF转图片后OCR
+                        info!("📄 PDF文档转换处理中...");
                         match ocr_conn::pdf_render_jpg(&attachment.attach_name, bytes) {
                             Ok(images) => {
-                                for image in images {
+                                info!("✅ PDF转换成功，生成 {} 页图片", images.len());
+                                for (page_num, image) in images.into_iter().enumerate() {
                                     match ocr.ocr_and_parse(image.into()) {
                                         Ok(ocr_results) => {
+                                            let page_text_count = ocr_results.len();
+                                            info!("✅ 第{}页OCR成功，识别{}个文本块", page_num + 1, page_text_count);
                                             contents.extend(ocr_results.into_iter().map(|content| content.text));
                                         }
                                         Err(e) => {
-                                            warn!("OCR处理失败: {}", e);
+                                            warn!("❌ 第{}页OCR处理失败: {}", page_num + 1, e);
+                                            ocr_success = false;
                                         }
                                     }
                                 }
                             }
                             Err(e) => {
-                                warn!("PDF转换失败: {}", e);
+                                warn!("❌ PDF转换失败: {}", e);
                                 ocr_success = false;
                             }
                         }
                     }
                     "doc" | "docx" => {
                         // Word文档解析
+                        info!("📝 Word文档解析中...");
                         match shiva::docx::Transformer::parse(&bytes.into()) {
                             Ok(doc) => {
                                 let elements = doc.get_all_elements();
+                                let mut text_count = 0;
                                 for element in elements {
                                     if let Element::Text { text, .. } = element {
                                         contents.push(text.clone());
+                                        text_count += 1;
                                     }
                                 }
+                                info!("✅ Word文档解析成功，提取{}个文本元素", text_count);
                             }
                             Err(e) => {
-                                warn!("Word文档解析失败: {}", e);
+                                warn!("❌ Word文档解析失败: {}", e);
                                 ocr_success = false;
                             }
                         }
                     }
                     _ => {
                         // 图片直接OCR
+                        info!("🖼️  图片OCR识别中...");
                         match ocr.ocr_and_parse(bytes.into()) {
                             Ok(ocr_results) => {
+                                let text_count = ocr_results.len();
+                                info!("✅ 图片OCR成功，识别{}个文本块", text_count);
                                 contents.extend(ocr_results.into_iter().map(|content| content.text));
                             }
                             Err(e) => {
-                                warn!("图片OCR处理失败: {}", e);
+                                warn!("❌ 图片OCR处理失败: {}", e);
                                 ocr_success = false;
                             }
                         }
@@ -660,9 +752,15 @@ impl Preview {
             }
 
             // 进行规则评估
-            info!("正在评估材料: {} (代码: {})", material.code, material.code);
+            let total_content_length = contents.join("").len();
+            info!("📋 材料评估开始: {} (附件数: {}, 总文本长度: {} 字符)", 
+                 material.code, attachment_infos.len(), total_content_length);
+            
             let ocr_content = contents.join("");
             let simple_result = evaluate_material_simple(&material.code, &ocr_content);
+            
+            info!("📊 材料评估结果: {} - {} (代码: {})", 
+                 material.code, simple_result.message, simple_result.code);
 
             // 构建规则评估结果
             let rule_evaluation = RuleEvaluationResult {
@@ -766,17 +864,85 @@ fn evaluate_material_simple(material_code: &str, content: &str) -> SimpleEvaluat
     }
 }
 
-// 辅助函数：下载文件内容
+// 辅助函数：下载文件内容（支持多种URL格式）
 async fn download_file_content(url: &str) -> anyhow::Result<Vec<u8>> {
-    if url.starts_with("http://") || url.starts_with("https://") {
+    use base64::{Engine as _, engine::general_purpose};
+    
+    tracing::debug!("尝试下载文件: {}", url);
+    
+    if url.starts_with("data:") {
+        // 处理 data URL 格式 (如: data:text/plain;base64,SGVsbG8gV29ybGQ=)
+        tracing::info!("检测到data URL格式，正在解析...");
+        
+        // 解析 data URL 格式: data:[<mediatype>][;base64],<data>
+        if let Some(comma_pos) = url.find(',') {
+            let header = &url[5..comma_pos]; // 去掉 "data:" 前缀
+            let data_part = &url[comma_pos + 1..];
+            
+            if header.contains("base64") {
+                // Base64 编码数据
+                match general_purpose::STANDARD.decode(data_part) {
+                    Ok(decoded) => {
+                        tracing::info!("✅ Base64数据解码成功，长度: {} bytes", decoded.len());
+                        return Ok(decoded);
+                    },
+                    Err(e) => {
+                        return Err(anyhow::anyhow!("Base64解码失败: {}", e));
+                    }
+                }
+            } else {
+                // URL编码的文本数据
+                let decoded = urlencoding::decode(data_part)
+                    .map_err(|e| anyhow::anyhow!("URL解码失败: {}", e))?;
+                tracing::info!("✅ URL编码数据解码成功，长度: {} bytes", decoded.len());
+                return Ok(decoded.to_string().into_bytes());
+            }
+        } else {
+            return Err(anyhow::anyhow!("无效的data URL格式: 缺少逗号分隔符"));
+        }
+    } else if url.starts_with("http://") || url.starts_with("https://") {
         // 网络文件下载
-        let response = reqwest::get(url).await?;
+        tracing::info!("正在从网络下载文件: {}", url);
+        
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .user_agent("OCR-Preview-Service/1.0")
+            .build()?;
+            
+        let response = client.get(url).send().await?;
+        
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!("HTTP请求失败: {}", response.status()));
+        }
+        
         let bytes = response.bytes().await?;
+        tracing::info!("✅ 网络文件下载成功，长度: {} bytes", bytes.len());
         Ok(bytes.to_vec())
+    } else if url.starts_with("file://") {
+        // 文件协议 URL
+        let file_path = &url[7..]; // 去掉 "file://" 前缀
+        tracing::info!("正在读取文件协议路径: {}", file_path);
+        
+        let bytes = tokio::fs::read(file_path).await
+            .map_err(|e| anyhow::anyhow!("读取文件失败 {}: {}", file_path, e))?;
+        tracing::info!("✅ 文件读取成功，长度: {} bytes", bytes.len());
+        Ok(bytes)
+    } else if url.contains("://") {
+        // 其他协议 (如 ftp://, sftp:// 等)
+        return Err(anyhow::anyhow!("不支持的协议: {}", url));
     } else {
-        // 本地文件读取
-        let path = CURRENT_DIR.join(url);
-        let bytes = tokio::fs::read(path).await?;
+        // 本地文件路径（相对或绝对路径）
+        tracing::info!("正在读取本地文件: {}", url);
+        
+        let path = if std::path::Path::new(url).is_absolute() {
+            std::path::PathBuf::from(url)
+        } else {
+            CURRENT_DIR.join(url)
+        };
+        
+        let bytes = tokio::fs::read(&path).await
+            .map_err(|e| anyhow::anyhow!("读取本地文件失败 {:?}: {}", path, e))?;
+        tracing::info!("✅ 本地文件读取成功，长度: {} bytes", bytes.len());
         Ok(bytes)
     }
 }

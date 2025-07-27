@@ -1,0 +1,46 @@
+# =====================================================================
+# OCR智能预审系统 - 开发环境配置
+# =====================================================================
+# 基于: config.yaml.template
+# 说明: 本文件仅包含开发环境特定的配置覆盖
+# =====================================================================
+
+# 服务配置
+host: "http://localhost:31101"
+port: 31101
+
+# 调试模式 - 开发环境启用所有调试功能
+debug:
+  enabled: true
+  enable_mock_login: true
+  mock_login_warning: true
+  tools_enabled:
+    api_test: true
+    mock_login: true
+    preview_demo: true
+    flow_test: true
+    system_monitor: true
+    data_manager: true
+
+# 日志配置 - 开发环境使用debug级别
+logging:
+  level: "debug"
+  file:
+    enabled: true
+    directory: "runtime/logs"
+    retention_days: 3
+
+# 监控配置 - 开发环境启用监控
+monitoring:
+  enabled: true
+
+# 第三方访问控制 - 开发环境禁用
+third_party_access:
+  enabled: false
+
+# 故障转移 - 开发环境可选择性启用
+failover:
+  database:
+    enabled: false  # 开发环境通常不需要
+  storage:
+    enabled: false  # 开发环境通常不需要

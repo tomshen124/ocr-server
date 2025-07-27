@@ -1,0 +1,125 @@
+# OCR服务器配置文件 - 带故障转移功能
+# 本配置文件展示了完整的故障转移配置选项
+
+# 服务基础配置
+host: "http://localhost:31101"
+port: 31101
+app-id: "ocr-server"
+preview-url: "http://localhost:31101/preview"
+session-timeout: 3600
+callback-url: "http://localhost:31101/callback"
+
+# 登录配置
+login:
+  access-token-url: "https://sso.example.com/oauth/token"
+  get-user-info-url: "https://sso.example.com/api/user/info"
+  token-key: "access_token"
+  user-id-key: "user_id"
+  user-name-key: "user_name"
+
+# OSS存储配置（留空则使用本地存储）
+zhzwdt-oss:
+  server-url: "oss-cn-beijing.aliyuncs.com"
+  bucket: "ocr-preview-bucket"
+  access-key: ""  # 填写实际的Access Key
+  access-key-secret: ""  # 填写实际的Secret Key
+  root: "ocr-preview"
+  public-url: "https://ocr-preview-bucket.oss-cn-beijing.aliyuncs.com"
+
+# DM数据库配置（留空则使用SQLite）
+DMSql:
+  database-host: ""  # 填写实际的数据库主机
+  database-port: "5236"
+  database-user: ""  # 填写实际的用户名
+  database-password: ""  # 填写实际的密码
+  database-name: "ocr_db"
+
+# 故障转移配置（新增）
+failover:
+  # 数据库故障转移
+  database:
+    enabled: true                          # 启用数据库故障转移
+    health_check_interval: 30              # 健康检查间隔（秒）
+    max_retries: 3                         # 最大重试次数
+    retry_delay: 1000                      # 重试延迟（毫秒）
+    fallback_to_local: true                # 降级到本地SQLite
+    local_data_dir: "runtime/fallback/db"  # 降级数据库目录
+  
+  # 存储故障转移
+  storage:
+    enabled: true                              # 启用存储故障转移
+    health_check_interval: 30                  # 健康检查间隔（秒）
+    max_retries: 3                             # 最大重试次数
+    retry_delay: 1000                          # 重试延迟（毫秒）
+    auto_switch_to_local: true                 # 自动切换到本地存储
+    sync_when_recovered: true                  # 恢复后同步文件
+    local_fallback_dir: "runtime/fallback/storage"  # 降级存储目录
+
+# 审批系统配置
+approve:
+  submit-url: "https://approve.example.com/api/submit"
+  access-key: "approve_access_key"
+  secret-key: "approve_secret_key"
+
+# 调试配置
+debug:
+  enabled: false                    # 生产环境设为false
+  enable_mock_login: false          # 生产环境必须设为false
+  mock_login_warning: true
+  tools_enabled:
+    api_test: false
+    mock_login: false
+    preview_demo: false
+    flow_test: false
+    system_monitor: false
+    data_manager: false
+
+# 日志配置
+logging:
+  level: "info"
+  file:
+    enabled: true
+    directory: "runtime/logs"
+    retention_days: 7               # 日志保留天数
+
+# 监控配置
+monitoring:
+  enabled: false                    # 需要编译时启用monitoring特性
+
+# 第三方访问控制
+third_party_access:
+  enabled: true                     # 生产环境建议启用
+  clients:
+    - client_id: "client_001"
+      secret_key: "change_this_in_production"
+      name: "第三方系统1"
+      enabled: true
+      permissions: ["preview", "query"]
+  signature:
+    required: true                  # 要求请求签名
+    timestamp_tolerance: 300        # 时间戳容差（秒）
+  rate_limiting:
+    enabled: true                   # 启用速率限制
+    requests_per_minute: 100
+    requests_per_hour: 1000
+
+# 主题配置
+themes:
+  # 主题缓存配置
+  cache:
+    enabled: true
+    ttl: 3600                       # 缓存时间（秒）
+
+# 测试模式配置
+test_mode:
+  enabled: false                    # 测试模式开关
+  auto_login: true                  # 启用自动登录
+  mock_ocr: true                    # 启用模拟OCR结果
+  mock_delay: 500                   # 模拟处理延迟（毫秒）
+  
+  # 测试用户配置
+  test_user:
+    id: "test_user_001"
+    username: "测试用户"
+    email: "test@example.com"
+    role: "tester"

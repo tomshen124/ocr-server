@@ -1,0 +1,108 @@
+# OCR智能预审系统 - 生产环境配置
+# 严格按照安全最佳实践配置
+
+# ============= 基本服务配置 =============
+host: "http://your-production-domain.com"
+port: 8080
+preview_url: "http://your-production-domain.com"
+session_timeout: 3600  # 1小时会话超时
+app_id: "${APP_ID}"
+callback_url: "${CALLBACK_URL}"
+
+# ============= 单点登录配置 =============
+login:
+  sso_login_url: "${SSO_LOGIN_URL}"
+  access_token_url: "${SSO_ACCESS_TOKEN_URL}"
+  get_user_info_url: "${SSO_USER_INFO_URL}"
+  access_key: "${SSO_ACCESS_KEY}"
+  secret_key: "${SSO_SECRET_KEY}"
+  use_callback: true
+
+# ============= 对象存储配置 =============
+zhzwdt-oss:
+  root: "${OSS_ROOT}"
+  bucket: "${OSS_BUCKET}"
+  server_url: "${OSS_SERVER_URL}"
+  AccessKey: "${OSS_ACCESS_KEY}"
+  AccessKey Secret: "${OSS_ACCESS_KEY_SECRET}"
+
+# ============= 数据库配置 =============
+DMSql:
+  DATABASE_HOST: "${DB_HOST}"
+  DATABASE_PORT: "${DB_PORT}"
+  DATABASE_USER: "${DB_USER}"
+  DATABASE_PASSWORD: "${DB_PASSWORD}"
+  DATABASE_NAME: "${DB_NAME}"
+
+# ============= 审批配置 =============
+approve:
+  submit-url: "${APPROVE_SUBMIT_URL}"
+  access-key: "${APPROVE_ACCESS_KEY}"
+  secret-key: "${APPROVE_SECRET_KEY}"
+
+# ============= 安全配置 =============
+debug:
+  enabled: false                    # 生产环境强制禁用
+  enable_mock_login: false         # 生产环境强制禁用
+  mock_login_warning: false
+  tools_enabled:
+    api_test: false                # 生产环境禁用所有测试工具
+    mock_login: false
+    preview_demo: false
+    flow_test: false
+    system_monitor: false
+    data_manager: false
+
+# ============= 日志配置 =============
+logging:
+  level: "warn"                    # 生产环境只记录警告和错误
+  file:
+    enabled: true
+    directory: "/var/log/ocr-server"
+    retention_days: 30             # 保留30天日志
+
+# ============= 监控配置 =============
+monitoring:
+  enabled: true
+
+# ============= 主题规则配置 =============
+themes:
+  enabled: true
+  config_file: "themes.json"
+  rules_directory: "rules"
+  default_theme: "theme_001"
+
+# ============= 第三方访问控制配置 =============
+third_party_access:
+  enabled: true
+  signature:
+    required: true
+    timestamp_tolerance: 300
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    requests_per_hour: 1000
+  clients:
+    - client_id: "${THIRD_PARTY_CLIENT_ID}"
+      secret_key: "${THIRD_PARTY_SECRET_KEY}"
+      name: "生产客户端"
+      enabled: true
+      permissions: ["preview", "query"]
+
+# ============= 故障转移配置 =============
+failover:
+  database:
+    enabled: true
+    health_check_interval: 30
+    max_retries: 3
+    retry_delay: 1000
+    fallback_to_local: true
+    local_data_dir: "/var/lib/ocr-server/fallback/db"
+  storage:
+    enabled: true
+    health_check_interval: 30
+    max_retries: 3
+    retry_delay: 1000
+    auto_switch_to_local: true
+    sync_when_recovered: true
+    local_fallback_dir: "/var/lib/ocr-server/fallback/storage"

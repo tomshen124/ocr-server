@@ -1,0 +1,60 @@
+{
+  "mappings": [
+    {
+      "matterId": "2002387292",
+      "matterName": "工程渣土准运证核准",
+      "themeId": "theme_001",
+      "priority": 1,
+      "enabled": true,
+      "description": "杭州市工程建设项目渣土准运许可证核准"
+    },
+    {
+      "matterId": "16570147206221001",
+      "matterName": "工程渣土准运证核准",
+      "themeId": "theme_001",
+      "priority": 2,
+      "enabled": true,
+      "description": "工程渣土准运证核准申请表"
+    },
+    {
+      "matterId": "330100000000",
+      "matterName": "建筑工程施工许可",
+      "themeId": "theme_002",
+      "priority": 1,
+      "enabled": true,
+      "description": "建筑工程施工许可证核发"
+    },
+    {
+      "matterId": "330100000001",
+      "matterName": "环境影响评价",
+      "themeId": "theme_003",
+      "priority": 1,
+      "enabled": true,
+      "description": "建设项目环境影响评价审批"
+    },
+    {
+      "matterId": "330100000002",
+      "matterName": "安全生产许可",
+      "themeId": "theme_004",
+      "priority": 1,
+      "enabled": true,
+      "description": "安全生产许可证核发"
+    },
+    {
+      "matterId": "330100000003",
+      "matterName": "消防验收备案",
+      "themeId": "theme_005",
+      "priority": 1,
+      "enabled": true,
+      "description": "建设工程消防验收备案"
+    },
+    {
+      "matterId": "330100000004",
+      "matterName": "规划许可证",
+      "themeId": "theme_006",
+      "priority": 1,
+      "enabled": true,
+      "description": "建设工程规划许可证核发"
+    }
+  ]
+}

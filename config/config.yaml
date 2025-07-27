@@ -1,0 +1,152 @@
+# 智能预审系统配置文件
+# 严格按照源码Config结构定义
+
+# ============= 基本服务配置 =============
+host: "http://127.0.0.1"
+port: 31101
+preview_url: "http://127.0.0.1:31101"
+session_timeout: 86400
+app_id: "2002387292"
+callback_url: "http://127.0.0.1:31101/api/sso/callback"
+
+# ============= 单点登录配置 =============
+login:
+  sso_login_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000006/uc/sso/login"
+  access_token_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000007/uc/sso/access_token"
+  get_user_info_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000008/uc/sso/getUserInfo"
+  access_key: "BCDSGA_f56e1708ce9038a17f2be55c14f01fce"
+  secret_key: "BCDSGS_1254c9d66293612217306ce6d728aad4"
+  use_callback: false  # 本地开发：禁用回调模式，直接跳转到第三方登录
+
+# ============= 对象存储配置 =============
+zhzwdt-oss:
+  root: "ocr-files"
+  bucket: "your-bucket"
+  server_url: "https://your-oss-endpoint.com"
+  AccessKey: "your-access-key"
+  AccessKey Secret: "your-access-key-secret"
+
+# ============= 数据库配置 =============
+DMSql:
+  DATABASE_HOST: ""
+  DATABASE_PORT: "5236"
+  DATABASE_USER: "SYSDBA"
+  DATABASE_PASSWORD: "SYSDBA"
+  DATABASE_NAME: "OCR_DB"
+
+# ============= 审批配置 =============
+approve:
+  submit-url: ""
+  access-key: ""
+  secret-key: ""
+
+# ============= 开发调试配置（向后兼容）=============
+debug:
+  enabled: true
+  # 模拟登录配置（仅在需要时使用）
+  enable_mock_login: true
+  mock_login_warning: true
+  tools_enabled:
+    api_test: true
+    mock_login: true
+    preview_demo: true
+    flow_test: true
+    system_monitor: true
+    data_manager: true
+
+# ============= 测试模式配置（向后兼容）=============
+test_mode:
+  enabled: true                     # 测试模式开关（设置为true启用）
+  auto_login: true                  # 启用自动登录
+  mock_ocr: true                    # 启用模拟OCR结果
+  mock_delay: 500                   # 模拟处理延迟（毫秒）
+
+  # 测试用户配置（可自定义）
+  test_user:
+    id: "test_user_001"
+    username: "测试用户"
+    email: "test@example.com"
+    role: "tester"
+
+# ============= 运行模式配置（统一开关）=============
+runtime_mode:
+  # 主运行模式：production | development | testing
+  mode: "development"               # 当前运行模式
+
+  # 开发模式配置
+  development:
+    debug_enabled: true             # 启用调试日志
+    mock_login: true                # 启用模拟登录
+    mock_ocr: true                  # 启用模拟OCR
+    test_tools: true                # 启用测试工具
+    auto_login: true                # 自动登录
+    detailed_logs: true             # 详细日志
+
+  # 测试模式配置
+  testing:
+    mock_data: true                 # 使用模拟数据
+    mock_delay: 500                 # 模拟延迟（毫秒）
+    test_scenarios: true            # 启用测试场景
+    performance_test: false         # 性能测试
+
+  # 生产模式配置
+  production:
+    debug_enabled: false            # 禁用调试
+    mock_login: false               # 禁用模拟登录
+    mock_ocr: false                 # 禁用模拟OCR
+    test_tools: false               # 禁用测试工具
+    security_strict: true           # 严格安全模式
+
+# ============= 日志配置 =============
+logging:
+  level: "info"
+  file:
+    enabled: true
+    directory: "runtime/logs"
+    retention_days: 7
+
+# ============= 监控配置 =============
+monitoring:
+  enabled: true
+
+# ============= 主题规则配置 =============
+themes:
+  enabled: true
+  config_file: "themes.json"
+  rules_directory: "rules"
+  default_theme: "theme_001"
+
+# ============= 第三方访问控制配置 =============
+third_party_access:
+  enabled: false
+  signature:
+    required: true
+    timestamp_tolerance: 300
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    requests_per_hour: 1000
+  clients:
+    - client_id: "demo_client"
+      secret_key: "demo_secret_key_change_in_production"
+      name: "演示客户端"
+      enabled: false
+      permissions: ["preview", "query"]
+
+# ============= 故障转移配置 =============
+failover:
+  database:
+    enabled: true                          # 启用数据库故障转移
+    health_check_interval: 30              # 健康检查间隔（秒）
+    max_retries: 3                         # 最大重试次数
+    retry_delay: 1000                      # 重试延迟（毫秒）
+    fallback_to_local: true                # 降级到本地数据库
+    local_data_dir: "runtime/fallback/db"  # 降级数据库目录
+  storage:
+    enabled: true                              # 启用存储故障转移
+    health_check_interval: 30                  # 健康检查间隔（秒）
+    max_retries: 3                             # 最大重试次数
+    retry_delay: 1000                          # 重试延迟（毫秒）
+    auto_switch_to_local: true                 # 自动切换到本地存储
+    sync_when_recovered: true                  # 恢复后同步文件
+    local_fallback_dir: "runtime/fallback/storage"  # 降级存储目录

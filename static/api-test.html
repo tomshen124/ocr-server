@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API接口测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .test-button { padding: 8px 16px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        .test-button:hover { background: #0056b3; }
+        .result { margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 3px; white-space: pre-wrap; font-family: monospace; }
+        .error { background: #f8d7da; color: #721c24; }
+        .success { background: #d4edda; color: #155724; }
+    </style>
+</head>
+<body>
+    <h1>🧪 API接口测试工具</h1>
+    <p>用于测试新前端与后端API的对接情况</p>
+
+    <div class="test-section">
+        <h3>🔐 认证测试</h3>
+        <button class="test-button" onclick="testAuth()">检查认证状态</button>
+        <button class="test-button" onclick="testMockLogin()">模拟登录</button>
+        <div id="auth-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>⚙️ 配置测试</h3>
+        <button class="test-button" onclick="testConfig()">获取前端配置</button>
+        <div id="config-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>📋 预审数据测试</h3>
+        <input type="text" id="preview-id" placeholder="输入预审ID" value="demo_001" style="padding: 5px; margin: 5px;">
+        <button class="test-button" onclick="testPreviewData()">获取预审数据</button>
+        <button class="test-button" onclick="testPreviewStatus()">获取预审状态</button>
+        <div id="preview-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>🚀 启动新前端</h3>
+        <button class="test-button" onclick="openNewFrontend()">打开新前端页面</button>
+        <button class="test-button" onclick="openWithPreviewId()">使用预审ID打开</button>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script>
+        // 测试认证状态
+        async function testAuth() {
+            const result = document.getElementById('auth-result');
+            try {
+                const response = await apiService.checkAuthStatus();
+                result.className = 'result ' + (response.success ? 'success' : 'error');
+                result.textContent = JSON.stringify(response, null, 2);
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 测试模拟登录
+        async function testMockLogin() {
+            const result = document.getElementById('auth-result');
+            try {
+                const response = await apiService.mockLogin({
+                    userId: 'test_user_001',
+                    userName: '测试用户'
+                });
+                result.className = 'result ' + (response.success ? 'success' : 'error');
+                result.textContent = JSON.stringify(response, null, 2);
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 测试配置
+        async function testConfig() {
+            const result = document.getElementById('config-result');
+            try {
+                const response = await apiService.getFrontendConfig();
+                result.className = 'result ' + (response.success ? 'success' : 'error');
+                result.textContent = JSON.stringify(response, null, 2);
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 测试预审数据
+        async function testPreviewData() {
+            const result = document.getElementById('preview-result');
+            const previewId = document.getElementById('preview-id').value;
+            try {
+                const response = await apiService.getMaterialsList(previewId);
+                result.className = 'result ' + (response.success ? 'success' : 'error');
+                
+                if (response.success) {
+                    const transformedData = apiService.transformPreviewData(response);
+                    result.textContent = '原始数据:\n' + JSON.stringify(response, null, 2) + 
+                                       '\n\n转换后数据:\n' + JSON.stringify(transformedData, null, 2);
+                } else {
+                    result.textContent = JSON.stringify(response, null, 2);
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 测试预审状态
+        async function testPreviewStatus() {
+            const result = document.getElementById('preview-result');
+            const previewId = document.getElementById('preview-id').value;
+            try {
+                const response = await apiService.getAuditStatus(previewId);
+                result.className = 'result ' + (response.success ? 'success' : 'error');
+                result.textContent = JSON.stringify(response, null, 2);
+            } catch (error) {
+                result.className = 'result error';
+                result.textContent = '请求失败: ' + error.message;
+            }
+        }
+
+        // 打开新前端
+        function openNewFrontend() {
+            window.open('/static/index.html', '_blank');
+        }
+
+        // 使用预审ID打开
+        function openWithPreviewId() {
+            const previewId = document.getElementById('preview-id').value;
+            window.open(`/static/index.html?preview_id=${previewId}`, '_blank');
+        }
+    </script>
+</body>
+</html>

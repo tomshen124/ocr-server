@@ -1,0 +1,195 @@
+# =====================================================================
+# OCR智能预审系统 - 主配置文件
+# =====================================================================
+# 版本: 2.0
+# 更新日期: 2025-07-13
+# 
+# 配置说明:
+# 1. 本文件包含所有系统配置项
+# 2. 敏感信息建议使用环境变量覆盖
+# 3. 生产环境部署前请仔细检查各项配置
+# =====================================================================
+
+# ======================== 基本服务配置 ========================
+# 服务访问地址（用于生成回调URL等）
+host: "http://127.0.0.1:31101"
+
+# 服务监听端口
+port: 31101
+
+# 应用标识（SSO系统分配）
+app_id: "2002387292"
+
+# 预览URL基础路径
+preview_url: "http://127.0.0.1:31101"
+
+# 会话超时时间（秒）
+session_timeout: 86400
+
+# SSO回调地址
+callback_url: "http://127.0.0.1:31101/api/sso/callback"
+
+# ======================== 单点登录配置 ========================
+login:
+  # SSO登录页面URL
+  sso_login_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000006/uc/sso/login"
+  
+  # 获取访问令牌接口
+  access_token_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000007/uc/sso/access_token"
+  
+  # 获取用户信息接口
+  get_user_info_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000008/uc/sso/getUserInfo"
+  
+  # SSO系统分配的访问密钥
+  access_key: "BCDSGA_f56e1708ce9038a17f2be55c14f01fce"
+  secret_key: "BCDSGS_1254c9d66293612217306ce6d728aad4"
+  
+  # 是否使用回调模式（开发环境可设为false）
+  use_callback: false
+
+# ======================== 对象存储配置 ========================
+# 注意: YAML中的键名需要引号包裹特殊字符
+"zhzwdt-oss":
+  # OSS根目录
+  root: "ocr-preview"
+  
+  # OSS存储桶名称
+  bucket: ""  # 留空使用本地存储
+  
+  # OSS服务端点（不含协议）
+  server_url: ""  # 例如: oss-cn-beijing.aliyuncs.com
+  
+  # OSS访问凭证
+  access_key: ""
+  access_key_secret: ""
+  
+  # 公网访问地址（可选）
+  public_url: ""
+
+# ======================== 数据库配置 ========================
+# DM数据库配置（留空使用SQLite）
+DMSql:
+  database_host: ""  # 留空使用SQLite
+  database_port: "5236"
+  database_user: ""
+  database_password: ""
+  database_name: "OCR_DB"
+
+# ======================== 故障转移配置 ========================
+failover:
+  # 数据库故障转移
+  database:
+    enabled: true                          # 是否启用故障转移
+    health_check_interval: 30              # 健康检查间隔（秒）
+    max_retries: 3                         # 最大重试次数
+    retry_delay: 1000                      # 重试延迟（毫秒）
+    fallback_to_local: true                # 是否降级到本地数据库
+    local_data_dir: "runtime/fallback/db"  # 本地降级数据库目录
+  
+  # 存储故障转移
+  storage:
+    enabled: true                              # 是否启用故障转移
+    health_check_interval: 30                  # 健康检查间隔（秒）
+    max_retries: 3                             # 最大重试次数
+    retry_delay: 1000                          # 重试延迟（毫秒）
+    auto_switch_to_local: true                 # 自动切换到本地存储
+    sync_when_recovered: true                  # 恢复后同步文件
+    local_fallback_dir: "runtime/fallback/storage"  # 本地降级存储目录
+
+# ======================== 审批系统配置 ========================
+approve:
+  submit_url: ""
+  access_key: ""
+  secret_key: ""
+
+# ======================== 调试模式配置 ========================
+debug:
+  # 是否启用调试模式（生产环境必须设为false）
+  enabled: true
+  
+  # 是否启用模拟登录（生产环境必须设为false）
+  enable_mock_login: true
+  
+  # 是否显示模拟登录警告
+  mock_login_warning: true
+  
+  # 调试工具开关
+  tools_enabled:
+    api_test: true        # API测试工具
+    mock_login: true      # 模拟登录工具
+    preview_demo: true    # 预览演示工具
+    flow_test: true       # 流程测试工具
+    system_monitor: true  # 系统监控工具
+    data_manager: true    # 数据管理工具
+
+# ======================== 日志配置 ========================
+logging:
+  # 日志级别: trace, debug, info, warn, error
+  level: "info"
+  
+  # 文件日志配置
+  file:
+    enabled: true
+    directory: "runtime/logs"
+    retention_days: 7  # 日志保留天数
+
+# ======================== 监控配置 ========================
+monitoring:
+  # 是否启用内置监控（需要编译时启用monitoring特性）
+  enabled: false
+
+# ======================== 主题规则配置 ========================
+themes:
+  # 主题缓存配置
+  cache:
+    enabled: true
+    ttl: 3600  # 缓存时间（秒）
+
+# ======================== 第三方访问控制 ========================
+third_party_access:
+  # 是否启用第三方访问控制
+  enabled: false
+  
+  # 签名验证配置
+  signature:
+    required: true           # 是否要求签名
+    timestamp_tolerance: 300 # 时间戳容差（秒）
+  
+  # 速率限制配置
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    requests_per_hour: 1000
+  
+  # 客户端配置
+  clients:
+    - client_id: "demo_client"
+      secret_key: "change_this_in_production"
+      name: "演示客户端"
+      enabled: false
+      permissions: ["preview", "query"]
+
+# ======================== 性能优化配置 ========================
+# 注：以下配置项为建议添加的优化配置
+performance:
+  # OCR处理配置
+  ocr:
+    max_concurrent_tasks: 10    # 最大并发OCR任务数
+    task_timeout: 300           # 任务超时时间（秒）
+    retry_on_failure: true      # 失败是否重试
+    
+  # 缓存配置
+  cache:
+    preview_ttl: 3600          # 预览结果缓存时间（秒）
+    max_memory_size: 1024      # 最大内存缓存大小（MB）
+    
+  # 文件处理配置
+  file:
+    max_upload_size: 52428800  # 最大上传文件大小（50MB）
+    allowed_types:             # 允许的文件类型
+      - "pdf"
+      - "jpg"
+      - "jpeg"
+      - "png"
+      - "tiff"
+      - "bmp"

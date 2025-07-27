@@ -55,6 +55,10 @@ wkhtmltopdf = "0.4"
 shiva = { version = "1", default-features = false, features = ["docx"] }
 sysinfo = "0.30"
 
+# database
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "chrono"] }
+async-trait = "0.1"
+
 # 监控模块依赖（可选）
 procfs = { version = "0.15", optional = true }
 psutil = { version = "3.2", optional = true }
@@ -65,3 +69,11 @@ bcrypt = { version = "0.13", optional = true }
 [features]
 default = []
 monitoring = ["procfs", "psutil", "actix-web", "actix-files", "bcrypt"]
+testing = []  # 测试功能特性
+
+[profile.release]
+opt-level = 3
+lto = "thin"  # 使用 thin LTO 而不是 fat LTO，更兼容
+codegen-units = 1
+strip = true
+panic = "abort"

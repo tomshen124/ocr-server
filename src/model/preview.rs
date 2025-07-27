@@ -1,5 +1,6 @@
 use crate::model::{Goto, PreviewInfo};
 use crate::util::WebResult;
+use crate::storage::Storage;
 use axum::body::Body;
 use axum::http::{header, StatusCode};
 use axum::response::Response;
@@ -9,6 +10,7 @@ use serde_json::Value;
 use std::io::Cursor;
 use std::path::Path;
 use std::process::Command;
+use std::sync::Arc;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
@@ -19,6 +21,54 @@ pub struct PreviewBody {
     #[serde(rename = "userId")]
     pub user_id: String,
     pub preview: Preview,
+}
+
+// 生产环境数据格式（直接格式，无包装层）
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProductionPreviewRequest {
+    #[serde(rename = "agentInfo")]
+    pub agent_info: UserInfo,
+    #[serde(rename = "subjectInfo")]
+    pub subject_info: UserInfo,
+    pub channel: String,
+    pub copy: bool,
+    #[serde(rename = "formData")]
+    pub form_data: Vec<Value>,
+    #[serde(rename = "materialData")]
+    pub material_data: Vec<MaterialValue>,
+    #[serde(rename = "matterId")]
+    pub matter_id: String,
+    #[serde(rename = "matterName")]
+    pub matter_name: String,
+    #[serde(rename = "matterType")]
+    pub matter_type: String,
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+    #[serde(rename = "sequenceNo")]
+    pub sequence_no: String,
+}
+
+impl ProductionPreviewRequest {
+    /// 转换为标准的PreviewBody格式
+    pub fn to_preview_body(self) -> PreviewBody {
+        PreviewBody {
+            user_id: self.agent_info.user_id.clone(),
+            preview: Preview {
+                matter_id: self.matter_id,
+                matter_type: self.matter_type,
+                matter_name: self.matter_name,
+                copy: self.copy,
+                channel: self.channel,
+                request_id: self.request_id,
+                sequence_no: self.sequence_no,
+                form_data: self.form_data,
+                material_data: self.material_data,
+                agent_info: self.agent_info,
+                subject_info: self.subject_info,
+                theme_id: None, // 将在后续处理中设置
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -196,6 +246,91 @@ impl PreviewBody {
             ),
         };
         Ok(WebResult::ok(preview_info))
+    }
+
+    /// 使用存储抽象层的预览方法
+    pub async fn preview_with_storage(self, storage: &Arc<dyn Storage>) -> anyhow::Result<WebResult> {
+        info!("Executing preview with storage: {:?}", &self);
+        let user_id_check = &self.preview.agent_info.user_id;
+        if user_id_check.ne(&self.user_id) {
+            info!("User: {} not match", self.user_id);
+            return Ok(WebResult::ok("User no match"));
+        }
+
+        let request_id = &self.preview.request_id;
+        
+        // 生成HTML内容
+        let html = match self.preview.clone().evaluate().await {
+            Ok(evaluation_result) => {
+                // 使用专门的报告生成器生成HTML
+                crate::util::report_generator::PreviewReportGenerator::generate_html(&evaluation_result)
+            }
+            Err(e) => {
+                tracing::error!("预审评估失败: {}", e);
+                // 降级到简化HTML生成
+                let materials: Vec<String> = self.preview.material_data.iter()
+                    .map(|m| format!("{} ({})", m.code, m.attachment_list.len()))
+                    .collect();
+                crate::util::report_generator::PreviewReportGenerator::generate_simple_html(
+                    &self.preview.matter_name,
+                    &self.preview.request_id,
+                    &materials
+                )
+            }
+        };
+
+        // 保存HTML文件到存储
+        let html_key = format!("previews/{}.html", request_id);
+        storage.put(&html_key, html.as_bytes()).await?;
+        
+        info!("Save HTML to storage: {}", html_key);
+
+        // 生成PDF（如果需要）
+        let temp_dir = std::env::temp_dir();
+        let temp_html_path = temp_dir.join(format!("{}.html", request_id));
+        let temp_pdf_path = temp_dir.join(format!("{}.pdf", request_id));
+
+        // 写入临时HTML文件
+        fs::write(&temp_html_path, html.as_bytes()).await?;
+
+        // 转换为PDF
+        let status = Command::new("wkhtmltopdf")
+            .args([
+                temp_html_path.to_str().unwrap_or_default(),
+                temp_pdf_path.to_str().unwrap_or_default(),
+            ])
+            .status()?;
+
+        if status.success() {
+            // 读取生成的PDF并保存到存储
+            let pdf_content = fs::read(&temp_pdf_path).await?;
+            let pdf_key = format!("previews/{}.pdf", request_id);
+            storage.put(&pdf_key, &pdf_content).await?;
+            
+            info!("Save PDF to storage: {}", pdf_key);
+            
+            // 清理临时文件
+            let _ = fs::remove_file(&temp_html_path).await;
+            let _ = fs::remove_file(&temp_pdf_path).await;
+            
+            let preview_info = PreviewInfo {
+                user_id: self.user_id.clone(),
+                preview_url: format!("/api/download?goto=storage/{}", pdf_key),
+            };
+            Ok(WebResult::ok(preview_info))
+        } else {
+            info!("wkhtmltopdf conversion failed for {}", temp_html_path.display());
+            
+            // 清理临时文件
+            let _ = fs::remove_file(&temp_html_path).await;
+            
+            // 即使PDF转换失败，也返回HTML文件的URL
+            let preview_info = PreviewInfo {
+                user_id: self.user_id.clone(),
+                preview_url: format!("/api/download?goto=storage/{}", html_key),
+            };
+            Ok(WebResult::ok(preview_info))
+        }
     }
 
     pub async fn download(goto: Goto) -> anyhow::Result<Response> {

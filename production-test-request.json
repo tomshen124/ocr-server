@@ -1,0 +1,138 @@
+{
+  "agentInfo": {
+    "certificateType": "ID_CARD",
+    "userId": "test_user_001"
+  },
+  "channel": "h5",
+  "copy": false,
+  "formData": [
+    {
+      "code": "legalRep.FRDBYDDH",
+      "value": "18758083621"
+    },
+    {
+      "code": "self.SZQTHWGGSSHZPZSPBADSZQKDSZDD",
+      "value": "金郡澜庭二区金一路1025号"
+    },
+    {
+      "code": "self.ZPSQPC",
+      "value": {
+        "text": "首次申请",
+        "value": "1"
+      }
+    },
+    {
+      "code": "legalRep.JBRZJLX",
+      "value": {
+        "text": "身份证",
+        "value": "351801"
+      }
+    },
+    {
+      "code": "legalRep.ZJHM",
+      "value": "332502199705263222"
+    },
+    {
+      "code": "self.FRZJLX",
+      "value": {
+        "text": "统一社会信用代码",
+        "value": "53"
+      }
+    },
+    {
+      "code": "self.DWMC",
+      "value": "杭州萧山测试卤味店"
+    },
+    {
+      "code": "self.SFWDB",
+      "value": {
+        "text": "法定代表人办理",
+        "value": "201"
+      }
+    },
+    {
+      "code": "self.SZQTHWGGSSHZPZSPBADSZQKDSZXS",
+      "value": {
+        "text": "招牌",
+        "value": "2"
+      }
+    },
+    {
+      "code": "self.FRZJH",
+      "value": "92330109MA8GH51X9D"
+    },
+    {
+      "code": "self.ZPSZXS",
+      "value": {
+        "text": "箱体式",
+        "value": "3"
+      }
+    },
+    {
+      "code": "legalRep.FDDBR",
+      "value": "测试用户"
+    },
+    {
+      "code": "self.RegionRoute",
+      "value": [
+        {
+          "text": "浙江省",
+          "value": "330000"
+        },
+        {
+          "text": "杭州市",
+          "value": "330101"
+        },
+        {
+          "text": "萧山区",
+          "value": "330109"
+        }
+      ]
+    },
+    {
+      "code": "self.DXKCS",
+      "value": {
+        "text": "否",
+        "value": "NO"
+      }
+    },
+    {
+      "code": "self.ZPSZZL",
+      "value": {
+        "text": "招牌",
+        "value": "1"
+      }
+    }
+  ],
+  "materialData": [
+    {
+      "attachmentList": [
+        {
+          "attaName": "test-business-license.jpg",
+          "attaUrl": "data:text/plain;base64,5rWL6K+V5paH5qGj5YaF5a65CgrnlLPor7fkurrvvJrlvKDkuIkK6aG555uu5ZCN56ew77ya5rWL6K+V6aG555uu55Sz6K+3CueUs+ivt+aXpeacn++8mjIwMjXlubQ35pyIMjDml6UK55Sz6K+357yW5Y+377yaVEVTVC0yMDI1LTAwMQoK55Sz6K+35p2Q5paZ77yaCjEuIOi6q+S7veivgeaYjuaWh+S7tgoyLiDpobnnm67nlLPor7fkuaYKMy4g55u45YWz6LWE6LSo6K+B5piOCgrnibnmraTnlLPor7fjgIIKCueUs+ivt+S6uuetvuWQje+8muW8oOS4iQrml6XmnJ/vvJoyMDI15bm0N+aciDIw5pelCg==",
+          "isCloudShare": false
+        }
+      ],
+      "code": "self.105100813"
+    },
+    {
+      "attachmentList": [
+        {
+          "attaName": "test-id-card.jpg",
+          "attaUrl": "data:text/plain;base64,6Lqr5Lu95Zyo6K+B5piO5paH5Lu2CgrmiJHmmK/mtYvor5XnlKjmiLfvvIzov5nmmK/miJHnmoTouqvku73or4HmmI7jgIIK6L+Z5piv5LiA5byg5Liq5Lq65L2T6K+B5piO5paH5Lu25qih5p2/44CCCgrmiJHnmoTlp5PlkI3vvJrmtYvor5XnlKjmiLcK6K+B5Lu25Y+356CB77yaMTIzNDU2Nzg5MDEyMzQ1Njc4CuWHuueUn+aXpeacn++8mjE5OTAtMDEtMDE=",
+          "isCloudShare": false
+        }
+      ],
+      "code": "legalRep.105100001"
+    }
+  ],
+  "matterId": "101105083",
+  "matterName": "设置其他户外广告设施和招牌、指示牌备案",
+  "matterType": "powerDirectory",
+  "requestId": "TEST_PROD_REQUEST_20250720_001",
+  "sequenceNo": "SEQ_20250720_001",
+  "subjectInfo": {
+    "certificateType": "ID_CARD",
+    "userId": "test_user_001"
+  }
+}

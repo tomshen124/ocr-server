@@ -1,0 +1,52 @@
+{
+  "userId": "test_user_001",
+  "preview": {
+    "matterId": "101104353",
+    "matterType": "powerDirectory",
+    "matterName": "测试事项（data URL兼容性）",
+    "copy": false,
+    "channel": "h5",
+    "requestId": "test_request_dataurl_001",
+    "sequenceNo": "SEQ_" + Date.now(),
+    "formData": [
+      {
+        "code": "self.DWMC",
+        "value": "测试公司"
+      },
+      {
+        "code": "legalRep.FDDBR",
+        "value": "测试用户"
+      }
+    ],
+    "materialData": [
+      {
+        "code": "self.105100813",
+        "attachmentList": [
+          {
+            "attaName": "测试文本文件.txt",
+            "attaUrl": "data:text/plain;base64,6L+Z5piv5LiA5byg55So5LqO5rWL6K+V55qE5paH5Lu26IqC54K55Yqf6IO9",
+            "isCloudShare": false
+          }
+        ]
+      },
+      {
+        "code": "legalRep.105100001",
+        "attachmentList": [
+          {
+            "attaName": "测试JSON数据.json",
+            "attaUrl": "data:application/json;base64,eyJ0ZXN0IjogInRydWUiLCAibWVzc2FnZSI6ICLmtYvor5XmlofmnKzkuLrlkIjmoLjlvI8ifQ==",
+            "isCloudShare": false
+          }
+        ]
+      }
+    ],
+    "agentInfo": {
+      "userId": "test_user_001",
+      "certificateType": "ID_CARD"
+    },
+    "subjectInfo": {
+      "userId": "test_user_001",
+      "certificateType": "ID_CARD"
+    }
+  }
+}

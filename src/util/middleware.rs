@@ -91,18 +91,18 @@ pub async fn auth_required(
 ) -> Result<Response, StatusCode> {
     let uri = request.uri().clone();
     let request_id = Uuid::new_v4().to_string();
-    
+
     info!("=== 认证检查开始 === request_id={} uri={}", request_id, uri);
 
     // 检查会话中是否有用户信息
     match session.get::<crate::model::SessionUser>("session_user").await {
         Ok(Some(user)) => {
             info!("认证成功 request_id={} user_id={} uri={}", request_id, user.user_id, uri);
-            
+
             // 将用户信息添加到请求扩展中，供后续处理使用
             let mut request = request;
             request.extensions_mut().insert(user);
-            
+
             let response = next.run(request).await;
             Ok(response)
         }
@@ -129,10 +129,11 @@ pub async fn cors_middleware(request: Request, next: Next) -> Response {
 pub async fn logging_middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
     let method = request.method().clone();
     let uri = request.uri().clone();
-    
+
     let response = next.run(request).await;
-    
+
     tracing::info!("{} {} - {}", method, uri, response.status());
-    
+
     Ok(response)
-} 
+}
+

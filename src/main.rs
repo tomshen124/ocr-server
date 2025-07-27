@@ -6,17 +6,39 @@ use opendal::services::Oss;
 use opendal::Operator;
 use reqwest::Client;
 use std::net::Ipv4Addr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use tokio::net::TcpListener;
 use tokio::signal::ctrl_c;
+use tokio::sync::Semaphore;
 use tracing::info;
 
 mod api;
 mod model;
 mod util;
 mod monitor;
+mod db;
+mod storage;
+
+/// 应用状态结构
+#[derive(Clone)]
+pub struct AppState {
+    pub database: Arc<dyn db::Database>,
+    pub storage: Arc<dyn storage::Storage>,
+    pub config: Config,
+}
 
 pub static CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
+
+/// 全局OCR并发控制信号量 - 针对32核64G服务器优化
+/// 限制同时进行的OCR任务数量，防止系统过载
+pub static OCR_SEMAPHORE: LazyLock<Arc<Semaphore>> = LazyLock::new(|| {
+    // 根据32核CPU和64GB内存，设置合理的并发限制
+    // 考虑OCR + 文件下载 + 规则引擎处理的资源消耗
+    let max_concurrent = 12; // 保守设置，确保系统稳定
+    tracing::info!("🚀 初始化OCR并发控制: 最大{}个并发任务", max_concurrent);
+    Arc::new(Semaphore::new(max_concurrent))
+});
+
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
     // 智能查找配置文件路径
     let config_path = find_config_file_path("config.yaml");
@@ -114,6 +136,93 @@ pub static OSS: LazyLock<Operator> = LazyLock::new(|| {
     Operator::new(builder).unwrap().finish()
 });
 
+/// 根据配置创建数据库实例
+async fn create_database_from_config(config: &Config) -> anyhow::Result<Arc<dyn db::Database>> {
+    // 根据配置创建数据库配置
+    let db_config = if config.dm_sql.database_host.is_empty() {
+        // 使用 SQLite 作为默认数据库
+        db::factory::DatabaseConfig {
+            db_type: db::factory::DatabaseType::Sqlite,
+            sqlite: Some(db::factory::SqliteConfig {
+                path: "data/ocr.db".to_string(),
+            }),
+            dm: None,
+        }
+    } else {
+        // 使用达梦数据库
+        db::factory::DatabaseConfig {
+            db_type: db::factory::DatabaseType::Dm,
+            sqlite: None,
+            dm: Some(db::factory::DmConfig {
+                host: config.dm_sql.database_host.clone(),
+                port: config.dm_sql.database_port.parse().unwrap_or(5236),
+                username: config.dm_sql.database_user.clone(),
+                password: config.dm_sql.database_password.clone(),
+                database: config.dm_sql.database_name.clone(),
+            }),
+        }
+    };
+
+    let database = db::factory::create_database(&db_config).await?;
+    
+    // 如果启用了故障转移，包装数据库
+    if config.failover.database.enabled {
+        info!("数据库故障转移已启用");
+        let failover_db = db::FailoverDatabase::new(
+            Arc::from(database),
+            config.failover.database.clone()
+        ).await?;
+        Ok(Arc::new(failover_db) as Arc<dyn db::Database>)
+    } else {
+        Ok(Arc::from(database))
+    }
+}
+
+/// 根据配置创建存储实例
+async fn create_storage_from_config(config: &Config) -> anyhow::Result<Arc<dyn storage::Storage>> {
+    // 根据配置创建存储配置
+    let storage_config = if config.oss.access_key.is_empty() {
+        // 使用本地存储
+        storage::factory::StorageConfig {
+            storage_type: storage::factory::StorageType::Local,
+            local: Some(storage::factory::LocalConfig {
+                base_path: "data/storage".to_string(),
+                base_url: format!("{}/files", config.host),
+            }),
+            oss: None,
+        }
+    } else {
+        // 使用 OSS 存储
+        storage::factory::StorageConfig {
+            storage_type: storage::factory::StorageType::Oss,
+            local: None,
+            oss: Some(storage::factory::OssConfig {
+                bucket: config.oss.bucket.clone(),
+                endpoint: format!("https://{}", config.oss.server_url),
+                access_key_id: config.oss.access_key.clone(),
+                access_key_secret: config.oss.access_key_secret.clone(),
+                root: Some(config.oss.root.clone()),
+                public_endpoint: Some(format!("https://{}.{}", config.oss.bucket, config.oss.server_url)),
+            }),
+        }
+    };
+
+    let storage = storage::factory::create_storage(&storage_config).await?;
+    
+    // 如果启用了故障转移，包装存储
+    if config.failover.storage.enabled {
+        info!("存储故障转移已启用");
+        let failover_storage = storage::FailoverStorage::new(
+            Arc::from(storage),
+            config.failover.storage.clone(),
+            config.host.clone()
+        ).await?;
+        Ok(Arc::new(failover_storage) as Arc<dyn storage::Storage>)
+    } else {
+        Ok(Arc::from(storage))
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 手动加载配置文件以获取日志配置
@@ -158,6 +267,20 @@ async fn main() -> anyhow::Result<()> {
     // 初始化服务启动时间
     init_start_time();
 
+    // 创建数据库和存储实例
+    info!("初始化数据库和存储系统...");
+    let database = create_database_from_config(&config).await?;
+    let storage = create_storage_from_config(&config).await?;
+    
+    // 创建应用状态
+    let app_state = AppState {
+        database,
+        storage,
+        config: config.clone(),
+    };
+    
+    info!("✅ 数据库和存储系统初始化完成");
+
     // 启动监控服务（如果启用）
     #[cfg(feature = "monitoring")]
     let monitor_service = {
@@ -185,10 +308,12 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     };
 
+    // 服务端测试代码已清理，使用前端工具进行测试
+
     info!("Server started at {}", listener.local_addr()?);
 
-    // 创建路由，包含监控路由
-    let app_routes = routes();
+    // 创建路由，包含应用状态
+    let app_routes = routes(app_state);
     
     #[cfg(feature = "monitoring")]
     let app_routes = if let Some(monitor) = monitor_service.clone() {

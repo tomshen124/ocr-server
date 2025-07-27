@@ -1,0 +1,101 @@
+{
+  "test_scenarios": [
+    {
+      "name": "基础预审流程测试",
+      "description": "测试标准的预审流程：登录 -> 上传 -> OCR -> 评估 -> 下载",
+      "user": {
+        "userId": "test_001",
+        "userName": "张测试",
+        "certificateType": "01",
+        "organizationName": "测试机构"
+      },
+      "preview_request": {
+        "matterId": "101104353",
+        "matterName": "工程渣土准运证核准",
+        "channel": "h5",
+        "formData": [
+          {
+            "code": "legalRep.FDDBR",
+            "value": "张测试"
+          },
+          {
+            "code": "self.DWMC",
+            "value": "测试运输有限公司"
+          }
+        ],
+        "materialData": [
+          {
+            "code": "self.105100813",
+            "attachmentList": [
+              {
+                "attaName": "营业执照.jpg",
+                "attaUrl": "data:text/plain;base64,6L+Z5piv5LiA5byg5rWL6K+V55So55qE6JCl5Lia5omn54Wn5paH5Lu2",
+                "isCloudShare": false
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "多材料预审测试",
+      "description": "测试包含多个材料的复杂预审场景",
+      "user": {
+        "userId": "test_002",
+        "userName": "李测试",
+        "certificateType": "01"
+      },
+      "preview_request": {
+        "matterId": "101105083",
+        "matterName": "设置其他户外广告设施和招牌、指示牌备案",
+        "channel": "h5",
+        "formData": [
+          {
+            "code": "self.DWMC",
+            "value": "测试广告公司"
+          }
+        ],
+        "materialData": [
+          {
+            "code": "self.105100813",
+            "attachmentList": [
+              {
+                "attaName": "申请表.pdf",
+                "attaUrl": "data:text/plain;base64,6L+Z5piv5LiA5byg5rWL6K+V55So55qE55Sz6K+35paH5Lu2",
+                "isCloudShare": false
+              }
+            ]
+          },
+          {
+            "code": "legalRep.105100001",
+            "attachmentList": [
+              {
+                "attaName": "身份证.jpg",
+                "attaUrl": "data:text/plain;base64,6L+Z5piv5LiA5byg5rWL6K+V55So55qE6Lqr5Lu96K+B5piO5paH5Lu2",
+                "isCloudShare": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "test_files": {
+    "business_license": {
+      "name": "营业执照.jpg",
+      "type": "image/jpeg",
+      "description": "标准营业执照图片，用于OCR识别测试"
+    },
+    "id_card": {
+      "name": "身份证.jpg",
+      "type": "image/jpeg",
+      "description": "身份证图片，用于身份验证测试"
+    },
+    "application_form": {
+      "name": "申请表.pdf",
+      "type": "application/pdf",
+      "description": "申请表PDF，用于文档处理测试"
+    }
+  }
+}
+

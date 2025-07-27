@@ -1,0 +1,259 @@
+# 智能预审系统 - Cursor 开发规则
+
+## 项目概览
+- **项目名称**: 智能预审系统 (OCR Server)
+- **版本**: v1.3.0
+- **技术栈**: Rust + Axum + PaddleOCR + WebUI
+- **编译目标**: x86_64-unknown-linux-musl (静态链接)
+- **部署方式**: Docker/直接部署，支持离线运行
+
+## 核心功能
+- 多语言OCR识别 (中英日韩俄文)
+- 智能规则引擎 (zen-engine)
+- 主题化预览系统
+- SSO单点登录集成
+- 监控和日志系统
+- 第三方系统访问控制 (AK/SK认证)
+
+## 项目结构
+
+### 核心代码目录
+```
+src/
+├── main.rs              # 程序入口
+├── api/                 # API路由和处理器
+├── model/               # 数据模型 (OCR、预览等)
+├── util/                # 工具模块 (配置、日志、中间件)
+└── monitor/             # 监控模块
+```
+
+### 配置文件
+```
+config.yaml             # 开发环境配置
+config.yaml.prod        # 生产环境配置 (安全设置)
+config.example.yaml     # 配置示例模板
+config/                 # 配置文件目录
+├── mappings/           # 主题映射配置
+├── rules/              # 业务规则配置
+└── themes.json         # 主题定义
+```
+
+### 构建和部署
+```
+build-release-package.sh    # 生产环境包构建 (无调试工具)
+build-simple-package.sh     # 调试开发包构建 (含调试工具)
+build-offline-package.sh    # 离线安装包构建
+scripts/
+├── ocr-server.sh           # 服务管理脚本
+└── log-manager.sh          # 日志管理脚本
+```
+
+### 静态资源
+```
+static/
+├── css/                # 样式文件
+├── js/                 # JavaScript文件
+├── prod/               # 生产环境页面
+├── debug/              # 调试工具 (仅开发环境)
+├── index.html          # 主页面
+├── login.html          # 登录页面
+└── monitor.html        # 监控界面
+```
+
+### 文档
+```
+docs/                   # 所有项目文档
+├── API_REFERENCE.md    # API参考文档
+├── TEST_GUIDE.md       # 测试指南
+├── DEPLOYMENT-SUMMARY.md # 部署说明
+└── 智能预审系统第三方接入编程指南.md # 第三方接入指南
+```
+
+## 开发规范
+
+### Rust代码规范
+1. **错误处理**: 使用 `anyhow::Result` 统一错误处理
+2. **日志记录**: 使用 `tracing` 进行结构化日志
+3. **异步编程**: 基于 `tokio` 运行时，所有IO操作使用async
+4. **依赖注入**: 通过 `Arc<AppState>` 共享应用状态
+5. **配置管理**: 集中在 `util/config.rs` 模块
+
+### API设计规范
+- **RESTful**: 遵循REST设计原则
+- **统一响应**: 使用标准JSON响应格式
+- **错误码**: HTTP状态码 + 自定义错误码
+- **认证**: 支持会话认证和AK/SK认证
+- **速率限制**: 对第三方接口实施速率控制
+
+### 配置文件规范
+- **开发环境**: `config.yaml` (调试功能开启)
+- **生产环境**: `config.yaml.prod` (安全配置)
+- **敏感信息**: 使用环境变量或外部配置管理
+- **版本控制**: 配置示例文件纳入版本控制
+
+## 常用开发命令
+
+### 本地开发
+```bash
+# 启动开发服务器
+cargo run
+
+# 启动带监控功能的服务器
+cargo run --features monitoring
+
+# 运行测试
+cargo test
+
+# 代码格式化
+cargo fmt
+
+# 代码检查
+cargo clippy
+```
+
+### 构建部署
+```bash
+# 构建生产环境包
+./build-release-package.sh
+
+# 构建调试包
+./build-simple-package.sh
+
+# 服务管理
+./scripts/ocr-server.sh start    # 启动服务
+./scripts/ocr-server.sh stop     # 停止服务
+./scripts/ocr-server.sh status   # 查看状态
+./scripts/ocr-server.sh logs     # 查看日志
+```
+
+### 测试和调试
+```bash
+# API测试
+curl -X POST http://localhost:31101/api/preview \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@test.pdf"
+
+# 健康检查
+curl http://localhost:31101/api/health
+
+# 监控界面
+http://localhost:31101/static/monitor.html
+```
+
+## 关键文件说明
+
+### 核心模块
+- `src/main.rs`: 应用程序入口，初始化配置和路由
+- `src/api/mod.rs`: API路由定义和中间件配置
+- `src/model/ocr.rs`: OCR处理逻辑和模型定义
+- `src/model/preview.rs`: 预览系统核心逻辑
+- `src/util/config.rs`: 配置文件解析和管理
+- `src/util/log.rs`: 日志系统配置
+
+### 配置文件
+- `Cargo.toml`: Rust项目依赖和元信息
+- `build.rs`: 构建脚本，处理静态文件
+- `graph.json`: 依赖关系图配置
+- `matter-theme-mapping.json`: 事项主题映射
+
+### 部署文件
+- `ocr/`: PaddleOCR引擎和模型文件
+- `runtime/`: 运行时目录（日志、缓存、临时文件）
+
+## 开发注意事项
+
+### 性能优化
+1. **并发处理**: 使用 `tokio` 任务池处理并发请求
+2. **内存管理**: 大文件处理使用流式处理，避免全量加载
+3. **缓存策略**: OCR结果和预览文件进行适当缓存
+4. **资源限制**: 配置合理的并发数和超时时间
+
+### 安全考虑
+1. **输入验证**: 所有用户输入进行严格验证
+2. **文件上传**: 限制文件大小、类型和路径
+3. **认证授权**: 生产环境必须启用认证
+4. **日志脱敏**: 避免在日志中记录敏感信息
+
+### 监控和日志
+1. **结构化日志**: 使用JSON格式便于分析
+2. **监控指标**: CPU、内存、请求数、错误率
+3. **告警机制**: 关键错误和性能问题及时告警
+4. **日志轮转**: 配置合理的日志保留策略
+
+## 故障排查
+
+### 常见问题
+1. **OCR引擎启动失败**: 检查 `ocr/` 目录完整性
+2. **PDF生成失败**: 确认 wkhtmltopdf 安装和配置
+3. **内存使用过高**: 检查并发数设置和文件处理逻辑
+4. **认证失败**: 验证SSO配置和第三方密钥
+
+### 调试工具
+- **开发模式**: 启用 `debug.enabled: true`
+- **API测试**: 使用 `static/debug/tools/api-test.html`
+- **模拟登录**: 开发环境可启用模拟登录
+- **监控界面**: 实时查看系统状态和性能指标
+
+### 日志分析
+```bash
+# 查看服务日志
+tail -f runtime/logs/ocr-server.log
+
+# 查看错误日志
+grep "ERROR" runtime/logs/ocr-server.log
+
+# 查看API请求日志
+grep "api" runtime/logs/ocr-server.log | jq '.'
+```
+
+## 维护指南
+
+### 版本发布
+1. 更新 `Cargo.toml` 中的版本号
+2. 更新 `CHANGELOG_FIX.md` 记录变更
+3. 运行完整测试套件
+4. 构建生产环境包进行验证
+5. 更新部署文档
+
+### 依赖更新
+```bash
+# 检查过时依赖
+cargo outdated
+
+# 更新依赖
+cargo update
+
+# 安全审计
+cargo audit
+```
+
+### 数据备份
+- 配置文件: 定期备份自定义配置
+- 预览文件: 根据业务需要备份重要预览
+- 日志文件: 按照保留政策归档日志
+
+## 团队协作
+
+### Git工作流
+- **主分支**: `main` - 稳定发布版本
+- **开发分支**: `develop` - 开发集成版本
+- **功能分支**: `feature/xxx` - 新功能开发
+- **修复分支**: `hotfix/xxx` - 紧急修复
+
+### 代码审查
+1. 所有功能必须通过代码审查
+2. 确保测试覆盖率
+3. 检查安全性和性能影响
+4. 验证文档更新
+
+### 部署流程
+1. 测试环境验证
+2. 预生产环境测试
+3. 生产环境发布
+4. 监控和回滚准备
+
+---
+
+**最后更新**: 2025年6月
+**维护者**: 开发团队
+**联系方式**: 项目文档或issue tracker 

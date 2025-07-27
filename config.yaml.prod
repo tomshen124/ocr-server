@@ -1,0 +1,83 @@
+# 智能预审系统配置文件 - 生产环境
+# 基于源码Config结构定义，生产环境安全配置
+
+# ============= 基本服务配置 =============
+host: "http://0.0.0.0"
+port: 31101
+preview_url: "http://your-domain.com:31101"  # 请修改为实际域名
+session_timeout: 86400
+app_id: "2002387292"
+callback_url: "http://your-domain.com:31101/api/sso/callback"  # 请修改为实际域名
+
+# ============= 单点登录配置 =============
+login:
+  sso_login_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000006/uc/sso/login"
+  access_token_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000007/uc/sso/access_token"
+  get_user_info_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000008/uc/sso/getUserInfo"
+  access_key: "BCDSGA_f56e1708ce9038a17f2be55c14f01fce"
+  secret_key: "BCDSGS_1254c9d66293612217306ce6d728aad4"
+  use_callback: true  # 生产环境启用回调模式
+
+# ============= 对象存储配置 =============
+zhzwdt-oss:
+  root: "ocr-files"
+  bucket: "your-bucket"  # 请修改为实际bucket
+  server_url: "https://your-oss-endpoint.com"  # 请修改为实际OSS地址
+  AccessKey: "your-access-key"  # 请修改为实际access key
+  AccessKey Secret: "your-access-key-secret"  # 请修改为实际secret
+
+# ============= 数据库配置 =============
+DMSql:
+  DATABASE_HOST: "localhost"  # 请修改为实际数据库地址
+  DATABASE_PORT: "5236"
+  DATABASE_USER: "SYSDBA"  # 请修改为实际用户名
+  DATABASE_PASSWORD: "SYSDBA"  # 请修改为实际密码
+  DATABASE_NAME: "OCR_DB"
+
+# ============= 审批配置 =============
+approve:
+  submit-url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220310000001/zjzwfw-open-middleware/zjzwfw/approve/add"
+  access-key: "BCDSGA_f56e1708ce9038a17f2be55c14f01fce"
+  secret-key: "BCDSGS_1254c9d66293612217306ce6d728aad4"
+
+# ============= 开发调试配置 =============
+debug:
+  enabled: false  # 生产环境关闭调试功能
+  enable_mock_login: false  # 生产环境禁用模拟登录
+  mock_login_warning: false  # 生产环境关闭警告
+  tools_enabled:  # 生产环境关闭所有调试工具
+    api_test: false
+    mock_login: false
+    preview_demo: false
+    flow_test: false
+    system_monitor: false
+    data_manager: false
+
+# ============= 日志配置 =============
+logging:
+  level: "info"  # 生产环境使用info级别
+  file:
+    enabled: true
+    directory: "runtime/logs"
+    retention_days: 30  # 生产环境保留30天日志
+
+# ============= 监控配置 =============
+monitoring:
+  enabled: true
+
+# ============= 第三方访问控制配置 =============
+third_party_access:
+  enabled: true  # 生产环境启用第三方访问控制
+  signature:
+    required: true
+    timestamp_tolerance: 300
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    requests_per_hour: 1000
+  clients:
+    - client_id: "production_client"
+      secret_key: "CHANGE_ME_IN_PRODUCTION"  # 请修改为随机密钥
+      name: "生产环境客户端"
+      enabled: true
+      permissions: ["preview", "query"] 

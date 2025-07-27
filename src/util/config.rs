@@ -16,10 +16,48 @@ pub struct Config {
     #[serde(rename = "DMSql")]
     pub dm_sql: DmSql,
     pub approve: Approve,
+    pub runtime_mode: RuntimeModeConfig,
     pub debug: Debug,
+    pub test_mode: Option<TestModeConfig>,  // 可选的测试模式配置
     pub logging: LoggingConfig,
     pub monitoring: MonitoringConfig,
     pub third_party_access: ThirdPartyAccessConfig,
+    pub failover: FailoverConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeModeConfig {
+    pub mode: String,
+    pub development: DevelopmentConfig,
+    pub testing: TestingConfig,
+    pub production: ProductionConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DevelopmentConfig {
+    pub debug_enabled: bool,
+    pub mock_login: bool,
+    pub mock_ocr: bool,
+    pub test_tools: bool,
+    pub auto_login: bool,
+    pub detailed_logs: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestingConfig {
+    pub mock_data: bool,
+    pub mock_delay: u64,
+    pub test_scenarios: bool,
+    pub performance_test: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProductionConfig {
+    pub debug_enabled: bool,
+    pub mock_login: bool,
+    pub mock_ocr: bool,
+    pub test_tools: bool,
+    pub security_strict: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +76,23 @@ pub struct DebugToolsConfig {
     pub flow_test: bool,
     pub system_monitor: bool,
     pub data_manager: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestModeConfig {
+    pub enabled: bool,
+    pub auto_login: bool,
+    pub mock_ocr: bool,
+    pub mock_delay: u64,
+    pub test_user: TestUserConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestUserConfig {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    pub role: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +132,7 @@ pub struct DmSql {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
+    pub sso_login_url: String,
     pub access_token_url: String,
     pub get_user_info_url: String,
     pub access_key: String,
@@ -137,6 +193,33 @@ pub struct RateLimitingConfig {
     pub requests_per_hour: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailoverConfig {
+    pub database: DatabaseFailoverConfig,
+    pub storage: StorageFailoverConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseFailoverConfig {
+    pub enabled: bool,
+    pub health_check_interval: u64, // seconds
+    pub max_retries: u32,
+    pub retry_delay: u64, // milliseconds
+    pub fallback_to_local: bool,
+    pub local_data_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageFailoverConfig {
+    pub enabled: bool,
+    pub health_check_interval: u64, // seconds
+    pub max_retries: u32,
+    pub retry_delay: u64, // milliseconds
+    pub auto_switch_to_local: bool,
+    pub sync_when_recovered: bool,
+    pub local_fallback_dir: String,
+}
+
 impl Config {
     pub fn read_yaml(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let config_str = fs::read_to_string(path)?;
@@ -166,7 +249,32 @@ impl Default for Config {
         Self {
             host: "http://127.0.0.1".to_string(),
             port: 31101,
+            runtime_mode: RuntimeModeConfig {
+                mode: "development".to_string(),
+                development: DevelopmentConfig {
+                    debug_enabled: true,
+                    mock_login: true,
+                    mock_ocr: true,
+                    test_tools: true,
+                    auto_login: true,
+                    detailed_logs: true,
+                },
+                testing: TestingConfig {
+                    mock_data: true,
+                    mock_delay: 500,
+                    test_scenarios: true,
+                    performance_test: false,
+                },
+                production: ProductionConfig {
+                    debug_enabled: false,
+                    mock_login: false,
+                    mock_ocr: false,
+                    test_tools: false,
+                    security_strict: true,
+                },
+            },
             login: Login {
+                sso_login_url: "".to_string(),
                 access_token_url: "".to_string(),
                 get_user_info_url: "".to_string(),
                 access_key: "".to_string(),
@@ -209,6 +317,18 @@ impl Default for Config {
                     data_manager: true,
                 },
             },
+            test_mode: Some(TestModeConfig {
+                enabled: true,
+                auto_login: true,
+                mock_ocr: false,
+                mock_delay: 100,
+                test_user: TestUserConfig {
+                    id: "test_user_001".to_string(),
+                    username: "测试用户".to_string(),
+                    email: "test@example.com".to_string(),
+                    role: "tester".to_string(),
+                },
+            }),
             logging: LoggingConfig {
                 level: "info".to_string(),
                 file: LogFileConfig {
@@ -239,6 +359,25 @@ impl Default for Config {
                     enabled: true,
                     requests_per_minute: 100,
                     requests_per_hour: 1000,
+                },
+            },
+            failover: FailoverConfig {
+                database: DatabaseFailoverConfig {
+                    enabled: true,
+                    health_check_interval: 30,
+                    max_retries: 3,
+                    retry_delay: 1000,
+                    fallback_to_local: true,
+                    local_data_dir: "runtime/fallback/db".to_string(),
+                },
+                storage: StorageFailoverConfig {
+                    enabled: true,
+                    health_check_interval: 30,
+                    max_retries: 3,
+                    retry_delay: 1000,
+                    auto_switch_to_local: true,
+                    sync_when_recovered: true,
+                    local_fallback_dir: "runtime/fallback/storage".to_string(),
                 },
             },
         }

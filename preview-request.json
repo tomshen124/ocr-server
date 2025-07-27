@@ -1,0 +1,40 @@
+{
+  "userId": "test_user_001",
+  "preview": {
+    "matterId": "TEST_MATTER_001",
+    "matterType": "申请类",
+    "matterName": "测试项目申请",
+    "copy": false,
+    "channel": "网上办事",
+    "requestId": "TEST_REQUEST_003",
+    "sequenceNo": "SEQ001",
+    "formData": [],
+    "materialData": [
+      {
+        "code": "TEST_MATERIAL_001",
+        "attachmentList": [
+          {
+            "attaName": "test-document.txt",
+            "attaUrl": "data:text/plain;base64,5rWL6K+V5paH5qGj5YaF5a65CgrnlLPor7fkurrvvJrlvKDkuIkK6aG555uu5ZCN56ew77ya5rWL6K+V6aG555uu55Sz6K+3CueUs+ivt+aXpeacn++8mjIwMjXlubQ35pyIMjDml6UK55Sz6K+357yW5Y+377yaVEVTVC0yMDI1LTAwMQoK55Sz6K+35p2Q5paZ77yaCjEuIOi6q+S7veivgeaYjuaWh+S7tgoyLiDpobnnm67nlLPor7fkuaYKMy4g55u45YWz6LWE6LSo6K+B5piOCgrnibnmraTnlLPor7fjgIIKCueUs+ivt+S6uuetvuWQje+8muW8oOS4iQrml6XmnJ/vvJoyMDI15bm0N+aciDIw5pelCg==",
+            "isCloudShare": false
+          }
+        ]
+      }
+    ],
+    "agentInfo": {
+      "userId": "test_user_001",
+      "certificateType": "身份证",
+      "userName": "测试用户",
+      "certificateNumber": "123456789012345678",
+      "phoneNumber": "13800138000",
+      "email": "test@example.com"
+    },
+    "subjectInfo": {
+      "userId": "test_user_001",
+      "certificateType": "身份证",
+      "userName": "测试用户",
+      "certificateNumber": "123456789012345678"
+    },
+    "themeId": "theme_001"
+  }
+}

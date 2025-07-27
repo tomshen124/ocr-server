@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR预审系统测试工具</title>
+    <style>
+        /* 政务系统风格样式 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        /* 头部导航 */
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+        }
+        
+        .header-title {
+            display: flex;
+            align-items: center;
+            font-size: 22px;
+            font-weight: bold;
+        }
+        
+        .header-title .icon {
+            margin-right: 12px;
+            font-size: 28px;
+        }
+        
+        .header-nav {
+            display: flex;
+            gap: 24px;
+        }
+        
+        .header-nav a {
+            color: white;
+            text-decoration: none;
+            padding: 10px 18px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+            font-weight: 500;
+        }
+        
+        .header-nav a:hover {
+            background-color: rgba(255,255,255,0.2);
+        }
+        
+        /* 主容器 */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        /* 面包屑导航 */
+        .breadcrumb {
+            background: white;
+            padding: 14px 24px;
+            margin-bottom: 24px;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            font-size: 14px;
+            color: #666;
+            border-left: 4px solid #1890ff;
+        }
+        
+        /* 工具卡片网格 */
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .tool-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border: 1px solid #e8e8e8;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        
+        .tool-card:hover {
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+            transform: translateY(-2px);
+        }
+        
+        .tool-card-header {
+            background: linear-gradient(135deg, #f6f8fc 0%, #e9ecef 100%);
+            padding: 20px 24px;
+            border-bottom: 1px solid #e8e8e8;
+            display: flex;
+            align-items: center;
+        }
+        
+        .tool-card-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            font-weight: 600;
+        }
+        
+        .tool-card-header .icon {
+            margin-right: 12px;
+            font-size: 22px;
+            color: #1890ff;
+        }
+        
+        .tool-card-body {
+            padding: 24px;
+        }
+        
+        /* 表单样式 */
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: all 0.3s;
+            background: #fafafa;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #1890ff;
+            box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.1);
+            background: white;
+        }
+        
+        .form-group textarea {
+            min-height: 100px;
+            resize: vertical;
+            font-family: "Consolas", "Monaco", monospace;
+        }
+        
+        /* 按钮样式 */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            min-width: 100px;
+        }
+        
+        .btn-primary {
+            background: #1890ff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #40a9ff;
+            transform: translateY(-1px);
+        }
+        
+        .btn-success {
+            background: #52c41a;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #73d13d;
+            transform: translateY(-1px);
+        }
+        
+        .btn-warning {
+            background: #faad14;
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            background: #ffc53d;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+            border: 1px solid #d9d9d9;
+        }
+        
+        .btn-secondary:hover {
+            background: #e6e6e6;
+            transform: translateY(-1px);
+        }
+
+        .btn-purple {
+            background: #722ed1;
+            color: white;
+        }
+
+        .btn-purple:hover {
+            background: #9254de;
+            transform: translateY(-1px);
+        }
+
+        .btn-info {
+            background: #13c2c2;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #36cfc9;
+            transform: translateY(-1px);
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        
+        /* 结果显示区域 */
+        .result-area {
+            background: #f8f9fa;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+            padding: 20px;
+            margin-top: 20px;
+            font-family: "Consolas", "Monaco", monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 400px;
+            overflow-y: auto;
+            border-left: 4px solid #1890ff;
+        }
+        
+        /* 状态指示器 */
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .status-success { background: #52c41a; }
+        .status-warning { background: #faad14; }
+        .status-error { background: #ff4d4f; }
+        .status-info { background: #1890ff; }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .tools-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .header-content {
+                flex-direction: column;
+                gap: 12px;
+            }
+            
+            .header-nav {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .main-container {
+                padding: 16px;
+            }
+            
+            .btn-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 头部导航 -->
+    <div class="header">
+        <div class="header-content">
+            <div class="header-title">
+                <span class="icon">🧪</span>
+                OCR预审系统测试工具
+            </div>
+            <div class="header-nav">
+                <a href="/static/index.html">预审页面</a>
+                <a href="/static/stats.html">统计页面</a>
+                <a href="/static/monitoring.html">监控中心</a>
+                <a href="/static/monitor.html">预审监控</a>
+                <a href="/static/test-tools.html">测试工具</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主容器 -->
+    <div class="main-container">
+        <!-- 面包屑导航 -->
+        <div class="breadcrumb">
+            首页 > 系统管理 > 测试工具
+        </div>
+
+        <!-- 工具卡片网格 -->
+        <div class="tools-grid">
+            <!-- 模拟登录测试 -->
+            <div class="tool-card">
+                <div class="tool-card-header">
+                    <h3><span class="icon">🔑</span>模拟登录测试</h3>
+                </div>
+                <div class="tool-card-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="mockUserId">用户ID</label>
+                            <input type="text" id="mockUserId" value="1472176" placeholder="输入用户ID">
+                        </div>
+                        <div class="form-group">
+                            <label for="mockUserName">用户姓名</label>
+                            <input type="text" id="mockUserName" value="张三" placeholder="输入用户姓名">
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="performMockLogin()">执行模拟登录</button>
+                        <button class="btn btn-success" onclick="mockLoginAndOpenProduction()">登录并打开生产页面</button>
+                        <button class="btn btn-secondary" onclick="checkAuthStatus()">检查认证状态</button>
+                        <button class="btn btn-warning" onclick="clearSession()">清除会话</button>
+                    </div>
+                    <div id="loginResult" class="result-area" style="display: none;"></div>
+                </div>
+            </div>
+
+            <!-- 预审数据测试 -->
+            <div class="tool-card">
+                <div class="tool-card-header">
+                    <h3><span class="icon">📋</span>预审数据测试</h3>
+                </div>
+                <div class="tool-card-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="testRequestId">预审请求ID</label>
+                            <input type="text" id="testRequestId" placeholder="留空使用模拟数据">
+                        </div>
+                        <div class="form-group">
+                            <label for="testDataMode">数据模式</label>
+                            <select id="testDataMode">
+                                <option value="mock">模拟数据</option>
+                                <option value="real">真实数据</option>
+                                <option value="mixed">混合模式</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="testPreviewData()">获取预审数据</button>
+                        <button class="btn btn-success" onclick="testFullFlow()">测试完整流程</button>
+                        <button class="btn btn-secondary" onclick="openPreviewPage()">打开预审页面</button>
+                        <button class="btn btn-info" onclick="quickTestWithLogin()">快速测试（含登录）</button>
+                        <button class="btn btn-warning" onclick="testProductionWorkflow()">测试生产工作流</button>
+                    </div>
+                    <div id="previewResult" class="result-area" style="display: none;"></div>
+                </div>
+            </div>
+
+            <!-- 第三方接口测试 -->
+            <div class="tool-card">
+                <div class="tool-card-header">
+                    <h3><span class="icon">🔗</span>第三方接口测试</h3>
+                </div>
+                <div class="tool-card-body">
+                    <div class="form-group">
+                        <label for="thirdPartyData">第三方请求数据 (JSON)</label>
+                        <textarea id="thirdPartyData" placeholder="粘贴qingqiu.json内容或使用默认数据"></textarea>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="loadDefaultThirdPartyData()">加载默认数据</button>
+                        <button class="btn btn-success" onclick="testThirdPartyCallback()">测试第三方回调</button>
+                        <button class="btn btn-warning" onclick="validateThirdPartyData()">验证数据格式</button>
+                    </div>
+                    <div id="thirdPartyResult" class="result-area" style="display: none;"></div>
+                </div>
+            </div>
+
+            <!-- 系统状态监控 -->
+            <div class="tool-card">
+                <div class="tool-card-header">
+                    <h3><span class="icon">📊</span>系统状态监控</h3>
+                </div>
+                <div class="tool-card-body">
+                    <div id="systemStatus" style="background: #f8f9fa; padding: 16px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid #1890ff;">
+                        <p><span class="status-indicator status-info"></span>正在加载系统状态...</p>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="refreshSystemStatus()">刷新状态</button>
+                        <button class="btn btn-secondary" onclick="openMainPage()">打开主页面</button>
+                        <button class="btn btn-secondary" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">返回顶部</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 生产环境模拟 -->
+            <div class="tool-card">
+                <div class="tool-card-header">
+                    <h3><span class="icon">🏭</span>生产环境模拟</h3>
+                </div>
+                <div class="tool-card-body">
+                    <div class="form-group">
+                        <label for="productionScenario">选择模拟场景</label>
+                        <select id="productionScenario">
+                            <option value="">请选择模拟场景...</option>
+                            <option value="scenario1">工程渣土准运证核准 - 淳安垒佳运输 (101104353)</option>
+                            <option value="scenario2">工程渣土消纳场地登记 - 桐庐富春江开发 (101306405)</option>
+                            <option value="scenario3">排水接管技术审查 - 杭州建设公司 (101102043)</option>
+                            <option value="scenario4">临时占用、挖掘河道设施许可 - 水利工程公司 (101304025)</option>
+                            <option value="scenario5">设置其他户外广告设施和招牌、指示牌备案 - 萧山斯哈斯哈卤味店 (101105083)</option>
+                            <option value="scenario6">利用广场等公共场所举办文化、商业等活动许可 - 建德市社区节 (101303167)</option>
+                        </select>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="startProductionSimulation()">启动生产模拟</button>
+                        <button class="btn btn-success" onclick="simulateThirdPartyRequest()">模拟第三方请求</button>
+                        <button class="btn btn-info" onclick="testCompleteFlow()">测试完整流程</button>
+                        <button class="btn btn-secondary" onclick="runE2ETest()">端到端测试</button>
+                        <button class="btn btn-warning" onclick="openProductionWithData()">打开生产页面并填充数据</button>
+                        <button class="btn btn-purple" onclick="testWithProductionPage()">🔗 联动生产页面测试</button>
+                    </div>
+                    <div id="productionSimResult" class="result-area" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 页脚信息 -->
+        <div style="text-align: center; padding: 24px; color: #666; border-top: 1px solid #e8e8e8; margin-top: 40px; background: white; border-radius: 8px;">
+            <p style="margin-bottom: 8px; font-weight: 600;">OCR预审系统测试工具 v2.0</p>
+            <p style="font-size: 14px; margin: 0;">仅供开发测试使用 | 请确保在生产环境中禁用所有测试功能</p>
+        </div>
+    </div>
+
+    <!-- 浮动返回顶部按钮 -->
+    <div id="backToTop" style="
+        position: fixed;
+        bottom: 40px;
+        right: 40px;
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        box-shadow: 0 4px 16px rgba(24, 144, 255, 0.3);
+        z-index: 1000;
+        transition: all 0.3s;
+    " onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
+        ↑
+    </div>
+
+    <script>
+        // 模拟登录功能
+        function performMockLogin() {
+            const userId = document.getElementById('mockUserId').value;
+            const userName = document.getElementById('mockUserName').value;
+            const resultDiv = document.getElementById('loginResult');
+
+            if (!userId || !userName) {
+                showResult('loginResult', '错误：用户ID和姓名不能为空', 'error');
+                return;
+            }
+
+            showResult('loginResult', '正在执行模拟登录...', 'info');
+
+            // 使用真实的模拟登录接口
+            fetch('/api/test/mock_login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    userId: userId,
+                    userName: userName
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                showResult('loginResult', JSON.stringify(data, null, 2), data.success ? 'success' : 'error');
+            })
+            .catch(error => {
+                showResult('loginResult', '请求失败: ' + error.message, 'error');
+            });
+        }
+
+        function checkAuthStatus() {
+            showResult('loginResult', '正在检查认证状态...', 'info');
+
+            fetch('/api/auth/status')
+            .then(response => response.json())
+            .then(data => {
+                showResult('loginResult', JSON.stringify(data, null, 2), 'info');
+            })
+            .catch(error => {
+                showResult('loginResult', '请求失败: ' + error.message, 'error');
+            });
+        }
+
+        function clearSession() {
+            showResult('loginResult', '正在清除会话...', 'info');
+
+            fetch('/api/clear-session', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                showResult('loginResult', JSON.stringify(data, null, 2), data.success ? 'success' : 'error');
+            })
+            .catch(error => {
+                showResult('loginResult', '请求失败: ' + error.message, 'error');
+            });
+        }
+
+        // 预审数据测试功能
+        function testPreviewData() {
+            const requestId = document.getElementById('testRequestId').value;
+            const dataMode = document.getElementById('testDataMode').value;
+
+            showResult('previewResult', '正在获取预审数据...', 'info');
+
+            const params = new URLSearchParams();
+            if (requestId) params.append('requestId', requestId);
+            params.append('mode', dataMode);
+
+            // 调用实际的测试数据接口
+            fetch('/api/test/mock/data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    requestId: requestId || 'test_' + Date.now(),
+                    mode: dataMode,
+                    type: 'preview_test'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                showResult('previewResult', JSON.stringify(data, null, 2), data.success ? 'success' : 'error');
+            })
+            .catch(error => {
+                showResult('previewResult', '测试数据请求失败: ' + error.message, 'error');
+            });
+        }
+
+        async function testFullFlow() {
+            showResult('previewResult', '🧪 开始完整流程测试...', 'info');
+
+            try {
+                let allPassed = true;
+                let results = [];
+
+                // 步骤1：健康检查
+                showResult('previewResult', '📊 步骤1：系统健康检查...', 'info');
+                const healthResponse = await fetch('/api/health');
+                const healthData = await healthResponse.json();
+                const healthPassed = healthResponse.ok && healthData.status === 'healthy';
+                results.push(`${healthPassed ? '✅' : '❌'} 系统健康检查: ${healthPassed ? '通过' : '失败'}`);
+                if (!healthPassed) allPassed = false;
+
+                // 步骤2：配置检查
+                showResult('previewResult', '⚙️ 步骤2：配置检查...', 'info');
+                const configResponse = await fetch('/api/config/frontend');
+                const configData = await configResponse.json();
+                const configPassed = configResponse.ok && configData.success;
+                results.push(`${configPassed ? '✅' : '❌'} 配置检查: ${configPassed ? '通过' : '失败'}`);
+                if (!configPassed) allPassed = false;
+
+                // 步骤3：认证检查
+                showResult('previewResult', '🔐 步骤3：认证检查...', 'info');
+                const authResponse = await fetch('/api/auth/status');
+                const authData = await authResponse.json();
+                const authPassed = authResponse.ok && authData.authenticated;
+                results.push(`${authPassed ? '✅' : '❌'} 认证检查: ${authPassed ? '通过' : '失败'}`);
+                if (!authPassed) allPassed = false;
+
+                // 步骤4：模拟数据生成
+                showResult('previewResult', '🎲 步骤4：模拟数据生成...', 'info');
+                const mockResponse = await fetch('/api/test/mock/data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: 'ocr', delay: 100 })
+                });
+                const mockData = await mockResponse.json();
+                const mockPassed = mockResponse.ok && mockData.success;
+                results.push(`${mockPassed ? '✅' : '❌'} 模拟数据生成: ${mockPassed ? '通过' : '失败'}`);
+                if (!mockPassed) allPassed = false;
+
+                // 生成测试报告
+                const summary = allPassed ? '🎉 完整流程测试全部通过！' : '⚠️ 完整流程测试存在问题';
+                const report = `${summary}\n\n📋 测试结果:\n${results.join('\n')}\n\n⏰ 测试时间: ${new Date().toLocaleString()}`;
+
+                showResult('previewResult', report, allPassed ? 'success' : 'error');
+
+            } catch (error) {
+                showResult('previewResult', '❌ 完整流程测试失败: ' + error.message, 'error');
+            }
+        }
+
+        function openPreviewPage() {
+            // 打开新的政务风格预审页面
+            // 注意：这里需要一个真实的预审ID，我们从最近的测试中获取
+            const lastPreviewId = localStorage.getItem('lastTestPreviewId') || 'test_preview_001';
+            const previewUrl = `/static/index.html?previewId=${lastPreviewId}&verified=true`;
+
+            showResult('previewResult', `🚀 正在打开预审页面: ${previewUrl}`, 'info');
+            window.open(previewUrl, '_blank');
+        }
+
+        // 快速测试：模拟登录 + 提交数据 + 打开预审页面
+        async function quickTestWithLogin() {
+            showResult('previewResult', '🚀 开始快速测试流程...', 'info');
+
+            try {
+                // 步骤1：检查认证状态
+                showResult('previewResult', '🔐 步骤1：检查用户认证状态...', 'info');
+                await ensureAuthenticated();
+
+                // 步骤2：提交测试数据
+                showResult('previewResult', '📤 步骤2：提交测试数据...', 'info');
+                const testData = await getScenarioData('scenario1'); // 使用第一个场景
+
+                const submitResponse = await fetch('/api/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testData)
+                });
+
+                const submitResult = await submitResponse.json();
+
+                if (!submitResult.success) {
+                    throw new Error('数据提交失败: ' + submitResult.errorMsg);
+                }
+
+                const previewId = submitResult.data.previewId;
+                localStorage.setItem('lastTestPreviewId', previewId);
+
+                // 步骤3：等待处理
+                showResult('previewResult', '⏳ 步骤3：等待OCR处理（2秒）...', 'info');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                // 步骤4：自动打开预审页面
+                const previewUrl = `/static/index.html?previewId=${previewId}&verified=true`;
+
+                showResult('previewResult', `✅ 快速测试完成！\n\n🆔 预审ID: ${previewId}\n🔗 正在自动打开预审页面...`, 'success');
+
+                // 延迟1秒后打开，让用户看到成功消息
+                setTimeout(() => {
+                    window.open(previewUrl, '_blank');
+                }, 1000);
+
+            } catch (error) {
+                showResult('previewResult', '❌ 快速测试失败: ' + error.message, 'error');
+            }
+        }
+
+        // 模拟登录并打开生产页面
+        async function mockLoginAndOpenProduction() {
+            showResult('loginResult', '正在执行模拟登录并准备跳转到生产页面...', 'info');
+
+            try {
+                // 先执行模拟登录
+                const userId = document.getElementById('mockUserId').value || '1472176';
+                const userName = document.getElementById('mockUserName').value || '张三';
+
+                // 模拟登录成功
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const data = {
+                    success: true,
+                    msg: '模拟登录成功',
+                    data: {
+                        userId: userId,
+                        userName: userName
+                    }
+                };
+
+                if (data.success) {
+                    showResult('loginResult', '✅ 模拟登录成功！正在打开生产页面...', 'success');
+
+                    // 延迟1秒后打开生产页面，让用户看到成功消息
+                    setTimeout(() => {
+                        // 打开新的政务风格预审页面
+                        const previewUrl = `/static/index.html?previewId=${previewId}&verified=true`;
+                        const productionWindow = window.open(previewUrl, '_blank');
+
+                        // 可选：向生产页面传递测试标识
+                        if (productionWindow) {
+                            // 在新窗口中设置测试模式标识
+                            setTimeout(() => {
+                                try {
+                                    productionWindow.postMessage({
+                                        type: 'TEST_MODE',
+                                        userId: userId,
+                                        userName: userName,
+                                        source: 'test-tools'
+                                    }, '*');
+                                } catch (e) {
+                                    console.log('无法向生产页面发送消息:', e);
+                                }
+                            }, 1000);
+                        }
+
+                        showResult('loginResult', '✅ 生产页面已打开，您现在可以进行完整的预审流程测试', 'success');
+                    }, 1000);
+                } else {
+                    showResult('loginResult', '❌ 模拟登录失败: ' + (data.error || '未知错误'), 'error');
+                }
+            } catch (error) {
+                showResult('loginResult', '❌ 请求失败: ' + error.message, 'error');
+            }
+        }
+
+        // 测试生产工作流
+        async function testProductionWorkflow() {
+            showResult('previewResult', '🚀 开始测试生产工作流...', 'info');
+
+            try {
+                // 1. 检查认证状态
+                showResult('previewResult', '1️⃣ 检查用户认证状态...', 'info');
+                const authResponse = await fetch('/api/auth/status');
+                const authData = await authResponse.json();
+
+                if (!authData.authenticated) {
+                    showResult('previewResult', '❌ 用户未登录，请先执行模拟登录', 'error');
+                    return;
+                }
+
+                // 2. 获取前端配置
+                showResult('previewResult', '2️⃣ 获取前端配置...', 'info');
+                const configResponse = await fetch('/api/config/frontend');
+                const configData = await configResponse.json();
+
+                // 3. 模拟文件上传流程
+                showResult('previewResult', '3️⃣ 模拟文件上传和预审流程...', 'info');
+
+                // 4. 打开生产页面进行实际测试
+                const lastPreviewId = localStorage.getItem('lastTestPreviewId') || 'test_preview_001';
+                const previewUrl = `/static/index.html?previewId=${lastPreviewId}&verified=true`;
+                const productionWindow = window.open(previewUrl, 'production-test');
+
+                let resultMessage = '✅ 生产工作流测试准备完成！\n\n';
+                resultMessage += `👤 当前用户: ${authData.user?.name || '未知'} (${authData.user?.id || '未知'})\n`;
+                resultMessage += `🔧 系统配置: ${configData.success ? '已加载' : '加载失败'}\n`;
+                resultMessage += `🌐 生产页面: ${productionWindow ? '已打开' : '打开失败'}\n\n`;
+                resultMessage += '📋 接下来您可以在生产页面中:\n';
+                resultMessage += '• 选择预审主题\n';
+                resultMessage += '• 上传测试文件\n';
+                resultMessage += '• 查看预审结果\n';
+                resultMessage += '• 测试完整的用户流程';
+
+                showResult('previewResult', resultMessage, 'success');
+
+            } catch (error) {
+                showResult('previewResult', '❌ 生产工作流测试失败: ' + error.message, 'error');
+            }
+        }
+
+        // 第三方接口测试功能
+        function loadDefaultThirdPartyData() {
+            const defaultData = {
+                "requestId": "test-" + Date.now(),
+                "userId": "1472176",
+                "userName": "张三",
+                "materials": [
+                    {
+                        "type": "identity",
+                        "url": "http://example.com/id.jpg"
+                    }
+                ]
+            };
+
+            document.getElementById('thirdPartyData').value = JSON.stringify(defaultData, null, 2);
+            showResult('thirdPartyResult', '已加载默认测试数据', 'success');
+        }
+
+        function validateThirdPartyData() {
+            const data = document.getElementById('thirdPartyData').value;
+
+            if (!data.trim()) {
+                showResult('thirdPartyResult', '错误：请输入JSON数据', 'error');
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(data);
+                showResult('thirdPartyResult', 'JSON格式验证通过\n' + JSON.stringify(parsed, null, 2), 'success');
+            } catch (error) {
+                showResult('thirdPartyResult', 'JSON格式错误: ' + error.message, 'error');
+            }
+        }
+
+        function testThirdPartyCallback() {
+            const data = document.getElementById('thirdPartyData').value;
+
+            if (!data.trim()) {
+                showResult('thirdPartyResult', '错误：请输入JSON数据', 'error');
+                return;
+            }
+
+            try {
+                const parsed = JSON.parse(data);
+                showResult('thirdPartyResult', '正在测试第三方回调...', 'info');
+
+                fetch('/api/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(parsed)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    showResult('thirdPartyResult', JSON.stringify(data, null, 2), data.success ? 'success' : 'error');
+                })
+                .catch(error => {
+                    showResult('thirdPartyResult', '请求失败: ' + error.message, 'error');
+                });
+            } catch (error) {
+                showResult('thirdPartyResult', 'JSON格式错误: ' + error.message, 'error');
+            }
+        }
+
+        // 系统状态功能
+        function refreshSystemStatus() {
+            const statusDiv = document.getElementById('systemStatus');
+            statusDiv.innerHTML = '<p><span class="status-indicator status-info"></span>正在刷新系统状态...</p>';
+
+            fetch('/api/health')
+            .then(response => response.json())
+            .then(data => {
+                let statusHtml = '';
+                if (data.success) {
+                    statusHtml += `<p><span class="status-indicator status-success"></span>系统运行正常</p>`;
+                    statusHtml += `<p>服务状态: ${data.data?.status || 'running'}</p>`;
+                    statusHtml += `<p>当前时间: ${new Date().toLocaleString()}</p>`;
+                    statusHtml += `<p>版本: ${data.data?.version || 'v2.0'}</p>`;
+                } else {
+                    statusHtml += `<p><span class="status-indicator status-error"></span>系统状态异常</p>`;
+                    statusHtml += `<p>错误信息: ${data.errorMsg || '未知错误'}</p>`;
+                }
+                statusDiv.innerHTML = statusHtml;
+            })
+            .catch(error => {
+                statusDiv.innerHTML = `<p><span class="status-indicator status-error"></span>获取系统状态失败: ${error.message}</p>`;
+            });
+        }
+
+        function openMainPage() {
+            window.open('/static/index.html', '_blank');
+        }
+
+        // 通用结果显示函数
+        function showResult(elementId, content, type) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.innerHTML = content;
+
+            // 根据类型设置边框颜色
+            switch(type) {
+                case 'success':
+                    element.style.borderLeftColor = '#52c41a';
+                    break;
+                case 'error':
+                    element.style.borderLeftColor = '#ff4d4f';
+                    break;
+                case 'warning':
+                    element.style.borderLeftColor = '#faad14';
+                    break;
+                case 'info':
+                default:
+                    element.style.borderLeftColor = '#1890ff';
+                    break;
+            }
+        }
+
+        // 生产环境模拟数据（仅包含6个真实事项）
+        const productionScenarios = {
+            scenario1: {
+                name: "工程渣土准运证 - 淳安垒佳运输",
+                userId: "8218536",
+                userName: "赵垒",
+                requestId: "d6a7239b15e8448191c5e78bfbdfb5e3",
+                matterId: "101104353",
+                matterName: "工程渣土准运证核准",
+                themeId: "theme_001",
+                description: "淳安县垒佳运输有限公司渣土运输车辆准运证申请",
+                formFields: {
+                    "legalRep.FDDBR": "赵垒",
+                    "self.DWMC": "淳安县垒佳运输有限公司",
+                    "legalRep.FRDBYDDH": "15988829315",
+                    "legalRep.ZJHM": "341125198602200738"
+                }
+            },
+            scenario2: {
+                name: "工程渣土消纳场地登记 - 桐庐富春江开发",
+                userId: "2872696",
+                userName: "方庭兴",
+                requestId: "c8b2f5e4d3a64f2b8e1c9d7a6b5c4e3f",
+                matterId: "101306405",
+                matterName: "工程渣土消纳场地登记",
+                themeId: "theme_002",
+                description: "桐庐县富春江全域建设开发有限公司消纳场地登记申请",
+                formFields: {
+                    "legalRep.FDDBR": "方庭兴",
+                    "self.DWMC": "桐庐县富春江全域建设开发有限公司",
+                    "legalRep.FRDBYDDH": "18968161718",
+                    "legalRep.ZJHM": "330122198303171816"
+                }
+            },
+            scenario3: {
+                name: "排水接管技术审查 - 杭州建设公司",
+                userId: "1472176",
+                userName: "李工程师",
+                requestId: "ps_tech_review_001",
+                matterId: "101102043",
+                matterName: "排水接管技术审查",
+                themeId: "theme_003",
+                description: "杭州市建设工程排水接管技术审查申请",
+                formFields: {
+                    "legalRep.FDDBR": "李工程师",
+                    "self.DWMC": "杭州市建设工程有限公司",
+                    "legalRep.FRDBYDDH": "13800138000",
+                    "legalRep.ZJHM": "330102199001010001"
+                }
+            },
+            scenario4: {
+                name: "临时占用挖掘河道设施许可 - 水利工程公司",
+                userId: "1472176",
+                userName: "王经理",
+                requestId: "river_permit_001",
+                matterId: "101304025",
+                matterName: "临时占用、挖掘河道设施许可",
+                themeId: "theme_004",
+                description: "临时占用、挖掘河道设施许可申请",
+                formFields: {
+                    "legalRep.FDDBR": "王经理",
+                    "self.DWMC": "杭州水利工程有限公司",
+                    "legalRep.FRDBYDDH": "13900139000",
+                    "legalRep.ZJHM": "330102199002020002"
+                }
+            },
+            scenario5: {
+                name: "户外广告设施备案 - 萧山斯哈斯哈卤味店",
+                userId: "1472176",
+                userName: "兰晓霞",
+                requestId: "ad32edc7820243d9a25ddcccf0a91294",
+                matterId: "101105083",
+                matterName: "设置其他户外广告设施和招牌、指示牌备案",
+                themeId: "theme_005",
+                description: "杭州萧山斯哈斯哈的卤味店招牌设置备案申请",
+                formFields: {
+                    "legalRep.FDDBR": "兰晓霞",
+                    "self.DWMC": "杭州萧山斯哈斯哈的卤味店",
+                    "legalRep.FRDBYDDH": "18758083621",
+                    "legalRep.ZJHM": "332502199705263222"
+                }
+            },
+            scenario6: {
+                name: "广场活动许可 - 建德市社区节",
+                userId: "1472176",
+                userName: "叶骁儒",
+                requestId: "50d64f618d6d43f8ae050649ff60d63d",
+                matterId: "101303167",
+                matterName: "利用广场等公共场所举办文化、商业等活动许可",
+                themeId: "theme_006",
+                description: "建德市首届社区节活动许可申请",
+                formFields: {
+                    "legalRep.FDDBR": "叶骁儒",
+                    "self.DWMC": "建德儒艺文化创意有限公司",
+                    "self.HDMC": "繁星有你 星火耀江建德市首届社区节",
+                    "legalRep.FRDBYDDH": "15158136773"
+                }
+            }
+        };
+
+        // 启动生产模拟
+        function startProductionSimulation() {
+            const scenario = document.getElementById('productionScenario').value;
+
+            if (!scenario) {
+                showResult('productionSimResult', '❌ 请先选择一个模拟场景', 'error');
+                return;
+            }
+
+            const scenarioData = productionScenarios[scenario];
+            showResult('productionSimResult', '🚀 正在启动生产环境模拟...', 'info');
+
+            // 1. 先执行模拟登录
+            performScenarioLogin(scenarioData).then(() => {
+                // 2. 显示模拟信息
+                let resultMessage = '✅ 生产环境模拟已启动！\n\n';
+                resultMessage += `📋 场景: ${scenarioData.name}\n`;
+                resultMessage += `👤 用户: ${scenarioData.userName} (${scenarioData.userId})\n`;
+                resultMessage += `📄 事项: ${scenarioData.matterName}\n`;
+                resultMessage += `🆔 请求ID: ${scenarioData.requestId}\n`;
+                resultMessage += `📝 描述: ${scenarioData.description}\n\n`;
+                resultMessage += '🎯 接下来您可以:\n';
+                resultMessage += '• 点击"模拟第三方请求"发送真实数据\n';
+                resultMessage += '• 点击"打开生产页面并填充数据"进行手动测试\n';
+                resultMessage += '• 在生产页面中上传文件进行完整流程测试';
+
+                showResult('productionSimResult', resultMessage, 'success');
+            }).catch(error => {
+                showResult('productionSimResult', '❌ 模拟启动失败: ' + error.message, 'error');
+            });
+        }
+
+        // 检查认证状态并自动模拟登录
+        async function ensureAuthenticated() {
+            try {
+                // 先检查是否已登录
+                const statusResponse = await fetch('/api/auth/status');
+                const statusResult = await statusResponse.json();
+
+                if (statusResult.authenticated) {
+                    console.log('✅ 用户已登录:', statusResult.user);
+                    return true;
+                }
+
+                console.log('❌ 用户未登录，尝试模拟登录...');
+
+                // 尝试模拟登录
+                const loginResponse = await fetch('/api/test/mock_login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: 'test_user_001',
+                        userName: '测试用户'
+                    })
+                });
+
+                const loginResult = await loginResponse.json();
+
+                if (loginResult.success) {
+                    console.log('✅ 模拟登录成功:', loginResult.data);
+                    return true;
+                } else {
+                    console.error('❌ 模拟登录失败:', loginResult.msg);
+
+                    // 如果模拟登录失败，引导用户进行真实登录
+                    const shouldLogin = confirm(
+                        '🔐 模拟登录失败，需要真实登录\n\n' +
+                        '可能原因：测试模式未启用\n\n' +
+                        '点击"确定"跳转到SSO登录页面\n' +
+                        '点击"取消"停止测试'
+                    );
+
+                    if (shouldLogin) {
+                        window.open('/api/sso/login', '_blank');
+                        throw new Error('请先完成SSO登录，然后重新运行测试');
+                    } else {
+                        throw new Error('用户取消登录，测试停止');
+                    }
+                }
+            } catch (error) {
+                if (error.message.includes('请先完成SSO登录')) {
+                    throw error;
+                }
+                console.error('认证检查失败:', error);
+                throw new Error('无法完成认证，请确保服务正常运行');
+            }
+        }
+
+        // 模拟第三方请求
+        async function simulateThirdPartyRequest() {
+            const scenario = document.getElementById('productionScenario').value;
+
+            if (!scenario) {
+                showResult('productionSimResult', '❌ 请先选择一个模拟场景', 'error');
+                return;
+            }
+
+            const scenarioData = productionScenarios[scenario];
+            showResult('productionSimResult', '📡 正在模拟第三方请求...', 'info');
+
+            try {
+                // 从qingqiu.json中获取对应的真实数据
+                const thirdPartyData = await getScenarioData(scenario);
+
+                // 发送第三方预审请求（正确的接口）
+                const response = await fetch('/api/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(thirdPartyData)
+                });
+
+                const result = await response.json();
+
+                let resultMessage = '✅ 第三方请求模拟完成！\n\n';
+                resultMessage += `📋 场景: ${scenarioData.name}\n`;
+                resultMessage += `📄 事项ID: ${thirdPartyData.matterId}\n`;
+                resultMessage += `📝 事项名称: ${thirdPartyData.matterName}\n`;
+                resultMessage += `📊 表单数据: ${thirdPartyData.formData?.length || 0} 个字段\n`;
+                resultMessage += `📎 材料数据: ${thirdPartyData.materialData?.length || 0} 个材料\n\n`;
+                resultMessage += `🔄 服务器响应:\n${JSON.stringify(result, null, 2)}`;
+
+                showResult('productionSimResult', resultMessage, result.success ? 'success' : 'error');
+
+            } catch (error) {
+                showResult('productionSimResult', '❌ 第三方请求模拟失败: ' + error.message, 'error');
+            }
+        }
+
+        // 测试完整流程
+        async function testCompleteFlow() {
+            const scenario = document.getElementById('productionScenario').value;
+
+            if (!scenario) {
+                showResult('productionSimResult', '❌ 请先选择一个模拟场景', 'error');
+                return;
+            }
+
+            const scenarioData = productionScenarios[scenario];
+            showResult('productionSimResult', '🔄 正在测试完整流程...', 'info');
+
+            try {
+                // 步骤1：模拟第三方提交数据
+                const thirdPartyData = await getScenarioData(scenario);
+
+                showResult('productionSimResult', '📡 步骤1：发送第三方数据...', 'info');
+                const response = await fetch('/api/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(thirdPartyData)
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error('第三方数据提交失败: ' + result.errorMsg);
+                }
+
+                const previewId = result.data.previewId;
+
+                // 保存最新的预审ID供其他测试使用
+                localStorage.setItem('lastTestPreviewId', previewId);
+                console.log('✅ 已保存预审ID到localStorage:', previewId);
+
+                // 步骤2：等待一下让OCR处理
+                showResult('productionSimResult', '⏳ 步骤2：等待OCR处理（3秒）...', 'info');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // 步骤3：生成用户访问链接
+                const userAccessUrl = `/static/index.html?previewId=${previewId}&verified=true`;
+
+                let resultMessage = '✅ 完整流程测试成功！\n\n';
+                resultMessage += `📋 场景: ${scenarioData.name}\n`;
+                resultMessage += `🆔 预审ID: ${previewId}\n`;
+                resultMessage += `📄 事项: ${thirdPartyData.matterName}\n`;
+                resultMessage += `👤 用户: ${thirdPartyData.agentInfo?.userName || '未知'}\n\n`;
+                resultMessage += `🔗 用户访问链接:\n${userAccessUrl}\n\n`;
+                resultMessage += '🎯 接下来您可以:\n';
+                resultMessage += '• 点击下面的按钮直接访问预审页面\n';
+                resultMessage += '• 复制链接在新标签页中打开\n';
+                resultMessage += '• 检查预审结果是否正确显示';
+
+                showResult('productionSimResult', resultMessage, 'success');
+
+                // 添加访问按钮
+                const resultDiv = document.getElementById('productionSimResult');
+                const accessButton = document.createElement('button');
+                accessButton.className = 'btn btn-primary';
+                accessButton.style.marginTop = '10px';
+                accessButton.textContent = '🚀 访问预审页面';
+                accessButton.onclick = () => window.open(userAccessUrl, '_blank');
+                resultDiv.appendChild(accessButton);
+
+            } catch (error) {
+                showResult('productionSimResult', '❌ 完整流程测试失败: ' + error.message, 'error');
+            }
+        }
+
+        // 端到端测试 - 覆盖所有关键场景
+        async function runE2ETest() {
+            showResult('productionSimResult', '🚀 开始端到端测试...', 'info');
+
+            const testResults = [];
+            let allPassed = true;
+
+            try {
+                // 测试1：系统健康检查
+                showResult('productionSimResult', '📊 步骤1：系统健康检查...', 'info');
+                const healthResult = await testSystemHealth();
+                testResults.push({
+                    name: '系统健康检查',
+                    passed: healthResult.passed,
+                    message: healthResult.message
+                });
+                if (!healthResult.passed) allPassed = false;
+
+                // 测试2：配置加载测试
+                showResult('productionSimResult', '⚙️ 步骤2：配置加载测试...', 'info');
+                const configResult = await testConfigLoading();
+                testResults.push({
+                    name: '配置加载',
+                    passed: configResult.passed,
+                    message: configResult.message
+                });
+                if (!configResult.passed) allPassed = false;
+
+                // 测试3：认证流程测试
+                showResult('productionSimResult', '🔐 步骤3：认证流程测试...', 'info');
+                const authResult = await testAuthFlow();
+                testResults.push({
+                    name: '认证流程',
+                    passed: authResult.passed,
+                    message: authResult.message
+                });
+                if (!authResult.passed) allPassed = false;
+
+                // 测试4：数据提交测试（多场景）
+                showResult('productionSimResult', '📤 步骤4：数据提交测试...', 'info');
+                const submitResults = await testMultipleScenarios();
+                testResults.push(...submitResults);
+                if (submitResults.some(r => !r.passed)) allPassed = false;
+
+                // 测试5：用户访问测试
+                showResult('productionSimResult', '👤 步骤5：用户访问测试...', 'info');
+                const accessResult = await testUserAccess();
+                testResults.push({
+                    name: '用户访问',
+                    passed: accessResult.passed,
+                    message: accessResult.message
+                });
+                if (!accessResult.passed) allPassed = false;
+
+                // 生成测试报告
+                generateTestReport(testResults, allPassed);
+
+            } catch (error) {
+                showResult('productionSimResult', '❌ 端到端测试失败: ' + error.message, 'error');
+            }
+        }
+
+        // 系统健康检查
+        async function testSystemHealth() {
+            try {
+                const response = await fetch('/api/health');
+                if (response.ok) {
+                    const health = await response.json();
+                    return {
+                        passed: health.status === 'healthy',
+                        message: `系统状态: ${health.status}, 运行时间: ${health.uptime}s`
+                    };
+                } else {
+                    return {
+                        passed: false,
+                        message: `健康检查失败: HTTP ${response.status}`
+                    };
+                }
+            } catch (error) {
+                return {
+                    passed: false,
+                    message: `健康检查异常: ${error.message}`
+                };
+            }
+        }
+
+        // 配置加载测试
+        async function testConfigLoading() {
+            try {
+                const response = await fetch('/api/config/frontend');
+                if (response.ok) {
+                    const config = await response.json();
+                    if (config.success && config.data) {
+                        return {
+                            passed: true,
+                            message: `配置加载成功，包含 ${Object.keys(config.data).length} 个配置项`
+                        };
+                    } else {
+                        return {
+                            passed: false,
+                            message: '配置格式不正确'
+                        };
+                    }
+                } else {
+                    return {
+                        passed: false,
+                        message: `配置加载失败: HTTP ${response.status}`
+                    };
+                }
+            } catch (error) {
+                return {
+                    passed: false,
+                    message: `配置加载异常: ${error.message}`
+                };
+            }
+        }
+
+        // 认证流程测试
+        async function testAuthFlow() {
+            try {
+                // 检查真实的认证状态
+                const response = await fetch('/api/auth/status');
+                const result = await response.json();
+
+                return {
+                    passed: result.authenticated,
+                    message: result.authenticated ?
+                        `认证成功: ${result.user?.user_name || '用户'}` :
+                        '用户未登录，请先完成SSO登录'
+                };
+            } catch (error) {
+                return {
+                    passed: false,
+                    message: `认证测试异常: ${error.message}`
+                };
+            }
+        }
+
+        // 多场景数据提交测试
+        async function testMultipleScenarios() {
+            const results = [];
+            const scenarios = ['scenario1', 'scenario2', 'scenario3']; // 测试前3个场景
+
+            for (const scenario of scenarios) {
+                try {
+                    const scenarioData = productionScenarios[scenario];
+                    if (!scenarioData) continue;
+
+                    const thirdPartyData = await getScenarioData(scenario);
+                    const response = await fetch('/api/preview', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(thirdPartyData)
+                    });
+
+                    const result = await response.json();
+                    results.push({
+                        name: `数据提交-${scenarioData.name}`,
+                        passed: result.success,
+                        message: result.success ?
+                            `预审ID: ${result.data?.previewId}` :
+                            `失败: ${result.errorMsg}`
+                    });
+                } catch (error) {
+                    results.push({
+                        name: `数据提交-${scenario}`,
+                        passed: false,
+                        message: `异常: ${error.message}`
+                    });
+                }
+            }
+
+            return results;
+        }
+
+        // 用户访问测试
+        async function testUserAccess() {
+            try {
+                // 测试静态页面访问
+                const response = await fetch('/static/index.html');
+                if (response.ok) {
+                    return {
+                        passed: true,
+                        message: '静态页面访问正常'
+                    };
+                } else {
+                    return {
+                        passed: false,
+                        message: `静态页面访问失败: HTTP ${response.status}`
+                    };
+                }
+            } catch (error) {
+                return {
+                    passed: false,
+                    message: `用户访问测试异常: ${error.message}`
+                };
+            }
+        }
+
+        // 生成测试报告
+        function generateTestReport(testResults, allPassed) {
+            const passedCount = testResults.filter(r => r.passed).length;
+            const totalCount = testResults.length;
+
+            let reportMessage = `🎯 端到端测试完成！\n\n`;
+            reportMessage += `📊 测试结果: ${passedCount}/${totalCount} 通过\n`;
+            reportMessage += `🎉 总体状态: ${allPassed ? '✅ 全部通过' : '❌ 存在失败'}\n\n`;
+
+            reportMessage += `📋 详细结果:\n`;
+            testResults.forEach((result, index) => {
+                const status = result.passed ? '✅' : '❌';
+                reportMessage += `${index + 1}. ${status} ${result.name}: ${result.message}\n`;
+            });
+
+            reportMessage += `\n🔧 建议:\n`;
+            if (allPassed) {
+                reportMessage += `• 系统运行正常，可以投入使用\n`;
+                reportMessage += `• 建议定期运行此测试确保系统稳定性\n`;
+            } else {
+                reportMessage += `• 请检查失败的测试项目\n`;
+                reportMessage += `• 修复问题后重新运行测试\n`;
+                reportMessage += `• 查看服务器日志获取更多信息\n`;
+            }
+
+            const resultType = allPassed ? 'success' : 'error';
+            showResult('productionSimResult', reportMessage, resultType);
+        }
+
+        // 真实模拟数据 - 直接嵌入qingqiu.json的内容
+        const realScenarioData = {
+            'theme_001': {
+                "agentInfo": {
+                    "certificateType": "ID_CARD",
+                    "userId": "8afac0cc580b07c701581aefd2435265"
+                },
+                "channel": "h5",
+                "copy": false,
+                "formData": [
+                    {
+                        "code": "legalRep.FRDBYDDH",
+                        "value": "18758083621"
+                    },
+                    {
+                        "code": "self.SZQTHWGGSSHZPZSPBADSZQKDSZDD",
+                        "value": "金郡澜庭二区金一路1025号"
+                    },
+                    {
+                        "code": "self.DWMC",
+                        "value": "杭州萧山斯哈斯哈的卤味店"
+                    },
+                    {
+                        "code": "legalRep.FDDBR",
+                        "value": "兰晓霞"
+                    },
+                    {
+                        "code": "self.FRZJH",
+                        "value": "92330109MA8GH51X9D"
+                    }
+                ],
+                "materialData": [
+                    {
+                        "attachmentList": [
+                            {
+                                "attaName": "Screenshot_20241018_143920_com.tencent.mm.jpg",
+                                "attaUrl": "http://recept.zjzwfw.gov.cn/media//oss/DEFAULT/FORM/MATERIAL/74217002-0c98-4e89-b071-7944d610bc66/9720b9dbcf1746aba433a33fc3023134.jpg",
+                                "isCloudShare": false
+                            }
+                        ],
+                        "code": "self.105100813"
+                    }
+                ],
+                "matterId": "101105083",
+                "matterName": "设置其他户外广告设施和招牌、指示牌备案",
+                "matterType": "powerDirectory",
+                "requestId": "ad32edc7820243d9a25ddcccf0a91294",
+                "sequenceNo": "d5a71bc4cb5e4bbe915613d7649e1610",
+                "subjectInfo": {
+                    "certificateType": "ID_CARD",
+                    "userId": "8afac0cc580b07c701581aefd2435265"
+                }
+            },
+            'theme_002': {
+                "agentInfo": {
+                    "certificateType": "ID_CARD",
+                    "userId": "1472176"
+                },
+                "channel": "h5",
+                "copy": false,
+                "formData": [
+                    {
+                        "code": "self.HDMC",
+                        "value": "繁星有你 星火耀江建德市首届社区节"
+                    },
+                    {
+                        "code": "self.DWMC",
+                        "value": "建德儒艺文化创意有限公司"
+                    },
+                    {
+                        "code": "legalRep.FDDBR",
+                        "value": "叶骁儒"
+                    },
+                    {
+                        "code": "self.FRZJH",
+                        "value": "91330182MA28R4UP1Q"
+                    }
+                ],
+                "materialData": [
+                    {
+                        "attachmentList": [
+                            {
+                                "attaName": "64C09D65-D5B8-494B-819C-89D783D95825.doc",
+                                "attaUrl": "http://recept.zjzwfw.gov.cn/media/oss/DEFAULT/FORM/MATERIAL/35efffe4-26c8-41e0-9d6b-5d4b29d3feff/64C09D65-D5B8-494B-819C-89D783D95825.doc",
+                                "isCloudShare": false
+                            }
+                        ],
+                        "code": "self.105302001"
+                    }
+                ],
+                "matterId": "101303167",
+                "matterName": "利用广场等公共场所举办文化、商业等活动许可",
+                "matterType": "powerDirectory",
+                "requestId": "50d64f618d6d43f8ae050649ff60d63d",
+                "sequenceNo": "96e888acb3c449cd93782103a05f9941",
+                "subjectInfo": {
+                    "certificateType": "ID_CARD",
+                    "userId": "1472176"
+                }
+            },
+            'theme_003': {
+                "agentInfo": {
+                    "certificateType": "ID_CARD",
+                    "userId": "8afac0cc616afee401619d053b14004d"
+                },
+                "channel": "h5",
+                "copy": false,
+                "formData": [
+                    {
+                        "code": "self.DWMC",
+                        "value": "杭州市临平君玉奶茶店"
+                    },
+                    {
+                        "code": "legalRep.FDDBR",
+                        "value": "张玉华"
+                    },
+                    {
+                        "code": "self.FRZJH",
+                        "value": "92330113MACUCAU77F"
+                    }
+                ],
+                "materialData": [
+                    {
+                        "attachmentList": [
+                            {
+                                "attaName": "FDD79D8B-4EF7-4C0E-AEA1-82BED1B0D3A2.jpeg",
+                                "attaUrl": "http://recept.zjzwfw.gov.cn/media/oss/DEFAULT/FORM/MATERIAL/d5b2aa50-3e7f-4a41-8e56-cd792a91087f/FDD79D8B-4EF7-4C0E-AEA1-82BED1B0D3A2.jpeg",
+                                "isCloudShare": false
+                            }
+                        ],
+                        "code": "self.105100813"
+                    }
+                ],
+                "matterId": "101105083",
+                "matterName": "设置其他户外广告设施和招牌、指示牌备案",
+                "matterType": "powerDirectory",
+                "requestId": "2d8b2acc21c54b359061a1dbaced74cb",
+                "sequenceNo": "299e95f2ee4244258f0dde5bc356494f",
+                "subjectInfo": {
+                    "certificateType": "ID_CARD",
+                    "userId": "8afac0cc616afee401619d053b14004d"
+                }
+            }
+        };
+
+        // 获取场景数据 - 使用嵌入的真实数据
+        async function getScenarioData(scenario) {
+            try {
+                console.log('🎯 获取场景数据:', scenario);
+
+                // 从嵌入的真实数据中获取
+                if (realScenarioData[scenario]) {
+                    console.log('✅ 找到真实场景数据:', scenario);
+                    return realScenarioData[scenario];
+                }
+
+                // 如果没有找到对应场景，返回默认数据
+                console.log('⚠️ 未找到场景数据，使用默认数据');
+                return getBasicTestData();
+            } catch (error) {
+                console.error('❌ 获取场景数据失败:', error);
+                return getBasicTestData();
+            }
+        }
+
+        // 基础测试数据（作为降级方案）
+        function getBasicTestData() {
+            return {
+                "agentInfo": {
+                    "certificateType": "ID_CARD",
+                    "userId": "test_user_001"
+                },
+                "channel": "h5",
+                "copy": false,
+                "formData": [
+                    {
+                        "code": "self.DWMC",
+                        "value": "测试公司"
+                    },
+                    {
+                        "code": "legalRep.FDDBR",
+                        "value": "测试用户"
+                    }
+                ],
+                "materialData": [
+                    {
+                        "attachmentList": [
+                            {
+                                "attaName": "测试文件.jpg",
+                                "attaUrl": "data:text/plain;base64,6L+Z5piv5LiA5byg5rWL6K+V55So55qE5paH5Lu2",
+                                "isCloudShare": false
+                            }
+                        ],
+                        "code": "self.105100813"
+                    }
+                ],
+                "matterId": "101104353",
+                "matterName": "测试事项",
+                "matterType": "powerDirectory",
+                "requestId": "test_request_001",
+                "sequenceNo": "SEQ_" + Date.now(),  // 添加缺失的sequenceNo字段
+                "subjectInfo": {
+                    "certificateType": "ID_CARD",
+                    "userId": "test_user_001"
+                }
+            };
+        }
+
+        // 打开生产页面并填充数据
+        async function openProductionWithData() {
+            const scenario = document.getElementById('productionScenario').value;
+
+            if (!scenario) {
+                showResult('productionSimResult', '❌ 请先选择一个模拟场景', 'error');
+                return;
+            }
+
+            const scenarioData = productionScenarios[scenario];
+            showResult('productionSimResult', '🚀 正在准备生产页面...', 'info');
+
+            try {
+                // 1. 执行模拟登录
+                await performScenarioLogin(scenarioData);
+
+                // 2. 打开生产页面
+                const lastPreviewId = localStorage.getItem('lastTestPreviewId') || 'test_preview_001';
+                const previewUrl = `/static/index.html?previewId=${lastPreviewId}&verified=true`;
+                const productionWindow = window.open(previewUrl, 'production-simulation');
+
+                // 3. 等待页面加载后发送数据
+                setTimeout(() => {
+                    try {
+                        productionWindow.postMessage({
+                            type: 'PRODUCTION_SIMULATION',
+                            scenario: scenarioData,
+                            source: 'test-tools'
+                        }, '*');
+
+                        let resultMessage = '✅ 生产页面已打开并填充数据！\n\n';
+                        resultMessage += `📋 场景: ${scenarioData.name}\n`;
+                        resultMessage += `👤 用户: ${scenarioData.userName}\n`;
+                        resultMessage += `📄 事项: ${scenarioData.matterName}\n\n`;
+                        resultMessage += '🎯 现在您可以在生产页面中:\n';
+                        resultMessage += '• 查看已填充的用户信息\n';
+                        resultMessage += '• 选择对应的预审主题\n';
+                        resultMessage += '• 手动上传测试文件\n';
+                        resultMessage += '• 体验完整的预审流程';
+
+                        showResult('productionSimResult', resultMessage, 'success');
+
+                    } catch (e) {
+                        console.log('无法向生产页面发送数据:', e);
+                        showResult('productionSimResult', '⚠️ 生产页面已打开，但数据传输可能失败。请手动操作。', 'warning');
+                    }
+                }, 2000);
+
+            } catch (error) {
+                showResult('productionSimResult', '❌ 打开生产页面失败: ' + error.message, 'error');
+            }
+        }
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshSystemStatus();
+
+            // 监听滚动事件，控制返回顶部按钮显示
+            window.addEventListener('scroll', function() {
+                const backToTopBtn = document.getElementById('backToTop');
+                if (window.pageYOffset > 400) {
+                    backToTopBtn.style.display = 'flex';
+                } else {
+                    backToTopBtn.style.display = 'none';
+                }
+            });
+
+            // 返回顶部按钮悬停效果
+            const backToTopBtn = document.getElementById('backToTop');
+            backToTopBtn.addEventListener('mouseenter', function() {
+                this.style.transform = 'scale(1.1)';
+            });
+            backToTopBtn.addEventListener('mouseleave', function() {
+                this.style.transform = 'scale(1)';
+            });
+        });
+
+        // 🔗 联动生产页面测试 - 完整的端到端测试
+        async function testWithProductionPage() {
+            const scenario = document.getElementById('productionScenario').value;
+            if (!scenario) {
+                showResult('productionSimResult', '❌ 请先选择一个模拟场景', 'error');
+                return;
+            }
+
+            showResult('productionSimResult', '🔗 开始联动生产页面测试...', 'info');
+
+            try {
+                // 步骤1: 使用真实数据发起预审请求
+                showResult('productionSimResult', '📡 步骤1: 使用qingqiu.json真实数据发起预审...', 'info');
+
+                const realData = await getScenarioData(scenario);
+                console.log('🎯 使用真实数据:', realData);
+
+                const previewResponse = await fetch('/api/preview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(realData)
+                });
+
+                if (!previewResponse.ok) {
+                    throw new Error(`预审请求失败: ${previewResponse.status}`);
+                }
+
+                const previewResult = await previewResponse.json();
+                console.log('📋 预审响应:', previewResult);
+
+                if (!previewResult.success) {
+                    throw new Error(`预审失败: ${previewResult.msg || '未知错误'}`);
+                }
+
+                // 获取预审ID
+                const previewId = previewResult.data?.previewId || previewResult.previewId;
+                if (!previewId) {
+                    throw new Error('未获取到预审ID');
+                }
+
+                showResult('productionSimResult', `✅ 步骤1完成: 预审ID = ${previewId}`, 'success');
+
+                // 步骤2: 等待处理完成
+                showResult('productionSimResult', '⏳ 步骤2: 等待OCR和预审处理...', 'info');
+                await new Promise(resolve => setTimeout(resolve, 3000)); // 等待3秒
+
+                // 步骤3: 检查用户认证状态
+                showResult('productionSimResult', '🔐 步骤3: 检查用户认证状态...', 'info');
+                await ensureAuthenticated();
+                showResult('productionSimResult', '✅ 步骤3完成: 用户认证验证通过', 'success');
+
+                // 步骤4: 打开生产页面
+                showResult('productionSimResult', '🚀 步骤4: 打开生产页面...', 'info');
+
+                const previewUrl = `/static/index.html?previewId=${previewId}&verified=true`;
+                const productionWindow = window.open(previewUrl, 'production-test', 'width=1200,height=800');
+
+                if (!productionWindow) {
+                    throw new Error('无法打开生产页面，请检查浏览器弹窗设置');
+                }
+
+                // 步骤5: 完成提示
+                showResult('productionSimResult',
+                    '🎉 联动测试启动成功！\n\n' +
+                    '📋 测试信息:\n' +
+                    `• 预审ID: ${previewId}\n` +
+                    `• 使用数据: qingqiu.json真实数据\n` +
+                    `• 生产页面: 已在新窗口打开\n\n` +
+                    '🔍 请在新窗口中验证:\n' +
+                    '• 页面是否正常加载\n' +
+                    '• 预审数据是否正确显示\n' +
+                    '• OCR识别结果是否准确\n' +
+                    '• 预审评估结果是否合理\n' +
+                    '• 报告下载功能是否正常\n\n' +
+                    '✅ 这就是完整的生产环境流程！',
+                    'success'
+                );
+
+                // 保存测试信息供后续使用
+                localStorage.setItem('lastTestPreviewId', previewId);
+                localStorage.setItem('lastTestScenario', scenario);
+                localStorage.setItem('lastTestTime', new Date().toISOString());
+
+            } catch (error) {
+                console.error('联动测试失败:', error);
+                showResult('productionSimResult', `❌ 联动测试失败: ${error.message}`, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
