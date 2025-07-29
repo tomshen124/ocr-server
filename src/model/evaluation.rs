@@ -167,3 +167,41 @@ impl PreviewEvaluationResult {
         };
     }
 }
+
+impl MaterialEvaluationResult {
+    /// 创建简单的材料评估结果
+    pub fn new_simple(
+        material_code: String,
+        material_name: String,
+        ocr_content: String,
+        status_code: u64,
+        message: String,
+        suggestions: Vec<String>,
+    ) -> Self {
+        Self {
+            material_code,
+            material_name,
+            attachments: vec![], // 可以后续添加
+            ocr_content,
+            rule_evaluation: RuleEvaluationResult {
+                status_code,
+                message: message.clone(),
+                description: message.clone(),
+                suggestions,
+                rule_details: None,
+            },
+            processing_status: if status_code == 200 { 
+                ProcessingStatus::Success 
+            } else { 
+                ProcessingStatus::Failed { error: message } 
+            },
+        }
+    }
+}
+
+impl PreviewEvaluationResult {
+    /// 设置整体结果
+    pub fn set_overall_result(&mut self, message: &str, _status: &str) {
+        self.evaluation_summary.overall_suggestions.push(message.to_string());
+    }
+}

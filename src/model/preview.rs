@@ -99,6 +99,14 @@ pub struct Preview {
 }
 
 impl Preview {
+    /// 执行预审评估
+    pub async fn evaluate(self) -> anyhow::Result<crate::model::evaluation::PreviewEvaluationResult> {
+        use crate::util::zen::evaluation::PreviewEvaluator;
+        
+        let evaluator = PreviewEvaluator::new(self);
+        evaluator.evaluate().await
+    }
+
     pub async fn generate_html(&self) -> anyhow::Result<String> {
         // 这是一个简单的HTML生成示例
         // 实际实现应该根据业务需求生成相应的HTML内容
@@ -201,7 +209,7 @@ impl PreviewBody {
         let html = match self.preview.clone().evaluate().await {
             Ok(evaluation_result) => {
                 // 使用专门的报告生成器生成HTML
-                crate::util::report_generator::PreviewReportGenerator::generate_html(&evaluation_result)
+                crate::util::report::PreviewReportGenerator::generate_html(&evaluation_result)
             }
             Err(e) => {
                 tracing::error!("预审评估失败: {}", e);
@@ -209,7 +217,7 @@ impl PreviewBody {
                 let materials: Vec<String> = self.preview.material_data.iter()
                     .map(|m| format!("{} ({})", m.code, m.attachment_list.len()))
                     .collect();
-                crate::util::report_generator::PreviewReportGenerator::generate_simple_html(
+                crate::util::report::PreviewReportGenerator::generate_simple_html(
                     &self.preview.matter_name,
                     &self.preview.request_id,
                     &materials
@@ -259,11 +267,21 @@ impl PreviewBody {
 
         let request_id = &self.preview.request_id;
         
-        // 生成HTML内容
-        let html = match self.preview.clone().evaluate().await {
+        // 执行预审评估并生成HTML内容
+        let (html, evaluation_result_json) = match self.preview.clone().evaluate().await {
             Ok(evaluation_result) => {
+                // 将evaluation_result序列化为JSON字符串用于数据库存储
+                let evaluation_json = match serde_json::to_string(&evaluation_result) {
+                    Ok(json) => Some(json),
+                    Err(e) => {
+                        tracing::error!("序列化evaluation_result失败: {}", e);
+                        None
+                    }
+                };
+                
                 // 使用专门的报告生成器生成HTML
-                crate::util::report_generator::PreviewReportGenerator::generate_html(&evaluation_result)
+                let html = crate::util::report::PreviewReportGenerator::generate_html(&evaluation_result);
+                (html, evaluation_json)
             }
             Err(e) => {
                 tracing::error!("预审评估失败: {}", e);
@@ -271,11 +289,12 @@ impl PreviewBody {
                 let materials: Vec<String> = self.preview.material_data.iter()
                     .map(|m| format!("{} ({})", m.code, m.attachment_list.len()))
                     .collect();
-                crate::util::report_generator::PreviewReportGenerator::generate_simple_html(
+                let html = crate::util::report::PreviewReportGenerator::generate_simple_html(
                     &self.preview.matter_name,
                     &self.preview.request_id,
                     &materials
-                )
+                );
+                (html, None)
             }
         };
 
@@ -300,6 +319,20 @@ impl PreviewBody {
                 temp_pdf_path.to_str().unwrap_or_default(),
             ])
             .status()?;
+
+        // TODO: 需要将evaluation_result_json保存到数据库
+        // 这需要通过参数传递database实例或其他方式来实现
+        // 目前先记录日志，表示需要保存这个数据
+        if let Some(ref eval_json) = evaluation_result_json {
+            tracing::info!("需要保存evaluation_result到数据库: request_id={}, 数据长度={}", request_id, eval_json.len());
+            tracing::debug!("evaluation_result内容预览: {}", 
+                if eval_json.len() > 200 { 
+                    format!("{}...", &eval_json[..200]) 
+                } else { 
+                    eval_json.clone() 
+                }
+            );
+        }
 
         if status.success() {
             // 读取生成的PDF并保存到存储

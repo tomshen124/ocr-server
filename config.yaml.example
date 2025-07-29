@@ -1,71 +1,50 @@
-# OCR服务器配置文件 - 带故障转移功能
-# 本配置文件展示了完整的故障转移配置选项
+# OCR Server Configuration Template
+# Copy this file to config.yaml and modify as needed
 
-# 服务基础配置
-host: "http://localhost:31101"
+# Basic service configuration
+host: "http://127.0.0.1"
 port: 31101
-app-id: "ocr-server"
-preview-url: "http://localhost:31101/preview"
-session-timeout: 3600
-callback-url: "http://localhost:31101/callback"
+preview_url: "http://127.0.0.1:31101"
+session_timeout: 86400
+app_id: "your_app_id"
+callback_url: "http://127.0.0.1:31101/api/sso/callback"
 
-# 登录配置
+# Single Sign-On configuration
 login:
-  access-token-url: "https://sso.example.com/oauth/token"
-  get-user-info-url: "https://sso.example.com/api/user/info"
-  token-key: "access_token"
-  user-id-key: "user_id"
-  user-name-key: "user_name"
+  sso_login_url: "https://your-sso-provider.com/login"
+  access_token_url: "https://your-sso-provider.com/token"
+  get_user_info_url: "https://your-sso-provider.com/userinfo"
+  access_key: "your_access_key"
+  secret_key: "your_secret_key"
+  use_callback: false
 
-# OSS存储配置（留空则使用本地存储）
+# Object storage configuration
 zhzwdt-oss:
-  server-url: "oss-cn-beijing.aliyuncs.com"
-  bucket: "ocr-preview-bucket"
-  access-key: ""  # 填写实际的Access Key
-  access-key-secret: ""  # 填写实际的Secret Key
-  root: "ocr-preview"
-  public-url: "https://ocr-preview-bucket.oss-cn-beijing.aliyuncs.com"
+  root: "ocr-files"
+  bucket: "your-bucket"
+  server_url: "your-oss-endpoint.com"
+  AccessKey: "your_access_key"
+  AccessKey Secret: "your_secret_key"
 
-# DM数据库配置（留空则使用SQLite）
+# Database configuration
 DMSql:
-  database-host: ""  # 填写实际的数据库主机
-  database-port: "5236"
-  database-user: ""  # 填写实际的用户名
-  database-password: ""  # 填写实际的密码
-  database-name: "ocr_db"
+  DATABASE_HOST: "localhost"
+  DATABASE_PORT: "5236"
+  DATABASE_USER: "username"
+  DATABASE_PASSWORD: "password"
+  DATABASE_NAME: "OCR_DB"
 
-# 故障转移配置（新增）
-failover:
-  # 数据库故障转移
-  database:
-    enabled: true                          # 启用数据库故障转移
-    health_check_interval: 30              # 健康检查间隔（秒）
-    max_retries: 3                         # 最大重试次数
-    retry_delay: 1000                      # 重试延迟（毫秒）
-    fallback_to_local: true                # 降级到本地SQLite
-    local_data_dir: "runtime/fallback/db"  # 降级数据库目录
-  
-  # 存储故障转移
-  storage:
-    enabled: true                              # 启用存储故障转移
-    health_check_interval: 30                  # 健康检查间隔（秒）
-    max_retries: 3                             # 最大重试次数
-    retry_delay: 1000                          # 重试延迟（毫秒）
-    auto_switch_to_local: true                 # 自动切换到本地存储
-    sync_when_recovered: true                  # 恢复后同步文件
-    local_fallback_dir: "runtime/fallback/storage"  # 降级存储目录
-
-# 审批系统配置
+# Approval system configuration
 approve:
-  submit-url: "https://approve.example.com/api/submit"
-  access-key: "approve_access_key"
-  secret-key: "approve_secret_key"
+  submit-url: "https://your-approval-system.com/submit"
+  access-key: "your_access_key"
+  secret-key: "your_secret_key"
 
-# 调试配置
+# Debug configuration (disable in production)
 debug:
-  enabled: false                    # 生产环境设为false
-  enable_mock_login: false          # 生产环境必须设为false
-  mock_login_warning: true
+  enabled: false
+  enable_mock_login: false
+  mock_login_warning: false
   tools_enabled:
     api_test: false
     mock_login: false
@@ -74,52 +53,68 @@ debug:
     system_monitor: false
     data_manager: false
 
-# 日志配置
+# Test mode configuration (disable in production)
+test_mode:
+  enabled: false
+  auto_login: false
+  mock_ocr: false
+  mock_delay: 100
+  test_user:
+    id: "test_user_001"
+    username: "Test User"
+    email: "test@example.com"
+    role: "tester"
+
+# Logging configuration
 logging:
   level: "info"
   file:
     enabled: true
     directory: "runtime/logs"
-    retention_days: 7               # 日志保留天数
+    retention_days: 7
 
-# 监控配置
+# Monitoring configuration
 monitoring:
-  enabled: false                    # 需要编译时启用monitoring特性
+  enabled: true
 
-# 第三方访问控制
+# Theme rules configuration
+themes:
+  enabled: true
+  config_file: "themes.json"
+  rules_directory: "rules"
+  default_theme: "theme_001"
+
+# Third-party access control
 third_party_access:
-  enabled: true                     # 生产环境建议启用
-  clients:
-    - client_id: "client_001"
-      secret_key: "change_this_in_production"
-      name: "第三方系统1"
-      enabled: true
-      permissions: ["preview", "query"]
+  enabled: true
   signature:
-    required: true                  # 要求请求签名
-    timestamp_tolerance: 300        # 时间戳容差（秒）
+    required: true
+    timestamp_tolerance: 300
   rate_limiting:
-    enabled: true                   # 启用速率限制
+    enabled: true
     requests_per_minute: 100
     requests_per_hour: 1000
+  clients:
+    - client_id: "demo_client"
+      secret_key: "change_this_in_production"
+      name: "Demo Client"
+      enabled: true
+      permissions: ["preview", "query"]
 
-# 主题配置
-themes:
-  # 主题缓存配置
-  cache:
+# Failover configuration
+failover:
+  database:
     enabled: true
-    ttl: 3600                       # 缓存时间（秒）
-
-# 测试模式配置
-test_mode:
-  enabled: false                    # 测试模式开关
-  auto_login: true                  # 启用自动登录
-  mock_ocr: true                    # 启用模拟OCR结果
-  mock_delay: 500                   # 模拟处理延迟（毫秒）
-  
-  # 测试用户配置
-  test_user:
-    id: "test_user_001"
-    username: "测试用户"
-    email: "test@example.com"
-    role: "tester"
+    health_check_interval: 30
+    max_retries: 3
+    retry_delay: 1000
+    fallback_to_local: true
+    local_data_dir: "runtime/fallback/db"
+  storage:
+    enabled: true
+    health_check_interval: 30
+    max_retries: 3
+    retry_delay: 1000
+    auto_switch_to_local: true
+    sync_when_recovered: true
+    local_fallback_dir: "runtime/fallback/storage"

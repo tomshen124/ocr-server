@@ -1,27 +1,19 @@
-# Rust编译产物
+# Build artifacts
 /target/
-target/
 /build/
-build/
-Cargo.lock
-
-# 运行时文件
-/runtime/logs/
-/runtime/cache/
-/runtime/temp/
-/runtime/preview/
-/runtime/preview_mappings/
-runtime/
-
-# 发布包和编译产物（不需要版本控制）
 /releases/
-releases/
 *.tar.gz
 *.zip
 
-# OCR二进制文件和模型（太大，不适合Git）
+# Runtime files
+/runtime/
+/data/
+*.db
+*.sqlite
+*.sqlite3
+
+# OCR binaries and models (too large for Git)
 /ocr/
-ocr/
 **/PaddleOCR-json
 **/*.so
 **/*.so.*
@@ -29,71 +21,61 @@ ocr/
 **/*.pdmodel
 **/*.pdiparams.info
 
-# 配置文件（保留模板，排除实际配置）
+# Configuration files (keep templates only)
 config.yaml
 !config.yaml.example
-!config.yaml.prod
-!config/config.yaml
-
-# 个人配置文件
-config.yaml.local
-config.yaml.dev
 .env
-.env.local
+.env.*
 
-# IDE和编辑器文件
-.vscode/settings.json
-.vscode/launch.json
+# IDE and editor files
+.vscode/
 .idea/
+.claude/
+.kiro/
 *.swp
 *.swo
 *~
-
-# 系统文件
 .DS_Store
 Thumbs.db
 
-# 测试产生的文件
-/test/output/
-/test/results/
+# Test files and scripts
+/test/
 test_*.json
 test_*.html
+*test*.sh
+TEST_*.md
+production-*.json
+qingqiu.json
 
-# 预览文件
-preview/
-preview_mappings/
-
-# Cookie和会话文件
+# Temporary files
+/tmp/
+/downloads/
 cookies.txt
 sessions/
-
-# 临时下载
-downloads/
-tmp/
-
-# 错误转储
-core
-core.*
-
-# OCR临时文件
+preview/
+preview_mappings/
 ocr_temp/
 ocr_cache/
-
-# 备份文件
 backup/
 *.backup
 
-# 证书和密钥文件
+# Logs
+logs/
+*.log
+*.log.*
+
+# Documentation and analysis files
+plans/
+*_PLAN.md
+*_ANALYSIS.md
+*_DESIGN.md
+*_CHANGELOG.md
+
+# Static backup (old frontend)
+static_backup/
+
+# Certificates and keys
 *.pem
 *.key
 *.crt
 *.p12
-
-# 本地数据库文件
-*.db
-*.sqlite
-*.sqlite3
-
-# 日志文件
-logs/
-*.log.* 

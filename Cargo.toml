@@ -60,15 +60,17 @@ sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "chrono"] }
 async-trait = "0.1"
 
 # 监控模块依赖（可选）
-procfs = { version = "0.15", optional = true }
+# Optional dependencies for monitoring (only when enabled)
+procfs = { version = "0.16", optional = true }
 psutil = { version = "3.2", optional = true }
-actix-web = { version = "4.4", optional = true }
-actix-files = { version = "0.6", optional = true }
-bcrypt = { version = "0.13", optional = true }
+actix-web = { version = "4", optional = true }
+
+# bcrypt for monitor auth
+bcrypt = { version = "0.15", optional = true }
 
 [features]
 default = []
-monitoring = ["procfs", "psutil", "actix-web", "actix-files", "bcrypt"]
+monitoring = ["procfs", "psutil", "actix-web", "bcrypt"]
 testing = []  # 测试功能特性
 
 [profile.release]

@@ -84,7 +84,7 @@ impl Storage for LocalStorage {
     
     async fn list(&self, prefix: &str) -> Result<Vec<String>> {
         let search_path = self.get_full_path(prefix);
-        let base_path_str = self.base_path.to_string_lossy();
+        let _base_path_str = self.base_path.to_string_lossy();
         
         let mut files = Vec::new();
         

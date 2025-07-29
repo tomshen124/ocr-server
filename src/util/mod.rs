@@ -10,8 +10,8 @@ pub mod log;
 pub mod zen;
 pub mod system_info;
 pub mod middleware;
-pub mod third_party_auth;
-pub mod report_generator;
+pub mod auth;
+pub mod report;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WebResult {

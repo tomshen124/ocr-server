@@ -7,5 +7,4 @@ pub mod factory;
 pub mod failover;
 
 pub use traits::Storage;
-pub use factory::{create_storage, StorageConfig};
 pub use failover::FailoverStorage;

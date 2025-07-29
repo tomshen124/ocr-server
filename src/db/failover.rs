@@ -167,6 +167,10 @@ impl FailoverDatabase {
 
 #[async_trait]
 impl Database for FailoverDatabase {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    
     async fn save_preview_record(&self, record: &PreviewRecord) -> Result<()> {
         self.execute_with_failover(|db| {
             let record = record.clone();
@@ -186,6 +190,14 @@ impl Database for FailoverDatabase {
             let id = id.to_string();
             let status = status.clone();
             Box::pin(async move { db.update_preview_status(&id, status).await })
+        }).await
+    }
+    
+    async fn update_preview_evaluation_result(&self, id: &str, evaluation_result: &str) -> Result<()> {
+        self.execute_with_failover(|db| {
+            let id = id.to_string();
+            let evaluation_result = evaluation_result.to_string();
+            Box::pin(async move { db.update_preview_evaluation_result(&id, &evaluation_result).await })
         }).await
     }
     

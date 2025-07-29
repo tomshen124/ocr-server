@@ -20,7 +20,9 @@ class ApiService {
         };
 
         try {
-            const response = await fetch(`${this.baseUrl}${url}`, config);
+            // 如果URL已经包含baseUrl，不要重复添加
+            const requestUrl = url.startsWith(this.baseUrl) ? url : `${this.baseUrl}${url}`;
+            const response = await fetch(requestUrl, config);
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);

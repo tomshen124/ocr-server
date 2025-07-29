@@ -1,8 +1,14 @@
+use crate::api::routes;
 use crate::util::config::Config;
+use crate::util::log::{log_init_with_config, cleanup_old_logs};
+use crate::util::system_info::init_start_time;
 use opendal::services::Oss;
 use opendal::Operator;
 use reqwest::Client;
+use std::net::Ipv4Addr;
 use std::sync::{Arc, LazyLock};
+use tokio::net::TcpListener;
+use tokio::signal::ctrl_c;
 use tokio::sync::Semaphore;
 use tracing::info;
 
@@ -12,7 +18,7 @@ mod util;
 mod monitor;
 mod db;
 mod storage;
-mod server;
+mod server; // 新增server模块
 
 /// 应用状态结构
 #[derive(Clone)]
@@ -65,8 +71,56 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
 
 /// 智能查找配置文件路径，适应开发和生产环境
 fn find_config_file_path(filename: &str) -> std::path::PathBuf {
-    // 这个函数将被移到server模块中，这里保留是为了兼容性
-    server::config::ConfigManager::find_config_file_path(filename)
+    let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    
+    // 获取可执行文件路径，用于判断我们在生产环境的哪个目录
+    let exe_path = std::env::current_exe().ok();
+    
+    // 情况1：如果当前目录就有config子目录，直接使用（开发环境或生产根目录）
+    let config_in_current = current_dir.join("config").join(filename);
+    if config_in_current.exists() {
+        return config_in_current;
+    }
+    
+    // 情况2：如果我们在bin/目录，尝试上级目录的config/（生产环境）
+    if let Some(parent) = current_dir.parent() {
+        let config_in_parent = parent.join("config").join(filename);
+        if config_in_parent.exists() {
+            return config_in_parent;
+        }
+    }
+    
+    // 情况3：检查可执行文件同级目录是否有config/
+    if let Some(exe_path) = exe_path {
+        if let Some(exe_dir) = exe_path.parent() {
+            // 如果在bin/目录，检查上级目录
+            if exe_dir.file_name() == Some(std::ffi::OsStr::new("bin")) {
+                if let Some(project_root) = exe_dir.parent() {
+                    let config_in_root = project_root.join("config").join(filename);
+                    if config_in_root.exists() {
+                        return config_in_root;
+                    }
+                }
+            }
+        }
+    }
+    
+    // 情况4：开发环境路径 (直接在当前目录)
+    let dev_path = current_dir.join(filename);
+    if dev_path.exists() {
+        return dev_path;
+    }
+    
+    // 如果都不存在，生产环境优先返回上级目录的config/，开发环境返回当前目录
+    if current_dir.file_name() == Some(std::ffi::OsStr::new("bin")) {
+        if let Some(parent) = current_dir.parent() {
+            parent.join("config").join(filename)
+        } else {
+            current_dir.join(filename)
+        }
+    } else {
+        current_dir.join(filename)
+    }
 }
 
 pub static OSS: LazyLock<Operator> = LazyLock::new(|| {

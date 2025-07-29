@@ -94,15 +94,21 @@ pub struct StatsFilter {
 /// 数据库操作trait
 #[async_trait]
 pub trait Database: Send + Sync {
+    /// 类型转换方法 - 用于访问具体实现的方法
+    fn as_any(&self) -> &dyn std::any::Any;
+    
     /// 保存预审记录
     async fn save_preview_record(&self, record: &PreviewRecord) -> Result<()>;
     
     /// 获取预审记录
     async fn get_preview_record(&self, id: &str) -> Result<Option<PreviewRecord>>;
     
-    /// 更新预审记录状态
+    /// 更新预审状态
     async fn update_preview_status(&self, id: &str, status: PreviewStatus) -> Result<()>;
     
+    /// 更新预审的evaluation_result字段
+    async fn update_preview_evaluation_result(&self, id: &str, evaluation_result: &str) -> Result<()>;
+
     /// 查询预审记录列表
     async fn list_preview_records(&self, filter: &PreviewFilter) -> Result<Vec<PreviewRecord>>;
     
