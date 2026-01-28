@@ -16,14 +16,8 @@
 *.sqlite
 *.sqlite3
 
-# OCR binaries and models (too large for Git)
-/ocr/
-**/PaddleOCR-json
-**/*.so
-**/*.so.*
-**/*.pdiparams
-**/*.pdmodel
-**/*.pdiparams.info
+# OCR binaries and models (managed by Git LFS)
+# /ocr/ is tracked via LFS - do not ignore
 
 # =============================================================
 # Configuration - Only keep templates
