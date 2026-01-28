@@ -17,26 +17,37 @@ cargo build --release                # Release build
 cargo build --release --features "dm_go,monitoring"  # Full features
 
 # Run
-cargo run                            # Dev mode
+cargo run                            # Dev mode (standalone)
 ./scripts/ocr-server.sh start       # Start service (port 8964)
-./scripts/ocr-server.sh status      # Check status
-./scripts/ocr-server.sh restart     # Restart
 ./target/release/ocr-server worker  # Start as worker node
 
 # Test & Quality
-cargo clippy                        # Lint check
-cargo fmt                           # Format code
-./scripts/quality-check.sh          # Full quality check
+cargo test --all --no-fail-fast     # Run all tests
+cargo clippy                        # Lint check (see clippy.toml for rules)
+cargo fmt --all                     # Format code
+./scripts/quality-check.sh          # Full quality check (fmt + clippy + tests)
+./scripts/quality-check.sh --fix    # Auto-format then check
 
-# Build Scripts
-./scripts/build.sh --prod           # MUSL static build (universal)
-./scripts/build.sh --prod-native    # glibc native build (performance)
-./scripts/build.sh --prod -f monitoring,dm_go  # With features
+# Build for Production
+./scripts/build.sh --prod           # MUSL static build (portable)
+./scripts/build.sh --prod-native    # glibc native build (faster)
+./scripts/build.sh --prod -f monitoring,dm_go  # With all features
 
 # Health Check
 curl http://localhost:8964/api/health
 curl http://localhost:8964/api/health/details
 ```
+
+## Feature Flags
+
+| Feature | Description |
+|---------|-------------|
+| `monitoring` | Enables system metrics, bcrypt auth, process monitoring |
+| `dm_go` | Enables DM database via HTTP Go gateway |
+| `production_crypto` | Enables production AES-GCM encryption |
+| `testing` | Test utilities |
+
+Default: `reqwest` (HTTP client for downloads)
 
 ## Architecture Overview
 
@@ -60,16 +71,36 @@ curl http://localhost:8964/api/health/details
 └────────────┘ └───────────┘ └─────────────┘
 ```
 
-**Key Abstractions**:
-- `Database` trait (`src/db/traits.rs`): 70+ methods for preview records, rules, monitoring
-- `Storage` trait (`src/storage/traits.rs`): put/get/delete with presigned URLs
-- `TaskQueue` trait (`src/util/task_queue.rs`): enqueue preview tasks
+**Core Traits** (all in `src/`):
+- `db/traits.rs`: Database interface (70+ methods for records, rules, monitoring)
+- `storage/traits.rs`: Storage interface (put/get/delete with presigned URLs)
+- `util/task_queue.rs`: Task queue interface (Local or NATS-backed)
 
 **Global State** (`src/lib.rs`):
-- `CONFIG`: Lazy-loaded configuration
-- `CLIENT`: HTTP client (reqwest)
+- `CONFIG`: Lazy-loaded YAML configuration
+- `CLIENT`: Shared reqwest HTTP client
 - `OCR_SEMAPHORE`: Concurrency limiter (default 6 tasks)
 - `OSS`: OpenDAL operator for object storage
+
+## Processing Pipeline
+
+Preview request flow: `API → Queue → Download → OCR → Rules → Report`
+
+1. **API** (`src/api/preview.rs`): Receives preview request with materials list
+2. **Queue** (`src/util/task_queue.rs`): Enqueues for async processing (local channel or NATS)
+3. **Evaluator** (`src/util/zen/evaluation.rs`): Orchestrates the full pipeline
+4. **Download** (`src/util/zen/downloader.rs`): Fetches attachments from URLs
+5. **Processing** (`src/util/processing/`): Multi-stage pipeline with resource prediction
+   - `multi_stage_controller.rs`: Manages concurrent stages (download/convert/OCR/upload)
+   - `resource_predictor.rs`: Predicts memory needs per task
+6. **OCR** (`ocr-conn/`): Wrapper around PaddleOCR-json binary
+   - `ocr.rs`: Engine pool management, process spawning
+   - `preprocess.rs`: Image preprocessing utilities
+7. **Rules** (`src/util/rules/`): Business rule evaluation using zen-engine
+   - `repository.rs`: Loads rules from database
+   - `cache.rs`: 5-minute TTL rule cache
+   - `executor.rs`: Entry point for rule evaluation
+8. **Report**: HTML/PDF generation of results
 
 ## Key Files
 
@@ -79,86 +110,58 @@ curl http://localhost:8964/api/health/details
 | `src/lib.rs` | Global state, AppState struct, initialization |
 | `src/api/preview.rs` | Core preview submission & processing |
 | `src/api/worker_proxy.rs` | Worker heartbeat & result handling |
-| `src/db/traits.rs` | Database trait with all query signatures |
 | `src/db/failover.rs` | Smart failover: DM → SQLite |
 | `src/storage/failover.rs` | Smart failover: OSS → local |
-| `src/util/task_queue.rs` | Task queue abstraction (Local/NATS) |
-| `src/util/rules/` | Business rule engine (zen-engine) |
-
-## Configuration
-
-Main config: `config/config.yaml` (use template: `config/config.template.yaml`)
-
-Key environment variables:
-```bash
-# Deployment
-OCR_DEPLOYMENT_ROLE=standalone|master|worker
-OCR_DISTRIBUTED_ENABLED=true|false
-OCR_NATS_URL=nats://host:4222
-
-# Database
-DB_PASSWORD=xxx
-DM_GATEWAY_URL=http://host:8080
-DM_GATEWAY_API_KEY=xxx
-
-# Storage
-OSS_ACCESS_KEY=xxx
-OSS_ACCESS_SECRET=xxx
-OSS_BUCKET=xxx
-
-# Proxy bypass (important for internal OSS)
-NO_PROXY=localhost,127.0.0.1,<oss-domain>
-```
+| `src/util/zen/evaluation.rs` | Preview evaluator (orchestrates OCR + rules) |
+| `src/util/rules/` | Business rule engine (zen-engine based) |
+| `ocr-conn/src/ocr.rs` | PaddleOCR process pool management |
 
 ## Deployment Modes
 
 | Mode | Command | Description |
 |------|---------|-------------|
 | standalone | `./ocr-server` | Single instance, local queue |
-| master | `./ocr-server` with distributed config | Accepts requests, distributes via NATS |
-| worker | `./ocr-server worker` | Processes tasks from NATS queue |
+| master | `./ocr-server` (distributed config) | Accepts requests, distributes via NATS |
+| worker | `./ocr-server worker` | Pulls tasks from NATS, processes OCR |
 
-## Key APIs
+Environment variables for distributed mode:
+```bash
+OCR_DEPLOYMENT_ROLE=master|worker|standalone
+OCR_DISTRIBUTED_ENABLED=true
+OCR_NATS_URL=nats://host:4222
+```
 
-| Endpoint | Auth | Description |
-|----------|------|-------------|
-| `POST /api/preview` | Third-party | Submit preview request |
-| `GET /api/preview/data/:id` | SSO/Monitor | Get preview result |
-| `GET /api/rules/matters/:id` | SSO/Monitor | Get matter rules |
-| `GET /api/health/details` | None | Detailed health check |
-| `GET /api/queue/status` | Monitor | Task queue status |
-| `GET /api/failover/status` | None | Failover status |
+## Configuration
 
-**Authentication Types**:
-- SSO: Via `/api/sso/callback` flow
-- Monitor: `?monitor_session_id=xxx` or `X-Monitor-Session-Id` header
-- Third-party: Signature-based (`X-Access-Key`, `X-Timestamp`, `X-Signature`)
+Main config: `config/config.yaml` (copy from `config/config.template.yaml`)
+
+Key environment overrides:
+```bash
+DB_PASSWORD=xxx                     # Database password
+DM_GATEWAY_URL=http://host:8080     # DM Go gateway URL
+DM_GATEWAY_API_KEY=xxx              # Gateway API key
+OSS_ACCESS_KEY=xxx                  # Alibaba Cloud OSS
+OSS_ACCESS_SECRET=xxx
+NO_PROXY=localhost,127.0.0.1,<oss>  # Bypass proxy for internal OSS
+```
 
 ## Failover Behavior
 
-**Database** (smart mode):
-1. Try DM via Go gateway (port 8080)
-2. On failure → auto-failover to SQLite
-3. Data persisted in `runtime/data/ocr.db`
+**Database** (smart mode): DM gateway → SQLite fallback. Check: `GET /api/failover/status`
 
-**Storage**:
-1. Try OSS (OpenDAL)
-2. On failure → auto-failover to local (`runtime/fallback/storage/`)
+**Storage**: OSS → local (`runtime/fallback/storage/`). Auto-sync when recovered.
 
-Check status: `GET /api/failover/status`
+## Code Style
 
-## Development Notes
-
-- **Port**: 8964 (configurable)
-- **Logs**: `runtime/logs/`
-- **Preview output**: `preview/` directory
-- **Concurrency**: 6 OCR tasks max (matches engine pool)
-- **Panic logs**: `./panic.log`, `runtime/logs/panic-*.log`
+- `cargo fmt --all` required; 4-space indent
+- Clippy must pass (see `clippy.toml`): avoid `unwrap`/`expect`/`panic!`
+- Prefer `?` for error propagation, early returns
+- Keep secrets in env vars, never in code
 
 ## Binary Targets
 
 ```bash
 cargo run --bin ocr-server          # Main server
 cargo run --bin daily-report        # Generate daily report
-cargo run --bin import_matter_rules # Import rule configs
+cargo run --bin import_matter_rules # Import rule configs from JSON
 ```
