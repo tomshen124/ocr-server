@@ -1,0 +1,26 @@
+{
+  "name": "ocr-frontend-build",
+  "version": "1.0.0",
+  "description": "OCR前端构建工具",
+  "private": true,
+  "scripts": {
+    "build": "node obfuscate.js",
+    "build:dev": "node obfuscate.js --dev",
+    "build:prod": "node obfuscate.js --prod",
+    "clean": "rimraf ../static-dist",
+    "watch": "nodemon --watch ../static --ext js,css,html --exec \"npm run build:dev\""
+  },
+  "devDependencies": {
+    "terser": "^5.19.2",
+    "clean-css": "^5.3.2",
+    "html-minifier-terser": "^7.2.0",
+    "fs-extra": "^11.1.1",
+    "glob": "^10.3.3",
+    "chalk": "^4.1.2",
+    "rimraf": "^5.0.1",
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

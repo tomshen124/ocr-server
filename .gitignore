@@ -1,0 +1,186 @@
+# =============================================================
+# OCR Server - Git Ignore Configuration
+# =============================================================
+
+# Build artifacts
+/target/
+/build/
+/releases/
+*.tar.gz
+*.zip
+
+# Runtime files
+/runtime/
+/data/
+*.db
+*.sqlite
+*.sqlite3
+
+# OCR binaries and models (too large for Git)
+/ocr/
+**/PaddleOCR-json
+**/*.so
+**/*.so.*
+**/*.pdiparams
+**/*.pdmodel
+**/*.pdiparams.info
+
+# =============================================================
+# Configuration - Only keep templates
+# =============================================================
+/config.yaml
+config/config.yaml
+config/config.development.yaml
+config/config.production.yaml
+config/config.clean.yaml
+config/config.minimal.yaml
+config/test_config_simple.yaml
+config/master/
+config/worker*/
+config/examples/
+config/mappings/
+config/themes.json
+config/config.master-node.yaml
+config/config.worker-node.yaml
+*.prod.yaml
+*.dev.yaml
+.env
+.env.*
+
+# Business rules data (keep only sample)
+config/rules/*.json
+!config/rules/sample.json
+matter-*.json
+
+# =============================================================
+# IDE and Development Tools
+# =============================================================
+.vscode/
+.idea/
+.claude/
+.kiro/
+.cursor/
+.worktrees/
+.cargo/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.cursorrules
+.cursor-rules
+forge.yaml
+graph.json
+
+# Build tools (npm packages)
+build-tools/node_modules/
+build-tools/package-lock.json
+
+# =============================================================
+# Test files and scripts
+# =============================================================
+/test/
+test_*.json
+test_*.html
+TEST_*.md
+production-*.json
+qingqiu.json
+test-data-local.txt
+test-scripts-package/
+static/test-images/
+static/test-tools*.html
+yushenqingqiu.txt
+
+# =============================================================
+# Temporary and debug files
+# =============================================================
+/tmp/
+/downloads/
+cookies.txt
+sessions/
+preview/
+preview_mappings/
+ocr_temp/
+ocr_cache/
+backup/
+*.backup
+1205/
+ocr-server.2025-*
+filtered_*.json
+
+# Logs
+logs/
+*.log
+*.log.*
+panic.log
+
+# =============================================================
+# Documentation - Exclude verbose docs
+# =============================================================
+plans/
+*_PLAN.md
+*_ANALYSIS.md
+*_DESIGN.md
+*_CHANGELOG.md
+monitoring-baseline-*.md
+
+# Static backups
+static_backup/
+static0808bak/
+static-dist/
+
+# =============================================================
+# Security - Certificates and secrets
+# =============================================================
+*.pem
+*.key
+*.crt
+*.p12
+certs/
+**/*token*
+**/*secret*
+**/*password*
+
+# =============================================================
+# Database scripts (internal)
+# =============================================================
+rules-sql/
+
+# Chinese filename docs
+*.docx
+
+# Mermaid diagrams and images
+*.svg
+*.png
+!static/**/*.png
+!static/**/*.svg
+
+# =============================================================
+# Internal scripts (not for distribution)
+# =============================================================
+scripts/batch-gateway-call.sh
+scripts/gateway_call.py
+scripts/stress-test-preview.sh
+scripts/extract-urls.sh
+scripts/url_pool.txt
+scripts/GATEWAY_STRESS_TEST.md
+scripts/QUICK_START.md
+
+# =============================================================
+# Internal docs
+# =============================================================
+DOCS_INDEX.md
+docs/GATEWAY_*.md
+docs/third_party_preview_api.md
+
+# =============================================================
+# Docker files (optional)
+# =============================================================
+docker/
+docker-compose.yml
+.dockerignore
+
+# =============================================================
+# Version and build info
+# =============================================================
+VERSION

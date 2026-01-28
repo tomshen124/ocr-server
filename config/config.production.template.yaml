@@ -1,0 +1,155 @@
+# OCR智能预审系统 - 生产环境配置模板
+#
+# 使用说明:
+#   1. 复制此文件: cp config.production.template.yaml config.production.yaml
+#   2. 修改所有标记为 "CHANGE_ME" 的配置项
+#   3. 设置文件权限: chmod 600 config.production.yaml
+#   4. 不要将 config.production.yaml 提交到Git
+#
+# ⚠️ 安全提示:
+#   - config.production.yaml 包含敏感信息，已在 .gitignore 中排除
+#   - 生产环境必须修改所有默认密码和密钥
+#   - 定期轮换密钥和证书
+#
+
+server:
+  host: "0.0.0.0"
+  port: 8964
+  protocol: "http"
+
+distributed:
+  enabled: true
+
+deployment:
+  role: "master"  # master | worker | standalone
+  node_id: "master-prod-01"  # CHANGE_ME: 节点唯一标识
+
+# ========== NATS消息队列配置 ==========
+task_queue:
+  driver: "nats"
+  nats:
+    enabled: true
+    server_url: "nats://127.0.0.1:4222"  # 单服务器用127.0.0.1，多服务器改为Master IP
+    stream: "OCR_PREVIEW"
+    subject: "ocr.preview"
+    durable_consumer: "ocr-preview-workers"
+    max_deliver: 5
+    ack_wait_ms: 60000
+    max_batch: 8
+    pull_wait_ms: 1000
+    inline_worker: false
+    tls:
+      enabled: false  # 开发环境false，生产环境建议true
+      require_tls: false
+      ca_file: "/app/certs/nats/ca-cert.pem"
+      client_cert: "/app/certs/nats/client-cert.pem"
+      client_key: "/app/certs/nats/client-key.pem"
+
+# ========== Worker认证配置 ==========
+worker_proxy:
+  max_clock_skew_seconds: 60
+  workers:
+    - worker_id: "worker-01"
+      secret: "CHANGE_ME_worker01_secret_min_32_chars"  # CHANGE_ME: Worker密钥（至少32位）
+      enabled: true
+      description: "生产环境Worker节点1"
+    - worker_id: "worker-02"
+      secret: "CHANGE_ME_worker02_secret_min_32_chars"  # CHANGE_ME: Worker密钥（至少32位）
+      enabled: false
+      description: "备用Worker节点"
+
+# ========== 数据库配置 ==========
+database:
+  type: "smart"  # smart | dm | sqlite
+
+  # 达梦数据库配置
+  dm:
+    host: "20.7.193.28"  # CHANGE_ME: 数据库主机
+    port: 5237
+    database: "OCR_INTELLIGENT_AUDIT"  # CHANGE_ME: 数据库名
+    username: "OCR_INTELLIGENT_AUDIT"  # CHANGE_ME: 数据库用户
+    password: "CHANGE_ME_your_secure_db_password"  # CHANGE_ME: 数据库密码
+    max_connections: 10
+    connection_timeout: 30
+
+  # SQLite备用数据库（故障转移）
+  sqlite:
+    path: "runtime/data/ocr.db"
+
+# ========== OSS存储配置 ==========
+zhzwdt-oss:
+  root: "ocr-files"
+  bucket: "zhzwdtxt"  # CHANGE_ME: OSS bucket名称
+  server_url: "oss-cn-hangzhou-hzxcgg-d01-a.res.hzggcloud.xc.com"  # CHANGE_ME: OSS endpoint
+  AccessKey: "CHANGE_ME_your_oss_access_key"  # CHANGE_ME: OSS访问密钥
+  AccessKey Secret: "CHANGE_ME_your_oss_secret_key"  # CHANGE_ME: OSS密钥
+
+# ========== SSO单点登录配置 ==========
+login:
+  sso_login_url: "https://portal.zjzwfw.gov.cn/uc/sso/login"
+  access_token_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000007/uc/sso/access_token"
+  get_user_info_url: "https://ibcdsg.zj.gov.cn:8443/restapi/prod/IC33000020220329000008/uc/sso/getUserInfo"
+  access_key: "BCDSGA_b0d54f6f644c41717039b9b6da351dc7"
+  secret_key: "BCDSGS_73f075e10214bfd18d12e2f4f9712664"
+
+# ========== 并发控制配置 ==========
+concurrency:
+  ocr_processing:
+    max_concurrent_tasks: 12  # 根据服务器资源调整
+    queue_enabled: true
+    queue_timeout: 300
+    retry_on_failure: true
+    max_retries: 3
+
+  queue_monitoring:
+    enabled: true
+    status_check_interval: 30
+    alert_on_overflow: true
+    max_queue_length: 100
+
+  resource_limits:
+    max_memory_per_task: 4096  # MB
+    task_timeout: 600  # 秒
+    cleanup_interval: 300
+
+  multi_stage:
+    enabled: true
+    download_concurrency: 20
+    pdf_conversion_concurrency: 3
+    ocr_processing_concurrency: 8
+    storage_concurrency: 15
+    resource_predictor:
+      enabled: true
+      pdf_memory_base_mb: 500.0
+      pdf_memory_per_page_mb: 100.0
+      ocr_memory_base_mb: 200.0
+      ocr_memory_per_page_mb: 80.0
+      high_risk_memory_threshold_mb: 4000.0
+      critical_risk_memory_threshold_mb: 6000.0
+
+# ========== 日志配置 ==========
+logging:
+  level: "info"  # debug | info | warn | error
+  file:
+    enabled: true
+    directory: "runtime/logs"
+    max_size_mb: 100
+    max_age_days: 30
+
+# ========== 监控配置 ==========
+monitoring:
+  enabled: true
+  metrics_interval: 60  # 秒
+
+# ========== 故障转移配置 ==========
+failover:
+  database:
+    enabled: true
+    fallback_to_local: false  # 生产环境建议false，确保主库正常
+  storage:
+    enabled: true
+    auto_switch_to_local: false  # 生产环境建议false
+
+# ========== 会话和应用配置 ==========
+session_timeout: 86400  # 24小时
+app_id: "gQBcJyGkgOE3tFU7HBvlVV8Q1hRC"

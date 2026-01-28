@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CYBEROPS - OCR智能预审监控中心</title>
+    <link rel="stylesheet" href="css/monitor-v2.css">
+    <script src="js/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- Cyberpunk Grid Background -->
+    <div class="cyber-grid"></div>
+    <div class="scanline"></div>
+
+    <!-- Main Container -->
+    <div class="cyber-container">
+        <!-- Sidebar Navigation -->
+        <aside class="cyber-sidebar">
+            <div class="sidebar-header">
+                <div class="logo-cyber">
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                    </div>
+                    <div class="logo-text">
+                        <span class="logo-title">CYBER</span>
+                        <span class="logo-subtitle">OPS</span>
+                    </div>
+                </div>
+                <div class="system-pulse">
+                    <div class="pulse-ring"></div>
+                    <div class="pulse-dot"></div>
+                </div>
+            </div>
+
+            <nav class="cyber-nav">
+                <a href="#overview" class="nav-link active" data-tab="overview">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">系统概览</span>
+                    <span class="nav-glow"></span>
+                </a>
+                <a href="#business" class="nav-link" data-tab="business">
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-label">业务统计</span>
+                    <span class="nav-glow"></span>
+                </a>
+                <a href="#resources" class="nav-link" data-tab="resources">
+                    <span class="nav-icon">🖥️</span>
+                    <span class="nav-label">资源监控</span>
+                    <span class="nav-glow"></span>
+                </a>
+                <a href="#ocr" class="nav-link" data-tab="ocr">
+                    <span class="nav-icon">🎯</span>
+                    <span class="nav-label">OCR引擎池</span>
+                    <span class="nav-glow"></span>
+                </a>
+                <a href="#failover" class="nav-link" data-tab="failover">
+                    <span class="nav-icon">🔄</span>
+                    <span class="nav-label">故障转移</span>
+                    <span class="nav-glow"></span>
+                </a>
+                <a href="#tracing" class="nav-link" data-tab="tracing">
+                    <span class="nav-icon">🔍</span>
+                    <span class="nav-label">链路追踪</span>
+                    <span class="nav-glow"></span>
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="system-status-mini">
+                    <div class="status-label">SYSTEM HEALTH</div>
+                    <div class="status-value" id="healthMini">98.7%</div>
+                    <div class="status-bar">
+                        <div class="status-fill" style="width: 98.7%"></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="cyber-main">
+            <!-- Header -->
+            <header class="cyber-header">
+                <div class="header-left">
+                    <h1 class="page-title" id="pageTitle">SYSTEM OVERVIEW</h1>
+                    <div class="breadcrumb">
+                        <span class="breadcrumb-item">HOME</span>
+                        <span class="breadcrumb-sep">/</span>
+                        <span class="breadcrumb-item active">OVERVIEW</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="auto-refresh">
+                        <label class="cyber-switch">
+                            <input type="checkbox" id="autoRefresh">
+                            <span class="switch-slider"></span>
+                        </label>
+                        <span class="refresh-label">AUTO REFRESH</span>
+                    </div>
+                    <div class="current-time" id="currentTime">00:00:00</div>
+                    <button class="cyber-btn cyber-btn-icon" id="refreshBtn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <div class="content-area">
+                <!-- Overview Tab -->
+                <div class="tab-pane active" id="overview-pane">
+                    <!-- System Health Radar -->
+                    <div class="cyber-card card-large">
+                        <div class="card-header">
+                            <h2 class="card-title">SYSTEM HEALTH RADAR</h2>
+                            <div class="card-status">
+                                <span class="status-indicator status-optimal">OPTIMAL</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="health-radar">
+                                <canvas id="radarChart"></canvas>
+                                <div class="radar-center">
+                                    <div class="radar-value" id="overallHealth">98.7</div>
+                                    <div class="radar-label">HEALTH SCORE</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Grid -->
+                    <div class="metrics-grid">
+                        <div class="cyber-card metric-card">
+                            <div class="metric-icon cpu-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="4" y="4" width="16" height="16" rx="2"/>
+                                    <rect x="9" y="9" width="6" height="6"/>
+                                    <line x1="9" y1="1" x2="9" y2="4"/>
+                                    <line x1="15" y1="1" x2="15" y2="4"/>
+                                    <line x1="9" y1="20" x2="9" y2="23"/>
+                                    <line x1="15" y1="20" x2="15" y2="23"/>
+                                    <line x1="20" y1="9" x2="23" y2="9"/>
+                                    <line x1="20" y1="14" x2="23" y2="14"/>
+                                    <line x1="1" y1="9" x2="4" y2="9"/>
+                                    <line x1="1" y1="14" x2="4" y2="14"/>
+                                </svg>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-label">CPU USAGE</div>
+                                <div class="metric-value" id="cpuValue">--</div>
+                                <div class="metric-bar">
+                                    <div class="metric-fill" id="cpuBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="cyber-card metric-card">
+                            <div class="metric-icon mem-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                                </svg>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-label">MEMORY</div>
+                                <div class="metric-value" id="memValue">--</div>
+                                <div class="metric-bar">
+                                    <div class="metric-fill" id="memBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="cyber-card metric-card">
+                            <div class="metric-icon disk-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-label">DISK I/O</div>
+                                <div class="metric-value" id="diskValue">--</div>
+                                <div class="metric-bar">
+                                    <div class="metric-fill" id="diskBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="cyber-card metric-card">
+                            <div class="metric-icon net-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="2"/>
+                                    <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6m-13.36 6.36l4.24-4.24m4.24-4.24l4.24-4.24"/>
+                                </svg>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-label">NETWORK</div>
+                                <div class="metric-value" id="netValue">--</div>
+                                <div class="metric-bar">
+                                    <div class="metric-fill" id="netBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Real-time Charts -->
+                    <div class="charts-grid">
+                        <div class="cyber-card">
+                            <div class="card-header">
+                                <h3 class="card-title">CPU & MEMORY TRENDS</h3>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="resourceChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="cyber-card">
+                            <div class="card-header">
+                                <h3 class="card-title">REQUEST THROUGHPUT</h3>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="throughputChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Business Tab -->
+                <div class="tab-pane" id="business-pane">
+                    <div class="stats-grid">
+                        <div class="cyber-card stat-card">
+                            <div class="stat-label">TOTAL REQUESTS</div>
+                            <div class="stat-value" id="totalRequests">
+                                <span class="counter" data-target="12847">0</span>
+                            </div>
+                            <div class="stat-trend trend-up">
+                                <span class="trend-icon">↗</span>
+                                <span class="trend-value">+12.5%</span>
+                            </div>
+                        </div>
+
+                        <div class="cyber-card stat-card">
+                            <div class="stat-label">SUCCESS RATE</div>
+                            <div class="stat-value" id="successRate">
+                                <span class="counter" data-target="98.7">0</span>
+                                <span class="unit">%</span>
+                            </div>
+                            <div class="stat-trend trend-up">
+                                <span class="trend-icon">↗</span>
+                                <span class="trend-value">+0.3%</span>
+                            </div>
+                        </div>
+
+                        <div class="cyber-card stat-card">
+                            <div class="stat-label">AVG RESPONSE TIME</div>
+                            <div class="stat-value" id="avgResponse">
+                                <span class="counter" data-target="234">0</span>
+                                <span class="unit">ms</span>
+                            </div>
+                            <div class="stat-trend trend-down">
+                                <span class="trend-icon">↘</span>
+                                <span class="trend-value">-15ms</span>
+                            </div>
+                        </div>
+
+                        <div class="cyber-card stat-card">
+                            <div class="stat-label">ACTIVE TASKS</div>
+                            <div class="stat-value" id="activeTasks">
+                                <span class="counter" data-target="8">0</span>
+                            </div>
+                            <div class="stat-trend">
+                                <span class="trend-icon">━</span>
+                                <span class="trend-value">STABLE</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cyber-card">
+                        <div class="card-header">
+                            <h3 class="card-title">REQUEST STATUS DISTRIBUTION</h3>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activities Table -->
+                    <div class="cyber-card">
+                        <div class="card-header">
+                            <h3 class="card-title">RECENT ACTIVITIES</h3>
+                            <button class="cyber-btn cyber-btn-sm">
+                                <span>EXPORT</span>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="cyber-table-wrapper">
+                                <table class="cyber-table" id="activityTable">
+                                    <thead>
+                                        <tr>
+                                            <th>TIMESTAMP</th>
+                                            <th>REQUEST ID</th>
+                                            <th>STATUS</th>
+                                            <th>DURATION</th>
+                                            <th>USER</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resources Tab -->
+                <div class="tab-pane" id="resources-pane">
+                    <div class="cyber-card">
+                        <div class="card-header">
+                            <h3 class="card-title">SYSTEM RESOURCES</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="resource-details" id="resourceDetails">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OCR Tab -->
+                <div class="tab-pane" id="ocr-pane">
+                    <div class="cyber-card">
+                        <div class="card-header">
+                            <h3 class="card-title">OCR ENGINE POOL</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="ocr-pool" id="ocrPool">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Failover Tab -->
+                <div class="tab-pane" id="failover-pane">
+                    <div class="cyber-card">
+                        <div class="card-header">
+                            <h3 class="card-title">FAILOVER STATUS</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="failover-grid" id="failoverGrid">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tracing Tab -->
+                <div class="tab-pane" id="tracing-pane">
+                    <div class="cyber-card">
+                        <div class="card-header">
+                            <h3 class="card-title">DISTRIBUTED TRACING</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="trace-timeline" id="traceTimeline">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="js/monitor-v2.js"></script>
+</body>
+</html>

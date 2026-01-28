@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端API集成测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 3px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 前端API集成测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 认证测试</h2>
+        <button onclick="testAuth()">测试调试票据认证</button>
+        <div id="auth-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. 预审请求测试</h2>
+        <button onclick="testPreviewRequest()">创建预审请求</button>
+        <div id="preview-request-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. 队列状态测试</h2>
+        <button onclick="testQueueStatus()">获取队列状态</button>
+        <div id="queue-status-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. 预审数据获取测试</h2>
+        <input type="text" id="preview-id" placeholder="输入预审ID" style="width: 300px;">
+        <button onclick="testPreviewData()">获取预审数据</button>
+        <div id="preview-data-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. 前端组件测试</h2>
+        <button onclick="testFrontendComponents()">测试数据转换</button>
+        <div id="component-test-result"></div>
+    </div>
+
+    <!-- 引入前端脚本 -->
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+
+    <script>
+        // 全局变量存储测试结果
+        let currentPreviewId = null;
+
+        function showResult(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `<div class="test-result ${type}">${message}</div>`;
+        }
+
+        function showJsonResult(containerId, data, type = 'success') {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `
+                <div class="test-result ${type}">
+                    <strong>响应数据:</strong>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+            `;
+        }
+
+        // 1. 测试认证
+        async function testAuth() {
+            showResult('auth-result', '正在测试认证...', 'info');
+            try {
+                const result = await window.apiService.debugTicketAuth();
+                if (result.success) {
+                    showJsonResult('auth-result', result, 'success');
+                } else {
+                    showResult('auth-result', `认证失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('auth-result', `认证异常: ${error.message}`, 'error');
+            }
+        }
+
+        // 2. 测试预审请求
+        async function testPreviewRequest() {
+            showResult('preview-request-result', '正在创建预审请求...', 'info');
+            try {
+                const requestData = {
+                    agentInfo: {
+                        userId: "debug_user_e4a0dc3fcc",
+                        certificateType: "身份证"
+                    },
+                    subjectInfo: {
+                        userId: "debug_user_e4a0dc3fcc", 
+                        certificateType: "身份证"
+                    },
+                    channel: "web",
+                    copy: false,
+                    formData: [],
+                    materialData: [
+                        {
+                            code: "MATERIAL_TEST_001",
+                            attachmentList: [
+                                {
+                                    attaName: "测试文档.pdf",
+                                    attaUrl: "data:application/pdf;base64,test_frontend_data",
+                                    isCloudShare: false
+                                }
+                            ]
+                        }
+                    ],
+                    matterId: "101104353",
+                    matterName: "工程渣土准运证核准",
+                    matterType: "许可",
+                    requestId: "frontend_test_" + Date.now(),
+                    sequenceNo: "20250818" + String(Date.now()).slice(-6)
+                };
+
+                const result = await window.apiService.startAudit(requestData);
+                if (result.success) {
+                    currentPreviewId = result.data.previewId;
+                    document.getElementById('preview-id').value = currentPreviewId;
+                    showJsonResult('preview-request-result', result, 'success');
+                } else {
+                    showResult('preview-request-result', `预审请求失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('preview-request-result', `预审请求异常: ${error.message}`, 'error');
+            }
+        }
+
+        // 3. 测试队列状态
+        async function testQueueStatus() {
+            showResult('queue-status-result', '正在获取队列状态...', 'info');
+            try {
+                const result = await window.apiService.getQueueStatus();
+                if (result.success) {
+                    showJsonResult('queue-status-result', result, 'success');
+                } else {
+                    showResult('queue-status-result', `获取队列状态失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('queue-status-result', `队列状态获取异常: ${error.message}`, 'error');
+            }
+        }
+
+        // 4. 测试预审数据获取
+        async function testPreviewData() {
+            const previewId = document.getElementById('preview-id').value.trim();
+            if (!previewId) {
+                showResult('preview-data-result', '请输入预审ID', 'error');
+                return;
+            }
+
+            showResult('preview-data-result', `正在获取预审数据: ${previewId}...`, 'info');
+            try {
+                const result = await window.apiService.getMaterialsList(previewId);
+                if (result.success) {
+                    // 测试数据转换
+                    const transformedData = window.apiService.transformPreviewData(result);
+                    showJsonResult('preview-data-result', {
+                        原始数据: result,
+                        转换后数据: transformedData
+                    }, 'success');
+                } else {
+                    showResult('preview-data-result', `获取预审数据失败: ${result.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('preview-data-result', `预审数据获取异常: ${error.message}`, 'error');
+            }
+        }
+
+        // 5. 测试前端组件功能
+        async function testFrontendComponents() {
+            showResult('component-test-result', '正在测试前端组件...', 'info');
+            
+            // 测试配置工具
+            const testResults = {
+                配置工具测试: {},
+                API端点测试: {},
+                数据映射测试: {}
+            };
+
+            try {
+                // 测试配置工具
+                if (window.CONFIG && window.CONFIG.ConfigUtils) {
+                    const utils = window.CONFIG.ConfigUtils;
+                    
+                    // 测试API URL生成
+                    const testUrl = utils.getApiUrl('previewData', { previewId: 'test123' });
+                    testResults.配置工具测试.API_URL生成 = testUrl;
+                    
+                    // 测试环境检测
+                    const env = utils.getEnvironment();
+                    testResults.配置工具测试.环境检测 = env;
+                    
+                    // 测试字段映射
+                    const testData = { applicant_name: '测试用户', matter_name: '测试事项' };
+                    const mappedValue = utils.mapField(testData, 'applicant_name');
+                    testResults.配置工具测试.字段映射 = mappedValue;
+                }
+
+                // 测试API端点配置
+                if (window.CONFIG && window.CONFIG.API_CONFIG) {
+                    testResults.API端点测试 = {
+                        baseUrl: window.CONFIG.API_CONFIG.baseUrl,
+                        endpoints: Object.keys(window.CONFIG.API_CONFIG.endpoints).length + ' 个端点',
+                        示例端点: window.CONFIG.API_CONFIG.endpoints.previewData
+                    };
+                }
+
+                // 测试数据映射配置
+                if (window.CONFIG && window.CONFIG.DATA_MAPPING) {
+                    testResults.数据映射测试 = {
+                        状态映射: window.CONFIG.DATA_MAPPING.preview.statusMapping,
+                        审核状态映射: window.CONFIG.DATA_MAPPING.preview.auditStatusMapping
+                    };
+                }
+
+                showJsonResult('component-test-result', testResults, 'success');
+            } catch (error) {
+                showResult('component-test-result', `组件测试异常: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载完成后自动测试基础功能
+        document.addEventListener('DOMContentLoaded', function() {
+            // 检查必要的全局对象是否存在
+            const checkResults = {
+                CONFIG: !!window.CONFIG,
+                ApiService: !!window.apiService,
+                ConfigUtils: !!(window.CONFIG && window.CONFIG.ConfigUtils)
+            };
+            
+            console.log('🔍 前端组件检查:', checkResults);
+            
+            if (checkResults.CONFIG && checkResults.ApiService) {
+                console.log('✅ 前端组件加载正常');
+            } else {
+                console.log('❌ 前端组件加载异常');
+            }
+        });
+    </script>
+</body>
+</html>

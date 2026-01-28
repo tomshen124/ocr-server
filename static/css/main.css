@@ -1,0 +1,373 @@
+/* 全局样式重置 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    background-color: #f5f7fa;
+    color: #333;
+    line-height: 1.6;
+    font-size: 14px;
+}
+
+/* 顶部导航 */
+.header {
+    background: linear-gradient(135deg, #4a90e2 0%, #4a90e2 100%);
+    color: white;
+    padding: 16px 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-title {
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.header-btn {
+    background: #FF8A00;
+    border: 1px solid #FF8A00;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.header-btn:hover {
+    background: #E67A00;
+    border-color: #E67A00;
+}
+
+/* 结果提示 */
+.result-notice {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+    padding: 12px 20px;
+    margin: 20px auto;
+    max-width: 1200px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notice-icon {
+    font-size: 16px;
+}
+
+/* 主容器 */
+.main-container {
+    max-width: 1200px;
+    margin: 24px auto;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    min-height: calc(100vh - 200px);
+}
+
+/* 左侧面板 */
+.left-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* 卡片通用样式 */
+.basic-info-card,
+.materials-card,
+.passed-materials-card {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: 1px solid #e8e8e8;
+}
+
+.card-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: #333;
+    border-left: 4px solid #4a90e2;
+    padding-left: 12px;
+}
+
+/* 基本信息 */
+.info-item {
+    display: flex;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+.info-label {
+    color: #666;
+    min-width: 80px;
+    font-size: 14px;
+}
+
+.info-value {
+    color: #333;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* 材料卡片 */
+.materials-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.btn {
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+}
+
+.btn-outline {
+    background: white;
+    border: 1px solid #d9d9d9;
+    color: #666;
+}
+
+.btn-outline:hover {
+    border-color: #4a90e2;
+    color: #4a90e2;
+}
+
+.btn-primary {
+    background: #4a90e2;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #3a80d2;
+}
+
+.materials-summary {
+    background: #f8f9fa;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.summary-count {
+    color: #4a90e2;
+    font-weight: 600;
+}
+
+/* 下載按鈕 */
+.download-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.download-btn {
+    background: #4a90e2;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.download-btn:hover {
+    background: #357abd;
+}
+
+.download-btn.download-btn-secondary {
+    background: transparent;
+    color: #4a90e2;
+    border: 1px solid #4a90e2;
+}
+
+.download-btn.download-btn-secondary:hover {
+    background: rgba(74, 144, 226, 0.08);
+}
+
+/* 右側面板 */
+.right-panel {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border: 1px solid #e8e8e8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 500px;
+}
+
+/* 状态显示样式 */
+.status-display {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.status-icon {
+    margin-bottom: 24px;
+}
+
+.status-text h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.status-text p {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 20px;
+    line-height: 1.5;
+}
+
+/* 重试按钮样式 */
+.retry-btn {
+    background: #1890FF;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+.retry-btn:hover {
+    background: #096DD9;
+    box-shadow: 0 4px 8px rgba(24, 144, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.retry-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .main-container {
+        grid-template-columns: 1fr;
+        padding: 12px;
+        gap: 16px;
+    }
+    
+    .header-content {
+        padding: 0 16px;
+        height: 56px;
+    }
+
+    .header-title {
+        font-size: 18px;
+    }
+
+    .header-btn {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+    
+    .result-notice {
+        margin: 12px;
+        padding: 12px;
+        font-size: 13px;
+    }
+
+    /* Reduce card padding on mobile */
+    .basic-info-card,
+    .materials-card,
+    .passed-materials-card {
+        padding: 16px;
+    }
+
+    /* Make buttons full width or larger on mobile if needed, or just stacked */
+    .action-buttons {
+        flex-direction: row; /* Keep row but ensure they fit */
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .download-actions {
+        flex-direction: column;
+    }
+
+    .download-btn {
+        width: 100%;
+        padding: 14px; /* Larger touch target */
+    }
+
+    .btn {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+
+    .header-btn {
+        padding: 10px 14px;
+        font-size: 14px;
+    }
+
+    .right-panel {
+        min-height: 320px;
+    }
+}
+
+/* 動畫效果 */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+/* 滾動條樣式 */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}

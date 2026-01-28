@@ -1,0 +1,89 @@
+{
+  "specVersion": "1.2",
+  "mode": "presentOnly",
+  "generatedAt": "2025-01-01",
+  "matterId": "SAMPLE_MATTER_ID",
+  "matterName": "Sample Business Process",
+  "description": "Sample rule configuration for OCR pre-review. Replace with actual business rules.",
+  "materials": [
+    {
+      "id": "sample.business_license",
+      "name": "Business License",
+      "allowedTypes": ["jpg", "jpeg", "png", "pdf"],
+      "validity": {
+        "type": "expiryField",
+        "field": "expiryDate"
+      },
+      "checks": {
+        "matches": [
+          {
+            "ocrField": "credit_code",
+            "caseField": "organization.code",
+            "normalize": "upper,rmspace"
+          },
+          {
+            "ocrField": "company_name",
+            "caseField": "organization.name",
+            "normalize": "trim"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sample.id_card",
+      "name": "ID Card",
+      "allowedTypes": ["jpg", "jpeg", "png", "pdf"],
+      "validity": {
+        "type": "expiryField",
+        "field": "expiryDate"
+      },
+      "checks": {
+        "matches": [
+          {
+            "ocrField": "id_number",
+            "caseField": "applicant.id_number",
+            "normalize": "upper,rmspace"
+          },
+          {
+            "ocrField": "name",
+            "caseField": "applicant.name",
+            "normalize": "trim"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sample.application_form",
+      "name": "Application Form",
+      "allowedTypes": ["jpg", "jpeg", "png", "pdf"],
+      "checks": {
+        "mustHaveSeal": true,
+        "mustHaveSignature": true
+      }
+    },
+    {
+      "id": "sample.vehicle_license",
+      "name": "Vehicle License",
+      "scope": "perVehicle",
+      "repeat": {
+        "caseList": "vehicles",
+        "caseKeyField": "plate_no",
+        "ocrKeyField": "plate_no"
+      },
+      "allowedTypes": ["jpg", "jpeg", "png", "pdf"],
+      "validity": {
+        "type": "expiryField",
+        "field": "expiryDate"
+      },
+      "checks": {
+        "matches": [
+          {
+            "ocrField": "plate_no",
+            "caseField": "item.plate_no",
+            "normalize": "upper,rmspace"
+          }
+        ]
+      }
+    }
+  ]
+}

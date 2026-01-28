@@ -1,0 +1,282 @@
+# =============================================================
+# OCR 智能预审系统 - 通用配置模板
+#
+# 使用说明：
+#   * 复制为 `config/config.yaml` 后按环境调整。
+#   * 单机部署：保持 `distributed.enabled=false`、`deployment.role="standalone"`。
+#   * Master 节点：设置 `distributed.enabled=true`、`deployment.role="master"`，
+#     并配置 `task_queue.nats`、`worker_proxy` 等字段。
+#   * Worker 节点：设置 `distributed.enabled=true`、`deployment.role="worker"`，
+#     修改 `deployment.worker` 与 `task_queue.nats.server_url`。
+#   * 所有带 “CHANGE_ME” 的字段均需替换。
+# =============================================================
+
+server:
+  host: "0.0.0.0"
+  port: 8964
+  protocol: "http"
+
+master:
+  material_cache_dir: "runtime/cache/materials"
+  material_token_ttl_secs: 3600
+  processing_watchdog:
+    enabled: true
+    interval_secs: 60
+    timeout_secs: 900
+    max_retries: 3
+
+distributed:
+  enabled: true
+
+deployment:
+  role: "standalone"            # standalone | master | worker | hybrid
+  node_id: "node-01"
+  worker:
+    id: "worker-01"
+    secret: "CHANGE_ME_STRONG_WORKER_SECRET"
+    master_url: "http://127.0.0.1:8964"
+    heartbeat_interval_secs: 30
+    capabilities:
+      max_concurrent: 6
+      max_file_size_mb: 100
+
+task_queue:
+  driver: "local"               # master/worker 场景改为 "nats"
+  local:
+    channel_capacity: 128
+  nats:
+    enabled: true
+    server_url: "nats://127.0.0.1:4222"
+    backup_servers: []
+    stream: "OCR_PREVIEW"
+    subject: "ocr.preview"
+    durable_consumer: "ocr-preview-workers"
+    max_deliver: 5
+    ack_wait_ms: 60000
+    max_batch: 8
+    pull_wait_ms: 1000
+    max_messages: 10000
+    max_bytes: 1073741824
+    max_age_seconds: 3600
+    inline_worker: false
+    tls:
+      enabled: false
+      require_tls: false
+      ca_file: ""
+      client_cert: ""
+      client_key: ""
+
+outbox:
+  enabled: true
+  poll_interval_secs: 5
+  batch_size: 50
+  max_retries: 10
+  max_error_len: 512
+
+worker_proxy:
+  max_clock_skew_seconds: 60
+  workers:
+    - worker_id: "worker-01"
+      secret: "CHANGE_ME_STRONG_WORKER_SECRET"
+      enabled: true
+      description: "示例 Worker"
+
+database:
+  type: "smart"                 # smart | dm | sqlite
+  dm:
+    host: "CHANGE_ME_DM_HOST"
+    port: 5237
+    database: "CHANGE_ME_DB_NAME"
+    username: "CHANGE_ME_DB_USER"
+    password: "CHANGE_ME_DB_PASSWORD"
+    go_gateway:
+      enabled: true
+      url: "http://127.0.0.1:8080"
+      api_key: "CHANGE_ME_GATEWAY_API_KEY"
+      timeout: 30
+      health_check_interval: 60
+  sqlite:
+    path: "runtime/data/ocr.db"
+
+DMSql:
+  enabled: true
+  strict_mode: false
+  DATABASE_HOST: "CHANGE_ME_DM_HOST"
+  DATABASE_PORT: "5237"
+  DATABASE_USER: "CHANGE_ME_DB_USER"
+  DATABASE_PASSWORD: "CHANGE_ME_DB_PASSWORD"
+  DATABASE_NAME: "CHANGE_ME_DM_SCHEMA"
+
+zhzwdt-oss:
+  root: ""
+  bucket: "CHANGE_ME_BUCKET"
+  server_url: "http://oss-cn-hangzhou-example.com"
+  AccessKey: "CHANGE_ME_OSS_KEY"
+  AccessKey Secret: "CHANGE_ME_OSS_SECRET"
+
+session_timeout: 86400
+app_id: "CHANGE_ME_APP_ID"
+
+login:
+  sso_login_url: ""
+  access_token_url: ""
+  get_user_info_url: ""
+  access_key: ""
+  secret_key: ""
+  use_callback: false
+
+third_party_access:
+  enabled: false
+  clients: []
+  signature:
+    required: false
+    timestamp_tolerance: 300
+  rate_limiting:
+    enabled: false
+    requests_per_minute: 100
+    requests_per_hour: 5000
+
+debug:
+  enabled: false
+  tools_enabled:
+    api_test: false
+    preview_demo: false
+    flow_test: false
+    system_monitor: true
+    data_manager: false
+
+logging:
+  level: "info"
+  file:
+    enabled: true
+    directory: "runtime/logs"
+    retention_days: 15
+  enable_debug_file: false
+
+monitoring:
+  enabled: true
+
+concurrency:
+  ocr_processing:
+    max_concurrent_tasks: 6
+    queue_enabled: true
+    queue_timeout: 300
+    retry_on_failure: true
+    max_retries: 3
+  queue_monitoring:
+    enabled: true
+    status_check_interval: 30
+    alert_on_overflow: true
+    max_queue_length: 100
+  resource_limits:
+    max_memory_per_task: 4096
+    task_timeout: 600
+    cleanup_interval: 300
+  multi_stage:
+    enabled: true
+    download_concurrency: 20
+    pdf_conversion_concurrency: 3
+    ocr_processing_concurrency: 8
+    storage_concurrency: 15
+    resource_predictor:
+      enabled: true
+      pdf_memory_base_mb: 500.0
+      pdf_memory_per_page_mb: 100.0
+      ocr_memory_base_mb: 200.0
+      ocr_memory_per_page_mb: 80.0
+      high_risk_memory_threshold_mb: 4000.0
+      critical_risk_memory_threshold_mb: 6000.0
+
+download_limits:
+  max_file_mb: 40
+  max_pdf_mb: 40
+  pdf_max_pages: 100
+  oversize_action: "truncate"
+  pdf_render_dpi: 150
+  pdf_jpeg_quality: 85
+
+ocr_engine:
+  work_dir: null
+  binary: null
+  lib_path: null
+  timeout_secs: 30
+
+ocr_tuning:
+  logging_detail: false
+  low_confidence_threshold: 0.6
+  min_char_threshold: 16
+  retry_enabled: false
+  retry_pages_limit: 3
+  retry_dpi_step: 60
+  max_dpi: 150
+  prewarm_engines: 0
+
+failover:
+  database:
+    enabled: true
+    health_check_interval: 30
+    max_retries: 3
+    retry_delay: 5000
+    fallback_to_local: true
+    local_data_dir: "runtime/fallback/db"
+  storage:
+    enabled: true
+    health_check_interval: 60
+    max_retries: 3
+    retry_delay: 5000
+    auto_switch_to_local: true
+    sync_when_recovered: true
+    local_fallback_dir: "runtime/fallback/storage"
+
+runtime_mode:
+  mode: "production"
+  development:
+    debug_enabled: false
+    mock_login: false
+    mock_ocr: false
+    test_tools: false
+    auto_login: false
+    detailed_logs: false
+  testing:
+    mock_data: false
+    mock_delay: 0
+    test_scenarios: false
+    performance_test: false
+  production:
+    debug_enabled: false
+    mock_login: false
+    mock_ocr: false
+    test_tools: false
+    security_strict: true
+
+download_proxy:
+  enabled: false
+  base_url: ""
+
+distributed_tracing:
+  enabled: false
+  sampling_rate: 1.0
+  max_spans: 10000
+  retention_seconds: 3600
+  verbose_logging: false
+  http_middleware_enabled: true
+  trace_database_operations: true
+  trace_storage_operations: true
+  trace_ocr_processing: true
+
+api_enhancement:
+  enhanced_error_handling: true
+  trace_id_enabled: true
+  structured_response: true
+
+user_data_encryption:
+  enabled: false
+  encryption_key: ""
+  key_version: "v1"
+  algorithm: "AES-256-GCM"
+  force_encrypt_fields: []
+
+approve:
+  submit-url: ""
+  access-key: ""
+  secret-key: ""

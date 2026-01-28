@@ -1,0 +1,41 @@
+# Clippy配置文件
+# 定义代码质量检查规则
+
+# 警告级别的规则
+warn = [
+    # P0修复相关 - 防止回退
+    "clippy::unwrap_used",           # 禁止使用unwrap
+    "clippy::expect_used",           # 禁止使用expect
+
+    # P2优化相关
+    "clippy::clone_on_copy",         # 检测不必要的clone (复制类型)
+    "clippy::clone_on_ref_ptr",      # 检测Arc/Rc上的不必要clone
+
+    # 代码质量
+    "clippy::panic",                 # 禁止panic!
+    "clippy::todo",                  # 警告TODO标记
+    "clippy::unimplemented",         # 禁止unimplemented!
+    "clippy::unreachable",           # 警告unreachable!
+
+    # 性能优化
+    "clippy::inefficient_to_string", # 低效的to_string
+    "clippy::unnecessary_clone",     # 不必要的clone
+    "clippy::redundant_clone",       # 冗余的clone
+
+    # 错误处理
+    "clippy::result_unit_err",       # Result<T, ()>应改为Option<T>
+    "clippy::map_unwrap_or",         # map().unwrap_or()应使用map_or
+
+    # 代码可读性
+    "clippy::needless_borrow",       # 不必要的借用
+    "clippy::needless_return",       # 不必要的return
+    "clippy::redundant_pattern_matching", # 冗余的模式匹配
+]
+
+# 允许的规则（不检查）
+allow = [
+    "clippy::too_many_arguments",    # 允许多参数函数
+    "clippy::type_complexity",       # 允许复杂类型
+    "clippy::large_enum_variant",    # 允许大枚举变体
+    "clippy::module_inception",      # 允许模块同名
+]

@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>运维管理中心 - OCR智能预审系统</title>
+    <script>
+        // 静态资源版本号，便于缓存刷新
+        window.__MONITOR_APP_VERSION = '20251210-01';
+    </script>
+    <link rel="stylesheet" href="css/monitor.css?v=20251210-01">
+    <!-- Chart.js (本地离线版本) -->
+    <script src="js/chart.umd.min.js"></script>
+    <script>
+        (function () {
+            try {
+                var params = new URLSearchParams(window.location.search);
+                var apiBase = params.get('api_base') || params.get('apiBase');
+                if (apiBase) {
+                    window.__MONITOR_API_BASE = apiBase.replace(/\/+$/, '');
+                }
+            } catch (error) {
+                console.warn('解析 api_base 失败:', error);
+            }
+        })();
+    </script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-icon">🛠️</div>
+                <h1 class="logo-text">运维中心</h1>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" onclick="switchTab('business')" id="tab-business">
+                    <span class="icon">📈</span>
+                    <span class="label">业务统计</span>
+                </a>
+                <a href="#" class="nav-item" onclick="switchTab('system')" id="tab-system">
+                    <span class="icon">🖥️</span>
+                    <span class="label">系统监控</span>
+                </a>
+                <a href="#" class="nav-item" onclick="switchTab('auth')" id="tab-auth">
+                    <span class="icon">🔐</span>
+                    <span class="label">监控认证</span>
+                </a>
+                <a href="#" class="nav-item" onclick="switchTab('failover')" id="tab-failover">
+                    <span class="icon">🔄</span>
+                    <span class="label">故障转移</span>
+                </a>
+                <a href="#" class="nav-item" onclick="switchTab('ocr')" id="tab-ocr">
+                    <span class="icon">🎯</span>
+                    <span class="label">OCR池</span>
+                </a>
+                <a href="#" class="nav-item" onclick="switchTab('concurrency')" id="tab-concurrency">
+                    <span class="icon">⚡</span>
+                    <span class="label">并发控制</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="system-health-mini">
+                    <div class="label">系统健康度</div>
+                    <div class="value" id="healthScoreMini">100%</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="top-header">
+                <div class="breadcrumbs">
+                    <span class="breadcrumb-item">首页</span>
+                    <span class="breadcrumb-separator">/</span>
+                    <span class="breadcrumb-item active" id="pageTitle">业务统计</span>
+                </div>
+                <div class="header-actions">
+                    <div class="auto-refresh-toggle">
+                        <label class="switch">
+                            <input type="checkbox" id="autoRefreshToggle" onchange="toggleAutoRefresh()">
+                            <span class="slider"></span>
+                        </label>
+                        <span>自动刷新</span>
+                    </div>
+                    <div class="user-profile" id="authStatus">
+                        <span class="user-name">未登录</span>
+                        <button class="btn btn-text" onclick="logout()" id="logoutBtn"
+                            style="display: none;">退出</button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Content Views -->
+            <div class="content-body">
+                <!-- 业务统计 View -->
+                <div class="view-pane active" id="business-pane">
+                    <!-- Overview Cards -->
+                    <div class="overview-cards">
+                        <div class="card metric-card">
+                            <div class="metric-title">总预审次数</div>
+                            <div class="metric-value" id="totalCount">-</div>
+                            <div class="metric-trend">
+                                <span class="label">刷新时间</span>
+                                <span class="value" id="statisticsLastUpdate">--</span>
+                            </div>
+                        </div>
+                        <div class="card metric-card">
+                            <div class="metric-title">成功率</div>
+                            <div class="metric-value" id="successRateMetric">--</div>
+                            <div class="metric-trend success">
+                                <span class="label">完成</span>
+                                <span class="value" id="completedCount">-</span>
+                            </div>
+                        </div>
+                        <div class="card metric-card">
+                            <div class="metric-title">平均耗时</div>
+                            <div class="metric-value" id="avgDurationMetric">--</div>
+                            <div class="metric-trend">
+                                <span class="value" id="avgDurationHint">暂无数据</span>
+                            </div>
+                        </div>
+                        <div class="card metric-card">
+                            <div class="metric-title">处理状态</div>
+                            <div class="metric-row">
+                                <span class="label warning">处理中</span>
+                                <span class="value" id="processingCount">-</span>
+                            </div>
+                            <div class="metric-row">
+                                <span class="label error">失败</span>
+                                <span class="value" id="failedCount">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="card filter-card">
+                        <div class="filter-row">
+                            <div class="filter-group">
+                                <label>日期范围</label>
+                                <div class="date-range">
+                                    <input type="date" id="dateFrom" class="form-input">
+                                    <span class="separator">至</span>
+                                    <input type="date" id="dateTo" class="form-input">
+                                </div>
+                            </div>
+                            <div class="filter-group">
+                                <label>状态</label>
+                                <select id="statusFilter" class="form-select">
+                                    <option value="">全部状态</option>
+                                    <option value="pending">待处理</option>
+                                    <option value="queued">排队中</option>
+                                    <option value="processing">处理中</option>
+                                    <option value="completed">已完成</option>
+                                    <option value="failed">处理失败</option>
+                                </select>
+                            </div>
+                            <div class="filter-group">
+                                <label>搜索</label>
+                                <input type="text" id="matterFilter" class="form-input" placeholder="事项名称 / ID">
+                            </div>
+                            <div class="filter-actions">
+                                <button class="btn btn-primary" onclick="applyFilters()">查询</button>
+                                <button class="btn btn-secondary" onclick="resetFilters()">重置</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 业务数据可视化图表 -->
+                    <div class="charts-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>预审状态分布</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="statusDistributionChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>处理时长趋势</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="durationTrendChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Table -->
+                    <div class="card table-card">
+                        <div class="card-header">
+                            <h3>预审记录</h3>
+                            <div class="card-actions">
+                                <button class="btn btn-secondary btn-sm" onclick="exportBusinessData()">导出</button>
+                                <button class="btn btn-primary btn-sm" onclick="refreshBusinessData()">刷新</button>
+                            </div>
+                        </div>
+                        <div class="card-body" id="businessTableContent">
+                            <div class="loading-state">正在加载数据...</div>
+                        </div>
+                        <div class="card-footer" id="businessPagination"></div>
+                    </div>
+
+                    <!-- Recent Failures -->
+                    <div class="card table-card mt-4">
+                        <div class="card-header">
+                            <h3>最近失败任务</h3>
+                            <div class="card-actions">
+                                <select id="recentFailureHours" class="form-select form-select-sm"
+                                    onchange="loadRecentFailures()">
+                                    <option value="6">最近 6 小时</option>
+                                    <option value="12">最近 12 小时</option>
+                                    <option value="24" selected>最近 24 小时</option>
+                                    <option value="72">最近 3 天</option>
+                                </select>
+                                <button class="btn btn-primary btn-sm" onclick="loadRecentFailures()">刷新</button>
+                            </div>
+                        </div>
+                        <div class="card-body" id="recentFailuresContent">
+                            <div class="loading-state">正在加载失败任务...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 系统监控 View -->
+                <div class="view-pane" id="system-pane">
+                    <div class="overview-cards">
+                        <div class="card metric-card">
+                            <div class="metric-title">CPU 使用率</div>
+                            <div class="metric-value" id="cpuUsage">-</div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="cpuBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="card metric-card">
+                            <div class="metric-title">内存 使用率</div>
+                            <div class="metric-value" id="memoryUsage">-</div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="memoryBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="card metric-card">
+                            <div class="metric-title">磁盘 使用率</div>
+                            <div class="metric-value" id="diskUsage">-</div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="diskBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="card metric-card">
+                            <div class="metric-title">OCR 进程</div>
+                            <div class="metric-value" id="ocrStatus">-</div>
+                            <div class="metric-trend">
+                                <span class="value" id="ocrRestartsHint">重启 0 次</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 实时资源趋势图 -->
+                    <div class="charts-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>CPU & 内存趋势</h3>
+                                <div class="card-actions">
+                                    <span style="font-size: 12px; color: var(--text-tertiary);">
+                                        实时更新 · 最近 20 个数据点
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="resourceTrendChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>系统负载趋势</h3>
+                                <div class="card-actions">
+                                    <span style="font-size: 12px; color: var(--text-tertiary);">
+                                        实时更新
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="loadTrendChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card table-card mt-4">
+                        <div class="card-header">
+                            <h3>系统详情</h3>
+                            <div class="card-actions">
+                                <button class="btn btn-secondary btn-sm" onclick="exportSystemData()">导出</button>
+                                <button class="btn btn-primary btn-sm" onclick="refreshSystemData()">刷新</button>
+                            </div>
+                        </div>
+                        <div class="card-body" id="systemTableContent">
+                            <div class="loading-state">正在加载系统数据...</div>
+                        </div>
+                    </div>
+
+                    <!-- 高级运维选项 (仅管理员可见) -->
+                    <div class="card table-card mt-4 admin-only" id="advancedOpsCard" style="display: none;">
+                        <div class="card-header" onclick="toggleAdvancedOps()" style="cursor: pointer;">
+                            <h3>
+                                <span id="advancedOpsIcon">▶</span>
+                                高级运维选项
+                            </h3>
+                            <div class="card-actions">
+                                <span style="font-size: 12px; color: var(--text-tertiary);">点击展开</span>
+                            </div>
+                        </div>
+                        <div class="card-body" id="advancedOpsContent" style="display: none;">
+                            <div class="throttle-control-panel">
+                                <div class="throttle-status-row">
+                                    <div class="throttle-indicator">
+                                        <span class="status-dot" id="throttleStatusDot"></span>
+                                        <span id="throttleStatusText">检查中...</span>
+                                    </div>
+                                    <div class="throttle-stats" id="throttleStats"></div>
+                                </div>
+                                <div class="throttle-actions">
+                                    <div class="form-group" style="display: inline-flex; align-items: center; gap: 8px;">
+                                        <label style="margin: 0;">最大请求数:</label>
+                                        <input type="number" id="throttleMaxRequests" class="form-input"
+                                               value="5" min="1" max="1000" style="width: 80px;">
+                                    </div>
+                                    <button class="btn btn-warning btn-sm" onclick="enableThrottle()" id="enableThrottleBtn">
+                                        启用限流
+                                    </button>
+                                    <button class="btn btn-success btn-sm" onclick="disableThrottle()" id="disableThrottleBtn"
+                                            style="display: none;">
+                                        解除限流
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="refreshThrottleStatus()">
+                                        刷新状态
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 监控认证 View -->
+                <div class="view-pane" id="auth-pane">
+                    <div class="auth-container">
+                        <!-- Login Form -->
+                        <div class="card auth-card" id="loginForm">
+                            <div class="auth-header">
+                                <h2>系统登录</h2>
+                                <p>请输入您的管理账号</p>
+                            </div>
+                            <div class="form-group">
+                                <label>用户名</label>
+                                <div class="input-group">
+                                    <span class="input-icon">👤</span>
+                                    <input type="text" id="username" class="form-input" placeholder="请输入用户名">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>密码</label>
+                                <div class="input-group">
+                                    <span class="input-icon">🔒</span>
+                                    <input type="password" id="password" class="form-input" placeholder="请输入密码">
+                                </div>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="login()">登录</button>
+                            <div class="auth-footer">
+                                未开放自助注册，请联系管理员
+                            </div>
+                        </div>
+
+                        <!-- Auth Management -->
+                        <div id="authManagement" style="display: none; width: 100%;">
+                            <div class="overview-cards">
+                                <div class="card metric-card">
+                                    <div class="metric-title">活跃会话</div>
+                                    <div class="metric-value" id="activeSessions">-</div>
+                                </div>
+                                <div class="card metric-card">
+                                    <div class="metric-title">登录次数</div>
+                                    <div class="metric-value" id="loginCount">-</div>
+                                </div>
+                                <div class="card metric-card">
+                                    <div class="metric-title">当前用户</div>
+                                    <div class="metric-value" id="currentUser">-</div>
+                                </div>
+                                <div class="card metric-card">
+                                    <div class="metric-title">会话状态</div>
+                                    <div class="metric-value" id="sessionStatus">-</div>
+                                </div>
+                            </div>
+
+                            <div class="card table-card mt-4">
+                                <div class="card-header">
+                                    <h3>用户管理</h3>
+                                    <div class="card-actions">
+                                        <div class="admin-only" style="display: flex; gap: 8px;">
+                                            <button class="btn btn-primary btn-sm"
+                                                onclick="openCreateUserModal('ops_admin')">创建运维账号</button>
+                                            <button class="btn btn-secondary btn-sm"
+                                                onclick="openCreateUserModal('admin')">创建管理员</button>
+                                        </div>
+                                        <button class="btn btn-secondary btn-sm"
+                                            onclick="cleanupSessions()">清理会话</button>
+                                        <button class="btn btn-primary btn-sm" onclick="refreshAuthData()">刷新</button>
+                                    </div>
+                                </div>
+                                <div class="card-body" id="monitorUsersContent">
+                                    <div class="loading-state">暂无数据</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 故障转移 View -->
+                <div class="view-pane" id="failover-pane">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>故障转移监控</h3>
+                            <button class="btn btn-primary btn-sm" onclick="checkFailoverStatus()">刷新状态</button>
+                        </div>
+                        <div class="card-body">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>组件</th>
+                                        <th>当前状态</th>
+                                        <th>主服务</th>
+                                        <th>备用服务</th>
+                                        <th>最后检查</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="failoverTable">
+                                    <tr>
+                                        <td>数据库</td>
+                                        <td id="dbFailoverStatus">-</td>
+                                        <td>达梦数据库</td>
+                                        <td>SQLite</td>
+                                        <td id="dbLastCheck">-</td>
+                                        <td><button class="btn btn-sm btn-secondary"
+                                                onclick="triggerDbRecovery()">触发恢复</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>存储</td>
+                                        <td id="storageFailoverStatus">-</td>
+                                        <td>阿里云OSS</td>
+                                        <td>本地存储</td>
+                                        <td id="storageLastCheck">-</td>
+                                        <td><button class="btn btn-sm btn-secondary"
+                                                onclick="triggerStorageRecovery()">触发恢复</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OCR池 View -->
+                <div class="view-pane" id="ocr-pane">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>OCR引擎池监控</h3>
+                            <button class="btn btn-primary btn-sm" onclick="refreshOCRStats()">刷新</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="overview-cards">
+                                <div class="card metric-card">
+                                    <div class="metric-title">池容量</div>
+                                    <div class="metric-value" id="poolCapacity">8</div>
+                                </div>
+                                <div class="card metric-card">
+                                    <div class="metric-title">可用引擎</div>
+                                    <div class="metric-value" id="poolAvailable">8</div>
+                                </div>
+                                <div class="card metric-card">
+                                    <div class="metric-title">使用中</div>
+                                    <div class="metric-value" id="poolInUse">0</div>
+                                </div>
+                                <div class="card metric-card">
+                                    <div class="metric-title">总重启次数</div>
+                                    <div class="metric-value" id="poolRestarted">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 并发控制 View -->
+                <div class="view-pane" id="concurrency-pane">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>多阶段并发控制</h3>
+                            <button class="btn btn-primary btn-sm" onclick="refreshConcurrency()">刷新</button>
+                        </div>
+                        <div class="card-body">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>处理阶段</th>
+                                        <th>最大并发</th>
+                                        <th>当前使用</th>
+                                        <th>可用槽位</th>
+                                        <th>使用率</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="concurrencyTable">
+                                    <tr>
+                                        <td>📥 下载阶段</td>
+                                        <td id="downloadMax">20</td>
+                                        <td id="downloadUsed">0</td>
+                                        <td id="downloadAvailable">20</td>
+                                        <td id="downloadRate">0%</td>
+                                    </tr>
+                                    <tr>
+                                        <td>📄 PDF转换</td>
+                                        <td id="pdfMax">3</td>
+                                        <td id="pdfUsed">0</td>
+                                        <td id="pdfAvailable">3</td>
+                                        <td id="pdfRate">0%</td>
+                                    </tr>
+                                    <tr>
+                                        <td>🔍 OCR处理</td>
+                                        <td id="ocrMax">8</td>
+                                        <td id="ocrUsed">0</td>
+                                        <td id="ocrAvailable">8</td>
+                                        <td id="ocrRate">0%</td>
+                                    </tr>
+                                    <tr>
+                                        <td>💾 存储操作</td>
+                                        <td id="storageMax">15</td>
+                                        <td id="storageUsed">0</td>
+                                        <td id="storageAvailable">15</td>
+                                        <td id="storageRate">0%</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <div class="alert-box mt-4">
+                                <h4>瓶颈分析</h4>
+                                <div id="bottleneckAnalysis">当前无瓶颈，系统运行流畅</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="requestDetailModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>预审请求详情</h3>
+                <button class="modal-close" onclick="closeRequestDetail()">×</button>
+            </div>
+            <div class="modal-body" id="requestDetailContent"></div>
+        </div>
+    </div>
+
+    <div id="createUserModal" class="modal-overlay">
+        <div class="modal small">
+            <div class="modal-header">
+                <h3>创建监控账号</h3>
+                <button class="modal-close" onclick="closeCreateUserModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>角色</label>
+                    <select id="createUserRole" class="form-select">
+                        <option value="ops_admin">运维管理员</option>
+                        <option value="admin">系统管理员</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="createUserName" class="form-input" placeholder="3-64 字符">
+                </div>
+                <div class="form-group">
+                    <label>初始密码</label>
+                    <input type="password" id="createUserPassword" class="form-input" placeholder="至少 8 位">
+                </div>
+                <div class="form-hint">创建后请第一时间通知用户登录并修改密码。</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCreateUserModal()">取消</button>
+                <button class="btn btn-primary" onclick="submitCreateUser()">创建账号</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="toast-container"></div>
+    <script src="/static/js/monitor-charts.js?v=20251121-03"></script>
+    <script src="/static/js/monitor.js?v=20251210-01"></script>
+</body>
+
+</html>
