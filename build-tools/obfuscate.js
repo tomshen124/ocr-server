@@ -15,7 +15,6 @@ class FrontendBuilder {
         this.isDevelopment = process.argv.includes('--dev');
         this.isProduction = process.argv.includes('--prod');
         
-        // 如果没有指定环境，默认为生产环境
         if (!this.isDevelopment && !this.isProduction) {
             this.isProduction = true;
         }
@@ -48,7 +47,6 @@ class FrontendBuilder {
     async copyStructure() {
         console.log(chalk.yellow('📁 复制目录结构...'));
         
-        // 复制除了js/css/html之外的所有文件
         const filesToCopy = glob.sync('**/*', {
             cwd: this.sourceDir,
             ignore: ['**/*.js', '**/*.css', '**/*.html'],
@@ -78,30 +76,28 @@ class FrontendBuilder {
             const sourceCode = await fs.readFile(sourcePath, 'utf8');
             
             if (this.isProduction) {
-                // 生产环境：混淆和压缩
                 const result = await minify(sourceCode, {
                     compress: {
-                        drop_console: true,      // 移除console语句
-                        drop_debugger: true,     // 移除debugger语句
+                        drop_console: true,
+                        drop_debugger: true,
                         pure_funcs: ['console.log', 'console.info', 'console.debug'],
                         passes: 2
                     },
                     mangle: {
-                        toplevel: true,          // 混淆顶级作用域
+                        toplevel: true,
                         properties: {
-                            regex: /^_/          // 混淆以_开头的属性
+                            regex: /^_/
                         }
                     },
                     format: {
-                        comments: false          // 移除注释
+                        comments: false
                     },
-                    sourceMap: false             // 不生成source map
+                    sourceMap: false
                 });
                 
                 await fs.writeFile(outputPath, result.code);
                 console.log(chalk.green(`  ✓ ${jsFile} (混淆压缩)`));
             } else {
-                // 开发环境：仅复制，保留源码
                 await fs.writeFile(outputPath, sourceCode);
                 console.log(chalk.cyan(`  ✓ ${jsFile} (源码保留)`));
             }
@@ -113,7 +109,7 @@ class FrontendBuilder {
         
         const cssFiles = glob.sync('**/*.css', { cwd: this.sourceDir });
         const cleanCSS = new CleanCSS({
-            level: this.isProduction ? 2 : 0  // 生产环境高级优化
+            level: this.isProduction ? 2 : 0
         });
         
         for (const cssFile of cssFiles) {
@@ -211,6 +207,5 @@ class FrontendBuilder {
     }
 }
 
-// 执行构建
 const builder = new FrontendBuilder();
 builder.build();

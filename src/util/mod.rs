@@ -6,15 +6,15 @@ use serde_json::{json, Value};
 use std::fmt::Display;
 
 pub mod adaptive_limiter;
-pub mod api_stats; // [stats] 新增API统计记录模块
+pub mod api_stats;
 pub mod auth;
 pub mod callbacks;
 pub mod config;
 pub mod converter;
 pub mod crypto;
-pub mod dynamic_worker; // [target] 新增动态Worker管理模块
+pub mod dynamic_worker;
 pub mod extract;
-pub mod http_client; // [global] HTTP客户端模块（支持依赖注入）
+pub mod http_client;
 pub mod log;
 pub mod logging;
 pub mod material;
@@ -23,16 +23,16 @@ pub mod material_cache_manager;
 pub mod middleware;
 pub mod outbox;
 pub mod permit_tracker;
-pub mod processing; // [launch] 新增处理流水线模块
+pub mod processing;
 pub mod report;
 pub mod rules;
 pub mod service_watchdog;
 pub mod system_info;
 pub mod task_queue;
 pub mod task_recovery;
-pub mod tracing; // [search] 新增分布式链路追踪模块
-pub mod worker; // [handshake] Worker proxy 客户端与运行时
-pub mod zen; // [ticket] 新增信号量追踪模块
+pub mod tracing;
+pub mod worker;
+pub mod zen;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WebResult {

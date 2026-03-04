@@ -109,7 +109,6 @@ pub async fn get_matter_rule(
 }
 
 pub async fn reload_matter_rule(Path(matter_id): Path<String>) -> impl IntoResponse {
-    // 目前规则配置直接从数据库读取，不需要缓存刷新
     Json(serde_json::json!({
         "success": true,
         "errorCode": 200,

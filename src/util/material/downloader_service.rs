@@ -189,7 +189,6 @@ async fn process_single_task_inner(
 
     let preview_id = task.preview_id.clone();
 
-    // third_party_request_id 从原始请求中取
     let third_party_request_id = preview_body.preview.request_id.clone();
 
     let mut failed: Vec<String> = Vec::new();
@@ -198,7 +197,7 @@ async fn process_single_task_inner(
         for (attachment_index, attachment) in material.attachment_list.iter_mut().enumerate() {
             let url = &attachment.attach_url;
             if url.starts_with(material_cache::WORKER_CACHE_SCHEME) {
-                continue; // 已经处理过
+                continue;
             }
 
             tracing::info!(preview_id = %preview_id, url = %url, "Downloading attachment");
@@ -256,7 +255,6 @@ async fn process_single_task_inner(
     }
 
     if !failed.is_empty() {
-        // Persist partial progress so下一次重试可以复用缓存
         let payload = serde_json::to_string(&preview_body)
             .context("serialize preview_body after partial downloads")?;
         let _ = database
@@ -318,7 +316,6 @@ async fn normalize_attachment(
         }
     }
 
-    // PDF 直接通过
     if file_lower.ends_with(".pdf") || bytes.starts_with(b"%PDF") {
         return Ok((
             bytes.to_vec(),
@@ -328,7 +325,6 @@ async fn normalize_attachment(
         ));
     }
 
-    // 尝试图片解码并转 PNG
     match image::load_from_memory(bytes) {
         Ok(img) => {
             let (w, h) = img.dimensions();
@@ -387,7 +383,6 @@ async fn download_with_retries(
     url: &str,
     max_attempts: u32,
 ) -> Result<Vec<u8>> {
-    // 先查持久化去重缓存
     if let Ok(Some(entry)) = database.get_download_cache_token(url).await {
         if let Ok(bytes) = material_cache::read_material(&entry.token).await {
             return Ok(bytes);
@@ -406,7 +401,6 @@ async fn download_with_retries(
         .await
         {
             Ok(Ok(bytes)) => {
-                // 下载成功，写入去重缓存
                 let _ = database
                     .upsert_download_cache_token(
                         url,

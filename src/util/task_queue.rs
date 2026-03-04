@@ -23,7 +23,6 @@ use crate::util::tracing::metrics_collector::METRICS_COLLECTOR;
 
 pub const PREVIEW_QUEUE_NAME: &str = "preview";
 
-/// 预审任务载荷，供队列传递
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewTask {
     pub preview_body: PreviewBody,
@@ -54,11 +53,9 @@ pub trait PreviewTaskHandler: Send + Sync {
 pub trait TaskQueue: Send + Sync + Any {
     async fn enqueue(&self, task: PreviewTask) -> Result<()>;
 
-    /// 类型转换支持，用于dynamic_worker模块的downcast
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
-/// 根据配置初始化任务队列实现
 pub async fn initialize_task_queue(
     distributed_enabled: bool,
     config: &TaskQueueConfig,
@@ -117,7 +114,6 @@ fn create_local_queue(
     Arc::new(LocalTaskQueue::new(queue_name, handler, capacity))
 }
 
-/// 单机队列实现，使用 tokio mpsc 连接本地 handler
 pub struct LocalTaskQueue {
     sender: mpsc::Sender<PreviewTask>,
     #[allow(dead_code)]
@@ -196,21 +192,17 @@ impl TaskQueue for LocalTaskQueue {
     }
 }
 
-/// 基于 NATS JetStream 的任务队列实现
 #[derive(Clone)]
 pub struct NatsTaskQueue {
     context: Arc<RwLock<jetstream::Context>>,
     subject: String,
     stream: String,
     queue_name: &'static str,
-    config: NatsQueueConfig, // 保存配置以供重连使用
-    /// 断线重连状态标记
+    config: NatsQueueConfig,
     reconnecting: Arc<AtomicBool>,
-    /// 连接健康状态
     healthy: Arc<AtomicBool>,
 }
 
-/// JetStream 队列运行指标
 #[derive(Debug, Clone)]
 pub struct QueueStreamMetrics {
     pub backlog_messages: u64,
@@ -221,11 +213,9 @@ pub struct QueueStreamMetrics {
 }
 
 impl NatsTaskQueue {
-    /// 连接NATS服务器，带超时和重试机制
     pub async fn connect(queue_name: &'static str, config: &NatsQueueConfig) -> Result<Self> {
         info!("[plug] 正在连接NATS服务器: {}", config.server_url);
 
-        // [tool] 连接重试配置
         const MAX_RETRIES: u32 = 3;
         const CONNECT_TIMEOUT_SECS: u64 = 10;
         let mut retry_delay = Duration::from_secs(1);
@@ -233,7 +223,6 @@ impl NatsTaskQueue {
         for attempt in 1..=MAX_RETRIES {
             info!("尝试连接NATS (第{}/{}次)...", attempt, MAX_RETRIES);
 
-            // [ok] 带超时的连接尝试
             let connect_result = tokio::time::timeout(
                 Duration::from_secs(CONNECT_TIMEOUT_SECS),
                 Self::try_connect(config),
@@ -244,10 +233,8 @@ impl NatsTaskQueue {
                 Ok(Ok(client)) => {
                     info!("[ok] NATS连接成功 (尝试 {}/{})", attempt, MAX_RETRIES);
 
-                    // 创建JetStream上下文
                     let context = jetstream::new(client);
 
-                    // 创建或获取Stream
                     context
                         .get_or_create_stream(build_stream_config(config))
                         .await
@@ -267,7 +254,6 @@ impl NatsTaskQueue {
                         healthy: Arc::new(AtomicBool::new(true)),
                     };
 
-                    // [loop] 启动后台健康监控任务
                     queue.start_health_monitor();
 
                     return Ok(queue);
@@ -288,15 +274,13 @@ impl NatsTaskQueue {
                 }
             }
 
-            // 如果还有重试次数，等待后重试
             if attempt < MAX_RETRIES {
                 info!("等待 {:?} 后重试...", retry_delay);
                 tokio::time::sleep(retry_delay).await;
-                retry_delay *= 2; // 指数退避
+                retry_delay *= 2;
             }
         }
 
-        // 所有重试都失败
         let error_msg = format!(
             "NATS连接失败，已重试{}次。请检查: 1) NATS服务是否运行 2) 网络连接 3) 配置地址: {}",
             MAX_RETRIES, config.server_url
@@ -305,7 +289,6 @@ impl NatsTaskQueue {
         Err(anyhow!(error_msg))
     }
 
-    /// 尝试连接NATS（不带超时）
     async fn try_connect(config: &NatsQueueConfig) -> Result<async_nats::Client> {
         if let Some(tls) = config.tls.as_ref().filter(|tls| tls.enabled) {
             let mut options = ConnectOptions::new();
@@ -347,17 +330,14 @@ impl NatsTaskQueue {
             return guard.clone();
         }
 
-        // 退化为阻塞等待，避免在重连期间直接 panic
         warn!("[warn] JetStream context 读取被阻塞，等待重连完成");
         self.context.blocking_read().clone()
     }
 
-    /// 关联的 JetStream 队列名称
     pub fn queue_name(&self) -> &'static str {
         self.queue_name
     }
 
-    /// NEW 获取队列深度 (pending消息数)
     pub async fn get_queue_depth(&self) -> Result<u64> {
         let context = self.context.read().await;
         let mut stream = context
@@ -367,11 +347,9 @@ impl NatsTaskQueue {
 
         let info = stream.info().await.context("获取Stream信息失败")?;
 
-        // pending消息数 = 总消息数
         Ok(info.state.messages)
     }
 
-    /// NEW 获取流量统计信息（backlog 与保留策略）
     pub async fn stream_metrics(&self) -> Result<QueueStreamMetrics> {
         let context = self.context.read().await;
         let mut stream = context
@@ -396,12 +374,10 @@ impl NatsTaskQueue {
         })
     }
 
-    /// NEW 获取配置（用于dynamic_worker的Consumer工厂）
     pub fn get_config(&self) -> &NatsQueueConfig {
         &self.config
     }
 
-    /// [loop] 启动后台健康监控任务
     fn start_health_monitor(&self) {
         let queue_clone = self.clone();
         tokio::spawn(async move {
@@ -409,25 +385,21 @@ impl NatsTaskQueue {
         });
     }
 
-    /// 健康监控循环
     async fn health_monitor_loop(&self) {
-        let mut check_interval = tokio::time::interval(Duration::from_secs(30)); // 每30秒检查一次
+        let mut check_interval = tokio::time::interval(Duration::from_secs(30));
 
         loop {
             check_interval.tick().await;
 
-            // 检查连接健康状态
             if let Err(e) = self.check_connection_health().await {
                 warn!("[warn] NATS连接健康检查失败: {}", e);
                 self.healthy.store(false, Ordering::SeqCst);
 
-                // 如果未在重连中，触发重连
                 if !self.reconnecting.load(Ordering::SeqCst) {
                     info!("[loop] 触发NATS断线重连...");
                     self.reconnect().await;
                 }
             } else {
-                // 连接健康，更新状态
                 if !self.healthy.load(Ordering::SeqCst) {
                     info!("[ok] NATS连接已恢复健康");
                     self.healthy.store(true, Ordering::SeqCst);
@@ -436,14 +408,11 @@ impl NatsTaskQueue {
         }
     }
 
-    /// 检查NATS连接健康状态
     async fn check_connection_health(&self) -> Result<()> {
         let context = self.context.read().await;
 
-        // 尝试获取stream信息作为健康检查
         match tokio::time::timeout(Duration::from_secs(5), context.get_stream(&self.stream)).await {
             Ok(Ok(mut stream)) => {
-                // 尝试获取stream info
                 match stream.info().await {
                     Ok(_) => Ok(()),
                     Err(e) => Err(anyhow!("获取Stream信息失败: {}", e)),
@@ -454,9 +423,7 @@ impl NatsTaskQueue {
         }
     }
 
-    /// [loop] 执行断线重连
     async fn reconnect(&self) {
-        // 设置重连标记，防止并发重连
         if self.reconnecting.swap(true, Ordering::SeqCst) {
             warn!("[warn] 已有重连任务在进行中，跳过");
             return;
@@ -478,16 +445,13 @@ impl NatsTaskQueue {
                 .await
             {
                 Ok(Ok(client)) => {
-                    // 连接成功，创建新的JetStream context
                     let new_context = jetstream::new(client);
 
-                    // 确保Stream存在
                     match new_context
                         .get_or_create_stream(build_stream_config(&self.config))
                         .await
                     {
                         Ok(_) => {
-                            // 更新context
                             let mut context_guard = self.context.write().await;
                             *context_guard = new_context;
                             drop(context_guard);
@@ -520,15 +484,13 @@ impl NatsTaskQueue {
                 }
             }
 
-            // 如果还有重试次数，等待后重试
             if attempt < MAX_RECONNECT_ATTEMPTS {
                 info!("等待 {:?} 后重试重连...", retry_delay);
                 tokio::time::sleep(retry_delay).await;
-                retry_delay = (retry_delay * 2).min(Duration::from_secs(60)); // 最大60秒
+                retry_delay = (retry_delay * 2).min(Duration::from_secs(60));
             }
         }
 
-        // 所有重连尝试都失败
         error!(
             "[fail] NATS重连失败，已尝试{}次。连接将在下次健康检查时继续重试。",
             MAX_RECONNECT_ATTEMPTS
@@ -536,12 +498,10 @@ impl NatsTaskQueue {
         self.reconnecting.store(false, Ordering::SeqCst);
     }
 
-    /// 获取连接健康状态
     pub fn is_healthy(&self) -> bool {
         self.healthy.load(Ordering::SeqCst)
     }
 
-    /// 获取是否正在重连
     pub fn is_reconnecting(&self) -> bool {
         self.reconnecting.load(Ordering::SeqCst)
     }
@@ -552,7 +512,6 @@ impl TaskQueue for NatsTaskQueue {
     async fn enqueue(&self, task: PreviewTask) -> Result<()> {
         let payload = serde_json::to_vec(&task).context("序列化预审任务失败")?;
 
-        // 通过RwLock获取context
         let context = self.context.read().await;
         let ack = context
             .publish(self.subject.clone(), payload.into())
@@ -569,7 +528,6 @@ impl TaskQueue for NatsTaskQueue {
     }
 }
 
-/// NATS JetStream 任务消费者
 pub struct NatsTaskQueueConsumer {
     queue_name: &'static str,
     context: jetstream::Context,
@@ -772,7 +730,6 @@ impl NatsTaskQueueConsumer {
     }
 }
 
-/// 直接执行处理（单机模式）
 pub struct DirectTaskQueue {
     handler: Arc<dyn PreviewTaskHandler>,
 }
@@ -827,7 +784,6 @@ fn build_consumer_config(config: &NatsQueueConfig) -> consumer::pull::Config {
     }
 }
 
-/// 启动任务队列 worker（独立进程）
 pub async fn start_queue_worker(
     config: &TaskQueueConfig,
     handler: Arc<dyn PreviewTaskHandler>,

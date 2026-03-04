@@ -1,11 +1,4 @@
-//! HTTP客户端模块 - 支持依赖注入和配置管理
 //!
-//! 提供可配置的HTTP客户端，支持：
-//! - 超时配置
-//! - 代理设置
-//! - TLS配置
-//! - 连接池管理
-//! - 重试机制
 
 use anyhow::{Context, Result};
 use std::time::Duration;
@@ -14,26 +7,17 @@ use tracing::{info, warn};
 #[cfg(feature = "reqwest")]
 use reqwest::Client;
 
-/// HTTP客户端配置
 #[derive(Debug, Clone)]
 pub struct HttpClientConfig {
-    /// 请求超时时间（秒）
     pub timeout_secs: u64,
-    /// 连接超时时间（秒）
     pub connect_timeout_secs: u64,
-    /// 是否接受无效证书（仅开发环境）
     pub danger_accept_invalid_certs: bool,
     /// User-Agent
     pub user_agent: String,
-    /// TCP keepalive时间（秒）
     pub tcp_keepalive_secs: u64,
-    /// 连接池空闲超时（秒）
     pub pool_idle_timeout_secs: u64,
-    /// 每个主机的最大空闲连接数
     pub pool_max_idle_per_host: usize,
-    /// HTTP代理URL（可选）
     pub http_proxy: Option<String>,
-    /// HTTPS代理URL（可选）
     pub https_proxy: Option<String>,
 }
 
@@ -42,7 +26,7 @@ impl Default for HttpClientConfig {
         Self {
             timeout_secs: 60,
             connect_timeout_secs: 30,
-            danger_accept_invalid_certs: true, // 默认接受，由nginx处理SSL
+            danger_accept_invalid_certs: true,
             user_agent: "OCR-Preview-Service/1.0".to_string(),
             tcp_keepalive_secs: 60,
             pool_idle_timeout_secs: 90,
@@ -54,7 +38,6 @@ impl Default for HttpClientConfig {
 }
 
 impl HttpClientConfig {
-    /// 从环境变量加载代理配置
     pub fn with_env_proxy(mut self) -> Self {
         if let Ok(proxy_url) = std::env::var("HTTP_PROXY") {
             self.http_proxy = Some(proxy_url);
@@ -66,7 +49,6 @@ impl HttpClientConfig {
     }
 }
 
-/// HTTP客户端包装器
 #[derive(Clone)]
 pub struct HttpClient {
     #[cfg(feature = "reqwest")]
@@ -75,7 +57,6 @@ pub struct HttpClient {
 }
 
 impl HttpClient {
-    /// 创建新的HTTP客户端
     pub fn new(config: HttpClientConfig) -> Result<Self> {
         #[cfg(feature = "reqwest")]
         {
@@ -93,7 +74,6 @@ impl HttpClient {
         }
     }
 
-    /// 创建默认HTTP客户端
     pub fn default_client() -> Result<Self> {
         let config = HttpClientConfig::default().with_env_proxy();
         Self::new(config)
@@ -110,7 +90,6 @@ impl HttpClient {
             .pool_idle_timeout(Duration::from_secs(config.pool_idle_timeout_secs))
             .pool_max_idle_per_host(config.pool_max_idle_per_host);
 
-        // 配置HTTP代理
         if let Some(proxy_url) = &config.http_proxy {
             if let Ok(proxy) = reqwest::Proxy::http(proxy_url) {
                 info!("使用HTTP代理: {}", proxy_url);
@@ -120,7 +99,6 @@ impl HttpClient {
             }
         }
 
-        // 配置HTTPS代理
         if let Some(proxy_url) = &config.https_proxy {
             if let Ok(proxy) = reqwest::Proxy::https(proxy_url) {
                 info!("使用HTTPS代理: {}", proxy_url);
@@ -133,7 +111,6 @@ impl HttpClient {
         client_builder.build().context("构建HTTP客户端失败")
     }
 
-    /// 获取底层reqwest客户端（如果可用）
     #[cfg(feature = "reqwest")]
     pub fn reqwest_client(&self) -> Result<&Client> {
         self.client
@@ -141,7 +118,6 @@ impl HttpClient {
             .ok_or_else(|| anyhow::anyhow!("HTTP客户端不可用"))
     }
 
-    /// 检查HTTP客户端是否可用
     pub fn is_available(&self) -> bool {
         #[cfg(feature = "reqwest")]
         {
@@ -154,12 +130,10 @@ impl HttpClient {
         }
     }
 
-    /// 获取配置
     pub fn config(&self) -> &HttpClientConfig {
         &self.config
     }
 
-    /// 使用新配置重建客户端
     pub fn rebuild_with_config(&mut self, config: HttpClientConfig) -> Result<()> {
         #[cfg(feature = "reqwest")]
         {

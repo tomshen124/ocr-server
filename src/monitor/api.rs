@@ -7,7 +7,6 @@ use super::health::HealthCheckResult;
 use super::metrics::{MonitoringStats, SystemMetrics};
 use super::service::MonitorService;
 
-/// 监控API路由
 pub fn monitoring_routes() -> Router<Arc<MonitorService>> {
     Router::new()
         .route("/api/monitor-service/status", get(get_monitoring_status))
@@ -18,7 +17,6 @@ pub fn monitoring_routes() -> Router<Arc<MonitorService>> {
         .route("/api/monitor-service/system-info", get(get_system_info))
 }
 
-/// 获取监控状态概览
 async fn get_monitoring_status(
     State(monitor): State<Arc<MonitorService>>,
 ) -> Json<serde_json::Value> {
@@ -47,7 +45,6 @@ async fn get_monitoring_status(
     }))
 }
 
-/// 获取当前系统指标
 async fn get_current_metrics(
     State(monitor): State<Arc<MonitorService>>,
 ) -> Json<serde_json::Value> {
@@ -59,17 +56,15 @@ async fn get_current_metrics(
     }))
 }
 
-/// 获取历史指标数据
 async fn get_metrics_history(
     State(monitor): State<Arc<MonitorService>>,
 ) -> Json<serde_json::Value> {
     let history = monitor.get_metrics_history().await;
 
-    // 只返回最近24小时的数据
     let recent_history: Vec<&SystemMetrics> = history
         .iter()
         .rev()
-        .take(1440) // 24小时 * 60分钟
+        .take(1440)
         .collect();
 
     Json(json!({
@@ -82,11 +77,9 @@ async fn get_metrics_history(
     }))
 }
 
-/// 获取健康状态
 async fn get_health_status(State(monitor): State<Arc<MonitorService>>) -> Json<serde_json::Value> {
     let mut result = HealthCheckResult::new();
 
-    // 检查OCR服务状态
     match monitor.get_ocr_status().await {
         Ok(healthy) => {
             result.overall_healthy = healthy;
@@ -103,7 +96,6 @@ async fn get_health_status(State(monitor): State<Arc<MonitorService>>) -> Json<s
     }))
 }
 
-/// 获取OCR服务状态
 async fn get_ocr_status(State(monitor): State<Arc<MonitorService>>) -> Json<serde_json::Value> {
     let health_checker = super::health::HealthChecker::new();
 
@@ -116,22 +108,18 @@ async fn get_ocr_status(State(monitor): State<Arc<MonitorService>>) -> Json<serd
         "last_check": chrono::Utc::now()
     });
 
-    // 检查端口监听
     if let Ok(port_ok) = health_checker.check_port_listening().await {
         status["port_listening"] = json!(port_ok);
     }
 
-    // 检查API响应
     if let Ok(api_ok) = health_checker.check_api_health().await {
         status["api_responsive"] = json!(api_ok);
     }
 
-    // 测量响应时间
     if let Ok(response_time) = health_checker.measure_api_response_time().await {
         status["response_time_ms"] = json!(response_time);
     }
 
-    // 获取进程信息
     if let Ok(Some(process_info)) = health_checker.get_process_info().await {
         status["process_info"] = json!(process_info);
         status["running"] = json!(true);
@@ -143,7 +131,6 @@ async fn get_ocr_status(State(monitor): State<Arc<MonitorService>>) -> Json<serd
     }))
 }
 
-/// 获取系统信息
 async fn get_system_info() -> Json<serde_json::Value> {
     use sysinfo::System;
 
@@ -173,7 +160,6 @@ async fn get_system_info() -> Json<serde_json::Value> {
     }))
 }
 
-/// 监控仪表盘数据
 pub async fn get_dashboard_data(
     State(monitor): State<Arc<MonitorService>>,
 ) -> Json<serde_json::Value> {
@@ -181,7 +167,6 @@ pub async fn get_dashboard_data(
     let history = monitor.get_metrics_history().await;
     let ocr_healthy = monitor.get_ocr_status().await.unwrap_or(false);
 
-    // 计算趋势数据
     let cpu_trend: Vec<f32> = history.iter().rev().take(60).map(|m| m.cpu_usage).collect();
     let memory_trend: Vec<f32> = history
         .iter()

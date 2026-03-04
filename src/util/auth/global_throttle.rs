@@ -1,5 +1,3 @@
-//! 全局限流控制模块
-//! 提供系统级请求限流功能，仅限管理员操作
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -7,7 +5,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::RwLock;
 use tracing::{info, warn};
 
-/// 全局限流守卫
 pub struct GlobalThrottleGuard {
     enabled: AtomicBool,
     max_requests: AtomicU32,
@@ -23,7 +20,6 @@ struct ThrottleState {
     reason: Option<String>,
 }
 
-/// 限流状态响应
 #[derive(Debug, Clone, Serialize)]
 pub struct ThrottleStatus {
     pub enabled: bool,
@@ -35,7 +31,6 @@ pub struct ThrottleStatus {
     pub reason: Option<String>,
 }
 
-/// 启用限流请求
 #[derive(Debug, Deserialize)]
 pub struct EnableThrottleRequest {
     pub max_requests: u32,
@@ -43,7 +38,6 @@ pub struct EnableThrottleRequest {
     pub reason: Option<String>,
 }
 
-/// 限流检查结果
 pub enum ThrottleCheckResult {
     Allowed,
     Blocked { current: u32, max: u32 },
@@ -60,7 +54,6 @@ impl GlobalThrottleGuard {
         }
     }
 
-    /// 检查请求是否被限流
     pub fn check(&self) -> ThrottleCheckResult {
         if !self.enabled.load(Ordering::Relaxed) {
             return ThrottleCheckResult::Allowed;
@@ -78,7 +71,6 @@ impl GlobalThrottleGuard {
         }
     }
 
-    /// 启用限流
     pub fn enable(&self, max_requests: u32, operator: &str, reason: Option<String>) {
         self.max_requests.store(max_requests, Ordering::Relaxed);
         self.current_count.store(0, Ordering::Relaxed);
@@ -104,7 +96,6 @@ impl GlobalThrottleGuard {
         );
     }
 
-    /// 解除限流
     pub fn disable(&self, operator: &str) -> (u32, u32, i64) {
         let blocked = self.blocked_count.load(Ordering::Relaxed);
         let processed = self.current_count.load(Ordering::Relaxed);
@@ -140,7 +131,6 @@ impl GlobalThrottleGuard {
         (blocked, processed, duration)
     }
 
-    /// 获取当前状态
     pub fn status(&self) -> ThrottleStatus {
         let state = self.state.read().ok();
 
@@ -157,7 +147,6 @@ impl GlobalThrottleGuard {
         }
     }
 
-    /// 获取全局实例
     pub fn global() -> &'static Self {
         use std::sync::OnceLock;
         static INSTANCE: OnceLock<GlobalThrottleGuard> = OnceLock::new();

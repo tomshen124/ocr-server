@@ -1,5 +1,3 @@
-//! 文件管理模块
-//! 处理文件上传、下载、预审结果展示等功能
 
 use crate::db::traits::{MaterialFileFilter, MaterialFileRecord, PreviewRecord, PreviewStatus};
 use crate::model::evaluation::PreviewEvaluationResult;
@@ -26,19 +24,16 @@ use tracing::{info, warn};
 use url::Url;
 use rand::{distributions::Alphanumeric, rngs::OsRng, Rng};
 
-/// 文件上传接口
 pub async fn upload(multipart: Multipart) -> impl IntoResponse {
     let result = crate::model::ocr::upload(multipart).await;
     result.into_json()
 }
 
-/// 文件下载接口
 pub async fn download(Query(goto): Query<Goto>) -> impl IntoResponse {
     let result = PreviewBody::download(goto).await;
     result.map_err(|err| ServerError::Custom(err.to_string()))
 }
 
-/// 第三方系统回调处理 (POST方式，用于预审完成通知)
 pub async fn third_party_callback(
     headers: axum::http::HeaderMap,
     Json(callback_data): Json<serde_json::Value>,
@@ -49,19 +44,16 @@ pub async fn third_party_callback(
         chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
     );
 
-    // 记录请求头信息
     tracing::info!("请求头信息:");
     for (name, value) in headers.iter() {
         let header_name = name.as_str();
         let header_value = value.to_str().unwrap_or("无法解析");
 
-        // 记录关键头部信息
         if header_name.to_lowercase().contains("content")
             || header_name.to_lowercase().contains("user-agent")
             || header_name.to_lowercase().contains("authorization")
             || header_name.to_lowercase().contains("x-")
         {
-            // 敏感信息脱敏
             let safe_value = if header_name.to_lowercase().contains("auth")
                 || header_name.to_lowercase().contains("token")
             {
@@ -77,14 +69,12 @@ pub async fn third_party_callback(
         }
     }
 
-    // 记录回调数据
     tracing::info!("回调数据结构:");
     tracing::info!(
         "{}",
         serde_json::to_string_pretty(&callback_data).unwrap_or_default()
     );
 
-    // 分析回调数据字段
     tracing::info!("数据字段分析:");
     for (key, value) in callback_data.as_object().unwrap_or(&serde_json::Map::new()) {
         match value {
@@ -101,7 +91,6 @@ pub async fn third_party_callback(
         }
     }
 
-    // 处理预审相关信息
     if let Some(preview_id) = callback_data.get("previewId").and_then(|v| v.as_str()) {
         tracing::info!("[ok] 第三方系统预审完成通知: {}", preview_id);
 
@@ -116,14 +105,12 @@ pub async fn third_party_callback(
             tracing::info!("第三方请求ID: {}", third_party_id);
         }
 
-        // 检查是否有材料URL信息
         if let Some(materials) = callback_data.get("materials").and_then(|v| v.as_array()) {
             tracing::info!("材料信息: {} 个材料", materials.len());
             for (i, material) in materials.iter().enumerate() {
                 if let Some(url) = material.get("url").and_then(|v| v.as_str()) {
                     tracing::info!("  材料{}: {}", i + 1, url);
 
-                    // 分析URL特征
                     if let Ok(parsed_url) = url::Url::parse(url) {
                         tracing::info!("    域名: {}", parsed_url.host_str().unwrap_or("未知"));
                         if let Some(query) = parsed_url.query() {
@@ -137,7 +124,6 @@ pub async fn third_party_callback(
 
     tracing::info!("=== 第三方系统回调处理完成 ===");
 
-    // 返回成功响应（模拟第三方系统接收成功）
     Json(serde_json::json!({
         "success": true,
         "message": "回调接收成功",
@@ -145,7 +131,6 @@ pub async fn third_party_callback(
     }))
 }
 
-/// 获取预审结果详情（用于政务风格展示页面）
 pub async fn get_preview_result(
     Path(preview_id): Path<String>,
     State(state): State<AppState>,
@@ -154,7 +139,6 @@ pub async fn get_preview_result(
 
     match state.database.get_preview_record(&preview_id).await {
         Ok(Some(preview)) => {
-            // 解析评估结果（如果存在）
             let evaluation_json = preview
                 .evaluation_result
                 .as_ref()
@@ -169,7 +153,6 @@ pub async fn get_preview_result(
                 crate::api::utils::sanitize_evaluation_result(eval);
             }
 
-            // 如果状态已完成但 evaluation 为空，增加告警日志，提示前端等待
             if preview.status == PreviewStatus::Completed && preview.evaluation_result.is_none() {
                 warn!(
                     preview_id = %preview_id,
@@ -177,7 +160,6 @@ pub async fn get_preview_result(
                 );
             }
 
-            // 构建政务风格的预审结果数据
             let result_data = serde_json::json!({
                 "preview_id": preview_id,
                 "applicant": evaluation_json
@@ -199,13 +181,10 @@ pub async fn get_preview_result(
                 "status": preview.status,
                 "created_at": preview.created_at,
 
-                // [image] 增强材料数据，包含图片信息
                 "materials": build_enhanced_materials(evaluation_struct.as_ref(), &preview, &preview_id),
 
-                // [doc] 文档信息 - 新增OCR图片支持
                 "documents": build_document_list(evaluation_struct.as_ref(), &preview, &preview_id),
 
-                // [stats] 基本统计信息
                 "statistics": {
                     "total_materials": evaluation_struct.as_ref()
                         .map(|eval| eval.material_results.len())
@@ -537,7 +516,6 @@ fn is_self_preview_download_url(url: &str, preview_id: &str) -> bool {
         return path.ends_with(&format!("/api/preview/download/{}", preview_id));
     }
 
-    // 相对路径的简单判断
     url.contains("/api/preview/download/") && url.contains(preview_id)
 }
 
@@ -600,7 +578,6 @@ fn parse_external_url(source: &str, value: &str) -> Option<Url> {
     }
 }
 
-/// 下载预审报告
 pub async fn download_preview_report(
     Path(preview_id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
@@ -626,7 +603,6 @@ pub async fn download_preview_report(
                     .map(IntoResponse::into_response)
             };
 
-            // 准备回退HTML内容 (使用 async 版本以解析 OSS URL)
             let report_html =
                 render_report_html_enriched(&preview, &state.database, &state.storage).await;
             let fallback_reason = if report_html.is_some() {
@@ -650,7 +626,6 @@ pub async fn download_preview_report(
 
             match format.as_str() {
                 "pdf" => {
-                    // 🎯 第一步：优先检查本地PDF文件
                     tracing::debug!(
                         preview_id = %preview_id,
                         "🔍 [本地查找] 检查本地PDF文件: preview/{}.pdf",
@@ -688,7 +663,6 @@ pub async fn download_preview_report(
                         }
                     }
 
-                    // 🔄 第二步：尝试按需生成PDF（基于 evaluation_result 渲染的HTML）
                     tracing::warn!(
                         preview_id = %preview_id,
                         "⚠️  [本地缺失] 本地PDF文件不存在，尝试按需生成"
@@ -706,7 +680,6 @@ pub async fn download_preview_report(
                         }
                     }
 
-                    // 🔄 第三步：本地文件不存在，尝试外部链接
                     tracing::warn!(
                         preview_id = %preview_id,
                         "⚠️  [按需生成失败] 检查外部下载地址"
@@ -773,7 +746,6 @@ pub async fn download_preview_report(
                         );
                     }
 
-                    // 🧭 第三步：尝试使用已生成的本地HTML作为兜底
                     if let Some(html_path) = resolve_preview_file(&preview_id, "html") {
                         tracing::info!(
                             preview_id = %preview_id,
@@ -795,7 +767,6 @@ pub async fn download_preview_report(
                         }
                     }
 
-                    // 🛡️ 第三步：最终回退为生成的HTML
                     tracing::info!(
                         preview_id = %preview_id,
                         "🔄 [最终回退] 本地文件和外部链接都不可用，返回生成的HTML提示页面"
@@ -804,7 +775,6 @@ pub async fn download_preview_report(
                     build_html_download_response(&preview_id, html_content)
                 }
                 "html" => {
-                    // 🎯 第一步：优先检查本地HTML文件
                     tracing::debug!(
                         preview_id = %preview_id,
                         "🔍 [本地查找] 检查本地HTML文件: preview/{}.html",
@@ -836,7 +806,6 @@ pub async fn download_preview_report(
                                     "❌ [读取失败] 本地HTML文件读取失败，尝试外部链接"
                                 );
 
-                                // HTML读取失败，尝试外部链接
                                 if let Some(normalized) = canonicalize_external_url(
                                     &preview.preview_url,
                                     monitor_session_id,
@@ -867,7 +836,6 @@ pub async fn download_preview_report(
                         }
                     }
 
-                    // 🔄 第二步：本地文件不存在，尝试外部链接
                     tracing::warn!(
                         preview_id = %preview_id,
                         "⚠️  [本地缺失] 本地HTML文件不存在，检查外部预览地址"
@@ -908,7 +876,6 @@ pub async fn download_preview_report(
                         );
                     }
 
-                    // 🛡️ 第三步：最终回退为生成的HTML
                     tracing::info!(
                         preview_id = %preview_id,
                         "🔄 [最终回退] 本地文件和外部链接都不可用，返回生成的HTML内容"
@@ -944,7 +911,6 @@ pub async fn download_preview_report(
     }
 }
 
-/// 获取OCR处理后的图片
 pub async fn get_ocr_image(
     Path((pdf_name, page_index)): Path<(String, usize)>,
 ) -> impl IntoResponse {
@@ -976,7 +942,6 @@ pub async fn get_ocr_image(
         Err(e) => {
             tracing::warn!("[fail] OCR图片不存在: {:?} - {}", image_path, e);
 
-            // 返回默认的文档占位图
             let default_image = include_bytes!("../../static/images/智能预审_审核依据材料1.3.png");
             let response = Response::builder()
                 .header("Content-Type", "image/png")
@@ -994,17 +959,14 @@ pub async fn get_ocr_image(
     }
 }
 
-/// 获取预审文档的缩略图
 pub async fn get_preview_thumbnail(
     Path((preview_id, page_index)): Path<(String, usize)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     tracing::info!("获取预审缩略图: {} 页码: {}", preview_id, page_index);
 
-    // 先尝试从数据库获取预审记录，获取原始文件名
     match state.database.get_preview_record(&preview_id).await {
         Ok(Some(preview)) => {
-            // 使用文件名生成图片路径
             let file_name_base = preview
                 .file_name
                 .split('.')
@@ -1013,20 +975,17 @@ pub async fn get_preview_thumbnail(
             get_ocr_image(Path((file_name_base.to_string(), page_index))).await
         }
         _ => {
-            // 如果无法获取记录，尝试直接使用preview_id
             get_ocr_image(Path((preview_id, page_index))).await
         }
     }
 }
 
-/// 获取材料预览图片（智能匹配OCR结果）
 pub async fn get_material_preview(
     Path((preview_id, material_name)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     tracing::info!("获取材料预览图片: {} 材料: {}", preview_id, material_name);
 
-    // 优先从材料文件表中查找已落库的附件
     if let Ok(records) = state
         .database
         .list_material_files(&MaterialFileFilter {
@@ -1042,7 +1001,6 @@ pub async fn get_material_preview(
         }
     }
 
-    // 兼容旧逻辑：回退到 OCR 生成的第一页缩略图
     match state.database.get_preview_record(&preview_id).await {
         Ok(Some(preview)) => {
             let file_name_base = preview
@@ -1173,7 +1131,6 @@ async fn serve_material_from_storage(
     }
 }
 
-/// 代理存储文件，防止直接暴露 OSS/本地存储路径
 pub async fn proxy_storage_file(
     Path(encoded_key): Path<String>,
     State(state): State<AppState>,
@@ -1224,7 +1181,6 @@ pub async fn proxy_storage_file(
     }
 }
 
-/// 构建增强的材料数据，包含OCR图片信息
 fn build_enhanced_materials(
     evaluation: Option<&PreviewEvaluationResult>,
     preview: &crate::db::PreviewRecord,
@@ -1276,7 +1232,6 @@ fn build_enhanced_materials(
             .collect();
     }
 
-    // 如果没有材料数据，创建默认材料项
     let file_name_base = preview
         .file_name
         .split('.')
@@ -1308,7 +1263,6 @@ fn build_enhanced_materials(
     })]
 }
 
-/// 构建材料子项列表
 fn build_material_items_from_result(
     material: &crate::model::evaluation::MaterialEvaluationResult,
 ) -> Vec<serde_json::Value> {
@@ -1324,7 +1278,6 @@ fn build_material_items_from_result(
     Vec::new()
 }
 
-/// 构建文档列表，包含OCR图片信息
 fn build_document_list(
     evaluation: Option<&PreviewEvaluationResult>,
     preview: &crate::db::PreviewRecord,
@@ -1358,7 +1311,6 @@ fn build_document_list(
         .unwrap_or(&preview.file_name);
     let mut documents = Vec::new();
 
-    // 检查OCR图片数量
     let total_pages = get_total_pages(preview);
 
     for page_index in 0..total_pages {
@@ -1378,7 +1330,6 @@ fn build_document_list(
         }
     }
 
-    // 如果没有OCR图片，提供默认文档
     if documents.is_empty() {
         documents.push(serde_json::json!({
             "id": format!("doc_{}_default", preview_id),
@@ -1393,7 +1344,6 @@ fn build_document_list(
     documents
 }
 
-/// 检查OCR图片是否存在
 fn check_ocr_image_exists(file_name: &str, page_index: usize) -> bool {
     let file_name_base = file_name.split('.').next().unwrap_or(file_name);
     let image_path = CURRENT_DIR
@@ -1402,12 +1352,10 @@ fn check_ocr_image_exists(file_name: &str, page_index: usize) -> bool {
     image_path.exists()
 }
 
-/// 检查是否有OCR图片
 fn check_ocr_images_exist(preview: &crate::db::PreviewRecord) -> bool {
     check_ocr_image_exists(&preview.file_name, 0)
 }
 
-/// 获取总页数
 fn get_total_pages(preview: &crate::db::PreviewRecord) -> usize {
     let file_name_base = preview
         .file_name
@@ -1420,10 +1368,8 @@ fn get_total_pages(preview: &crate::db::PreviewRecord) -> usize {
         return 1;
     }
 
-    // 查找匹配的图片文件
     let mut page_count = 0;
     for index in 0..50 {
-        // 假设最多50页
         let image_path = images_dir.join(format!("{}_{}.jpg", file_name_base, index));
         if image_path.exists() {
             page_count = index + 1;
@@ -1432,7 +1378,7 @@ fn get_total_pages(preview: &crate::db::PreviewRecord) -> usize {
         }
     }
 
-    std::cmp::max(page_count, 1) // 至少1页
+    std::cmp::max(page_count, 1)
 }
 
 fn material_status_from_code(code: u64) -> &'static str {
@@ -1443,7 +1389,6 @@ fn material_status_from_code(code: u64) -> &'static str {
     }
 }
 
-/// 生成外部分享一次性URL（需要监控后台登录）
 pub async fn create_preview_share_url(
     Path(preview_id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
@@ -1539,7 +1484,6 @@ pub async fn create_preview_share_url(
     }))
 }
 
-/// 消费外部分享一次性URL（免登录，打开后立即失效）
 pub async fn download_shared_preview_report(
     Path(token): Path<String>,
     State(state): State<AppState>,

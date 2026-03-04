@@ -1,60 +1,45 @@
-// 前端配置文件 - 统一管理API接口和数据映射
 (() => {
-// API 基础配置
 const API_CONFIG = {
     baseUrl: '/api',
     timeout: 30000,
     
-    // API 端点映射
     endpoints: {
-        // 预审相关接口
         preview: '/preview',
         previewData: '/preview/data/{previewId}',
         previewStatus: '/preview/status/{previewId}',
         previewView: '/preview/view/{previewId}',
         
-        // 认证相关接口
         authStatus: '/auth/status',
         authLogout: '/auth/logout',
-        verifyUser: '/verify_user',  // 使用debug ticket进行认证
+        verifyUser: '/verify_user',
         ssoLogin: '/sso/login',
         
-        // 移除mockLogin - 使用debug ticket代替
         
-        // 系统相关接口
         health: '/health',
         healthDetails: '/health/details',
         config: '/config/frontend',
         themes: '/themes',
         
-        // 队列状态接口 - 新增并发控制监控
         queueStatus: '/queue/status',
         
-        // 下载接口
         download: '/download',
         
-        // 🖼️ 图片服务接口 - 新增OCR图片支持
         ocrImage: '/files/ocr-image/{pdfName}/{pageIndex}',
         previewThumbnail: '/files/preview-thumbnail/{previewId}/{pageIndex}',
         materialPreview: '/files/material-preview/{previewId}/{materialName}',
         
-        // 测试接口
         mockData: '/test/mock/data'
     }
 };
 
-// 数据映射配置
 const DATA_MAPPING = {
-    // 后端数据字段到前端字段的映射
     preview: {
-        // 基本信息映射
         basicInfo: {
             applicant: ['applicant_name', 'legalRep.FDDBR', 'self.DWMC'],
             applicationType: ['matter_name', 'application_type'],
             auditOrgan: ['audit_organ', () => '智能预审系统']
         },
         
-        // 材料状态映射
         statusMapping: {
             'success': 'passed',
             'passed': 'passed',
@@ -69,7 +54,6 @@ const DATA_MAPPING = {
             'running': 'loading'
         },
         
-        // 审核状态映射
         auditStatusMapping: {
             'completed': 'completed',
             'finished': 'completed', 
@@ -85,9 +69,7 @@ const DATA_MAPPING = {
     }
 };
 
-// 图片路径配置
 const IMAGE_PATHS = {
-    // 根据不同环境的图片路径配置
     development: {
         base: '/static/images/',
         ocr: '/static/images/ocr/',
@@ -100,9 +82,7 @@ const IMAGE_PATHS = {
     }
 };
 
-// 主题配置
 const THEME_CONFIG = {
-    // 预审主题映射
     themes: {
         'theme_001': '工程渣土准运证核准',
         'theme_002': '工程渣土消纳场地登记',
@@ -112,7 +92,6 @@ const THEME_CONFIG = {
         'theme_006': '利用广场等公共场所举办文化、商业等活动许可'
     },
     
-    // 主题到matter_id的映射
     matterMapping: {
         'theme_001': '101104353',
         'theme_002': '101306405', 
@@ -123,7 +102,6 @@ const THEME_CONFIG = {
     }
 };
 
-// 错误消息配置
 const ERROR_MESSAGES = {
     network: '网络连接失败，请检查网络设置',
     timeout: '请求超时，请稍后重试',
@@ -135,13 +113,10 @@ const ERROR_MESSAGES = {
     permission: '权限不足，无法访问该资源'
 };
 
-// 工具函数
 const ConfigUtils = {
-    // 获取API端点URL
     getApiUrl(endpoint, params = {}) {
         let url = API_CONFIG.baseUrl + API_CONFIG.endpoints[endpoint];
         
-        // 替换URL中的参数
         Object.keys(params).forEach(key => {
             url = url.replace(`{${key}}`, params[key]);
         });
@@ -149,13 +124,11 @@ const ConfigUtils = {
         return url;
     },
     
-    // 根据环境获取图片路径
     getImagePath(type = 'base') {
         const env = this.getEnvironment();
         return IMAGE_PATHS[env][type] || IMAGE_PATHS.production[type];
     },
     
-    // 检测当前环境
     getEnvironment() {
         const hostname = window.location.hostname;
         if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('myide.io')) {
@@ -164,7 +137,6 @@ const ConfigUtils = {
         return 'production';
     },
     
-    // 映射数据字段
     mapField(data, fieldMapping) {
         if (typeof fieldMapping === 'function') {
             return fieldMapping(data);
@@ -185,7 +157,6 @@ const ConfigUtils = {
         return this.getNestedValue(data, fieldMapping);
     },
     
-    // 获取嵌套对象的值
     getNestedValue(obj, path) {
         if (!obj || !path) return null;
         
@@ -203,18 +174,15 @@ const ConfigUtils = {
         return value;
     },
     
-    // 映射状态
     mapStatus(status, mapping) {
         return mapping[status] || status;
     },
     
-    // 获取错误消息
     getErrorMessage(errorType, defaultMessage = '') {
         return ERROR_MESSAGES[errorType] || defaultMessage;
     }
 };
 
-// 导出配置
 window.CONFIG = {
     API_CONFIG,
     DATA_MAPPING,
@@ -224,7 +192,6 @@ window.CONFIG = {
     ConfigUtils
 };
 
-// 为了兼容性，也导出到全局
 window.ApiConfig = API_CONFIG;
 window.DataMapping = DATA_MAPPING;
 window.ConfigUtils = ConfigUtils;

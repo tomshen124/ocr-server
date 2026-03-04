@@ -1,5 +1,3 @@
-//! 数据库初始化模块
-//! 负责根据配置创建和初始化数据库连接
 
 use crate::util::config::Config;
 use crate::{db, storage};
@@ -7,17 +5,14 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-/// 数据库初始化器
 pub struct DatabaseInitializer;
 
 impl DatabaseInitializer {
-    /// 计算DM网关URL：优先环境变量；否则使用本机IP避免localhost
     fn resolve_dm_gateway_url(config: &Config) -> String {
         if let Ok(url) = std::env::var("DM_GATEWAY_URL") {
             return url;
         }
 
-        // 候选IP: HOST_IP > OCR_HOST > config.server.host
         let candidate_ip = std::env::var("HOST_IP")
             .ok()
             .or_else(|| std::env::var("OCR_HOST").ok())
@@ -42,24 +37,19 @@ impl DatabaseInitializer {
         tracing::info!("[compass] 解析DM网关URL: {}", url);
         url
     }
-    /// 根据配置创建数据库实例
     pub async fn create_from_config(config: &Config) -> Result<Arc<dyn db::Database>> {
         info!("[cabinet] 初始化数据库连接...");
 
-        // [brain] 优先使用新的统一数据库配置
         if let Some(database_config) = &config.database {
             info!("[ok] 使用新的统一数据库配置");
             return Self::create_from_unified_config(database_config).await;
         }
 
-        // 兼容旧的DMSql配置
         info!("[doc] 使用兼容的DMSql配置模式");
         info!("达梦数据库开关: {}", config.dm_sql.enabled);
         info!("达梦数据库严格模式: {}", config.dm_sql.strict_mode);
 
-        // 根据配置创建数据库配置
         let db_config = if config.dm_sql.enabled && !config.dm_sql.database_host.is_empty() {
-            // 使用智能模式：会根据编译特性自动选择达梦数据库
             info!(
                 "[ok] 达梦数据库已启用，使用智能模式: {}:{}",
                 config.dm_sql.database_host, config.dm_sql.database_port
@@ -93,7 +83,6 @@ impl DatabaseInitializer {
             }
             #[cfg(not(feature = "dm_go"))]
             {
-                // 没有dm_go特性时，自动降级到SQLite
                 warn!("[warn] 达梦数据库配置存在但缺少dm_go特性，自动降级到SQLite");
                 db::factory::DatabaseConfig {
                     db_type: db::factory::DatabaseType::Sqlite,
@@ -104,7 +93,6 @@ impl DatabaseInitializer {
                 }
             }
         } else {
-            // 使用 SQLite 作为降级数据库
             if config.dm_sql.enabled {
                 info!("[warn] 达梦数据库已启用但配置不完整，降级到 SQLite");
             } else {
@@ -119,7 +107,6 @@ impl DatabaseInitializer {
             }
         };
 
-        // 尝试创建数据库连接
         let database_result = db::factory::create_database(&db_config).await;
 
         let database = match database_result {
@@ -131,13 +118,11 @@ impl DatabaseInitializer {
                 let error_msg = format!("数据库连接失败: {}", e);
 
                 if config.dm_sql.enabled && config.dm_sql.strict_mode {
-                    // 严格模式下，达梦数据库连接失败则服务启动失败
                     return Err(anyhow::anyhow!(
                         "[red] 严格模式: 达梦数据库连接失败，服务停止启动: {}",
                         e
                     ));
                 } else if config.dm_sql.enabled {
-                    // 非严格模式下，降级到 SQLite
                     tracing::warn!("[warn] 达梦数据库连接失败，自动降级到 SQLite: {}", e);
 
                     let sqlite_config = db::factory::DatabaseConfig {
@@ -167,7 +152,6 @@ impl DatabaseInitializer {
             }
         };
 
-        // 如果启用了故障转移，包装数据库
         if config.failover.database.enabled {
             info!("[loop] 数据库故障转移已启用");
             let failover_db =
@@ -180,7 +164,6 @@ impl DatabaseInitializer {
         }
     }
 
-    /// [brain] 使用新的统一数据库配置创建数据库
     async fn create_from_unified_config(
         database_config: &crate::util::config::DatabaseConfig,
     ) -> Result<Arc<dyn db::Database>> {
@@ -193,7 +176,6 @@ impl DatabaseInitializer {
             database_config.database_type
         );
 
-        // 转换配置格式
         let db_config =
             match database_config.database_type.as_str() {
                 "sqlite" => {
@@ -246,7 +228,6 @@ impl DatabaseInitializer {
                     info!("[ok] 智能数据库模式启用");
                     #[cfg(feature = "dm_go")]
                     {
-                        // 优先尝试达梦数据库
                         if let Some(dm_config) = &database_config.dm {
                             info!("[brain] 启动智能数据库连接模式");
                             info!("[loop] 尝试智能达梦数据库连接...");
@@ -294,7 +275,6 @@ impl DatabaseInitializer {
                     }
                     #[cfg(not(feature = "dm_go"))]
                     {
-                        // 没有dm_go特性时，智能模式自动降级到SQLite
                         info!("[warn] 智能模式启用但缺少dm_go特性，自动降级到SQLite");
                         let sqlite_config = database_config
                             .sqlite
@@ -328,7 +308,6 @@ impl DatabaseInitializer {
                 }
             };
 
-        // 尝试创建数据库连接，智能故障转移
         let database = match db::factory::create_database(&db_config).await {
             Ok(database) => {
                 info!("[ok] 统一数据库配置连接成功");
@@ -337,9 +316,7 @@ impl DatabaseInitializer {
             Err(e) => {
                 warn!("[warn] 主数据库连接失败，尝试故障转移: {}", e);
 
-                // 智能故障转移逻辑
                 if db_config.dm.is_some() {
-                    // 达梦数据库连接失败，自动降级到SQLite
                     if let Some(sqlite_config) = &db_config.sqlite {
                         info!("[loop] 网关连接失败，智能降级到SQLite数据库");
                         let fallback_config = db::factory::DatabaseConfig {
@@ -361,7 +338,6 @@ impl DatabaseInitializer {
                             }
                         }
                     } else {
-                        // 没有SQLite配置，创建默认的SQLite数据库
                         warn!("[loop] 网关连接失败且未配置SQLite，创建默认本地数据库");
                         let default_sqlite_config = db::factory::DatabaseConfig {
                             db_type: db::factory::DatabaseType::Sqlite,
@@ -394,34 +370,25 @@ impl DatabaseInitializer {
         Ok(database)
     }
 
-    /// 验证数据库连接
     pub async fn validate_connection(database: &Arc<dyn db::Database>) -> Result<()> {
         info!("[search] 验证数据库连接...");
 
-        // 这里可以添加数据库连接验证逻辑
-        // 例如执行简单的查询或健康检查
 
         info!("[ok] 数据库连接验证成功");
         Ok(())
     }
 
-    /// 初始化数据库表结构（如果需要）
     pub async fn initialize_schema(database: &Arc<dyn db::Database>) -> Result<()> {
         info!("[clipboard] 检查数据库表结构...");
 
-        // 这里可以添加表结构初始化逻辑
-        // 例如创建必要的表或执行迁移
 
         info!("[ok] 数据库表结构检查完成");
         Ok(())
     }
 
-    /// 执行数据库健康检查
     pub async fn health_check(database: &Arc<dyn db::Database>) -> Result<DatabaseHealth> {
-        // 执行基本的数据库健康检查
         let start_time = std::time::Instant::now();
 
-        // 尝试执行简单查询（具体实现根据数据库类型而定）
         let connection_test_result = Self::test_connection(database).await;
         let response_time = start_time.elapsed();
 
@@ -433,32 +400,22 @@ impl DatabaseInitializer {
         })
     }
 
-    /// 测试数据库连接
     async fn test_connection(database: &Arc<dyn db::Database>) -> Result<()> {
-        // 这里应该根据具体的数据库实现来执行连接测试
-        // 暂时返回成功，实际实现中应该调用数据库的健康检查方法
 
-        // 模拟连接测试
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
         Ok(())
     }
 }
 
-/// 数据库健康状态
 #[derive(Debug, Clone)]
 pub struct DatabaseHealth {
-    /// 是否健康
     pub is_healthy: bool,
-    /// 响应时间（毫秒）
     pub response_time_ms: u64,
-    /// 错误消息（如果有）
     pub error_message: Option<String>,
-    /// 最后检查时间
     pub last_check: chrono::DateTime<chrono::Utc>,
 }
 
 impl DatabaseHealth {
-    /// 创建健康状态
     pub fn healthy(response_time_ms: u64) -> Self {
         Self {
             is_healthy: true,
@@ -468,7 +425,6 @@ impl DatabaseHealth {
         }
     }
 
-    /// 创建不健康状态
     pub fn unhealthy(error: String) -> Self {
         Self {
             is_healthy: false,

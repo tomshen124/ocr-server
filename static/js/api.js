@@ -1,4 +1,3 @@
-// API 接口管理模塊
 (() => {
 class ApiService {
     constructor() {
@@ -60,7 +59,6 @@ class ApiService {
         return url;
     }
 
-    // 通用請求方法
     async request(url, options = {}) {
         const config = {
             method: 'GET',
@@ -68,27 +66,23 @@ class ApiService {
                 'Content-Type': 'application/json',
                 ...options.headers
             },
-            credentials: 'include', // 重要：确保发送Cookie
+            credentials: 'include',
             timeout: this.timeout,
             ...options
         };
 
         try {
-            // 如果URL已经包含baseUrl或是绝对URL，不要重复添加
             const needPrefix = !(url.startsWith(this.baseUrl) || url.startsWith('http://') || url.startsWith('https://'));
             const requestUrl = needPrefix ? `${this.baseUrl}${url}` : url;
             const finalUrl = this.appendMonitorSessionParam(requestUrl);
             const response = await fetch(finalUrl, config);
 
-            // 尝试解析JSON（仅当响应类型为JSON时）
             const contentType = response.headers.get('content-type') || '';
             const isJson = contentType.includes('application/json');
             const parsed = isJson ? await response.json().catch(() => null) : null;
 
-            // 未认证统一处理（适配后端返回401或带redirect字段的JSON）
             if (!response.ok) {
                 if (response.status === 401) {
-                    // 优先使用后端提供的跳转地址
                     const redirectUrl = parsed?.redirect || parsed?.sso_url || '/api/sso/login';
                     this.showBackendAuthPrompt();
                     setTimeout(() => {
@@ -96,11 +90,9 @@ class ApiService {
                     }, 1000);
                     return { success: false, need_auth: true, data: null, message: '正在跳转到用户认证...' };
                 }
-                // 其他HTTP错误
                 return { success: false, data: parsed, message: `HTTP ${response.status}` };
             }
 
-            // 🎯 处理后端免登录检测响应（如POST /api/preview返回的need_auth）
             if (parsed && parsed.need_auth && parsed.sso_url) {
                 console.log('🔐 后端检测到需要用户认证，准备跳转认证页面');
                 this.showBackendAuthPrompt();
@@ -117,9 +109,7 @@ class ApiService {
         }
     }
 
-    // 显示后端认证提示
     showBackendAuthPrompt() {
-        // 移除可能存在的旧提示
         const existingPrompt = document.getElementById('backend-auth-prompt');
         if (existingPrompt) {
             existingPrompt.remove();
@@ -158,7 +148,6 @@ class ApiService {
             </div>
         `;
         
-        // 添加动画样式
         if (!document.getElementById('backend-auth-spinner-style')) {
             const style = document.createElement('style');
             style.id = 'backend-auth-spinner-style';
@@ -175,7 +164,6 @@ class ApiService {
         console.log('📢 显示后端认证提示');
     }
 
-    // 获取预审数据 - 映射到后端实际接口
     async getBasicInfo(previewId) {
         const url = this.utils.getApiUrl ? 
             this.utils.getApiUrl('previewData', { previewId }) : 
@@ -183,7 +171,6 @@ class ApiService {
         return await this.request(url);
     }
 
-    // 获取审核材料列表 - 映射到后端实际接口
     async getMaterialsList(previewId) {
         const url = this.utils.getApiUrl ? 
             this.utils.getApiUrl('previewData', { previewId }) : 
@@ -191,7 +178,6 @@ class ApiService {
         return await this.request(url);
     }
 
-    // 获取审核状态 - 映射到后端实际接口
     async getAuditStatus(previewId) {
         const url = this.utils.getApiUrl ? 
             this.utils.getApiUrl('previewData', { previewId }) : 
@@ -199,7 +185,6 @@ class ApiService {
         return await this.request(url);
     }
 
-    // 开始智能预审 - 映射到现有的预审接口
     async startAudit(requestData) {
         return await this.request(`/preview`, {
             method: 'POST',
@@ -207,12 +192,10 @@ class ApiService {
         });
     }
 
-    // 获取审核进度 - 映射到后端实际接口
     async getAuditProgress(previewId) {
         return await this.request(`/preview/data/${previewId}`);
     }
 
-    // 获取文档预览 - 支持数据或URL
     async getDocumentPreview(previewId, options = {}) {
         if (typeof options === 'number') {
             return this.getDocumentPreviewUrl(previewId, options);
@@ -227,32 +210,26 @@ class ApiService {
         return await this.request(`/preview/data/${previewId}`);
     }
 
-    // 导出材料 - 使用下载接口
     async exportMaterials(previewId) {
-        // 使用后端提供的下载路由：/api/preview/download/:preview_id?format=pdf
         const url = `${this.baseUrl}/preview/download/${encodeURIComponent(previewId)}?format=pdf`;
         window.open(url, '_blank');
         return { success: true, message: '下载已开始' };
     }
 
-    // 下载检查要素清单
     async downloadCheckList(previewId) {
         const url = `${this.baseUrl}/preview/download/${encodeURIComponent(previewId)}?format=pdf`;
         window.open(url, '_blank');
         return { success: true, message: '下载已开始' };
     }
 
-    // 获取前端配置
     async getFrontendConfig() {
         return await this.request('/config/frontend');
     }
 
-    // 检查认证状态
     async checkAuthStatus() {
         return await this.request('/auth/status');
     }
 
-    // 调试票据认证 - 替代模拟登录
     async debugTicketAuth(ticketId = 'debug_tk_e4a0dc3fcc8d464ba336b9bcb1ba2072') {
         return await this.request('/verify_user', {
             method: 'POST',
@@ -260,20 +237,17 @@ class ApiService {
         });
     }
 
-    // 获取系统队列状态 - 并发控制监控
     async getQueueStatus() {
         return await this.request('/queue/status');
     }
 
-    // 🖼️ 新增：获取材料图片
     getMaterialImage(previewId, materialName) {
         const url = this.utils.getApiUrl ? 
             this.utils.getApiUrl('materialPreview', { previewId, materialName }) : 
             `/files/material-preview/${previewId}/${materialName}`;
-        return url; // 直接返回URL供img标签使用
+        return url;
     }
 
-    // 新增：获取OCR处理后的图片
     getOcrImage(pdfName, pageIndex) {
         const url = this.utils.getApiUrl ? 
             this.utils.getApiUrl('ocrImage', { pdfName, pageIndex }) : 
@@ -281,7 +255,6 @@ class ApiService {
         return url;
     }
 
-    // 新增：获取预览缩略图
     getPreviewThumbnail(previewId, pageIndex) {
         const url = this.utils.getApiUrl ? 
             this.utils.getApiUrl('previewThumbnail', { previewId, pageIndex }) : 
@@ -289,7 +262,6 @@ class ApiService {
         return url;
     }
 
-    // 新增：构建文档预览URL
     getDocumentPreviewUrl(previewId, pageIndex = null) {
         if (pageIndex !== null) {
             return this.getPreviewThumbnail(previewId, pageIndex);
@@ -298,7 +270,6 @@ class ApiService {
         return `/preview/document/${encodedId}`;
     }
 
-    // 数据转换方法 - 将后端数据转换为前端格式
     transformPreviewData(backendData) {
         if (!backendData || !backendData.success) {
             return null;
@@ -310,7 +281,6 @@ class ApiService {
             return null;
         }
 
-        // 兼容后端 { success, data: {...} } 与直接返回实体两种格式
         const data =
             typeof payload === 'object' && payload !== null
                 ? payload.data || payload.record || payload
@@ -481,14 +451,12 @@ class ApiService {
             ),
         };
 
-        // 如果后端状态已完成但 evaluation_result/mat 数据缺失，标记为加载中，供前端轮询重试
         const statusRaw = (data.status || data.latest_status || '').toString().toLowerCase();
         const evaluationMissing =
             !evaluationResult ||
             (!materials.length &&
                 !(Array.isArray(data.materials) && data.materials.length));
         if (evaluationMissing && statusRaw === 'completed') {
-            // 后端已完成但结果缺失：标记为已完成并提示刷新/联系管理员，避免前端无限 loading
             auditStatus.status = 'completed';
             auditStatus.result = overallResult.result || 'completed';
             auditStatus.progress = auditStatus.progress || 100;
@@ -504,7 +472,6 @@ class ApiService {
         };
     }
 
-    // 构建材料子项列表
     buildMaterialItems(material) {
         if (material.items && Array.isArray(material.items)) {
             return material.items.map((item, index) => {
@@ -549,7 +516,6 @@ class ApiService {
             });
         }
         
-        // 如果没有子项，创建默认检查项
         return [{
             id: 1,
             name: material.name || '检查项',
@@ -1038,11 +1004,9 @@ class ApiService {
         if (!trimmed) {
             return '';
         }
-        // data/blob URL 直接返回，避免被拼接成站点前缀导致请求错误
         if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
             return trimmed;
         }
-        // 去除自定义scheme或前缀，如 zhzwdxt:http:// / zhzwdxt.http:// 等
         const customPrefixRegex = /^zhzwdxt[:\.\/]+/i;
         if (customPrefixRegex.test(trimmed)) {
             trimmed = trimmed.replace(customPrefixRegex, '');
@@ -1082,7 +1046,6 @@ class ApiService {
         return trimmed;
     }
 
-    // 从表单数据中提取值
     extractFormValue(data, fieldCode) {
         if (data.form_data && Array.isArray(data.form_data)) {
             const field = data.form_data.find(f => f.code === fieldCode);
@@ -1091,7 +1054,6 @@ class ApiService {
         return null;
     }
 
-    // 计算整体结果
     calculateOverallResult(evaluation) {
         if (!evaluation) {
             return 'passed';
@@ -1144,7 +1106,6 @@ class ApiService {
         return 'passed';
     }
 
-    // 生成状态消息
     generateStatusMessage(result, materialsCount) {
         switch (result) {
             case 'passed': return '智能预审通过，所有材料符合要求';
@@ -1157,7 +1118,6 @@ class ApiService {
         }
     }
 
-    // 状态映射 - 使用配置化映射
     mapStatus(backendStatus) {
         const statusMap = this.config.DATA_MAPPING?.preview?.statusMapping || {
             'success': 'passed',
@@ -1173,7 +1133,6 @@ class ApiService {
             statusMap[backendStatus] || 'passed';
     }
 
-    // 审核状态映射
     mapAuditStatus(backendStatus) {
         const statusMap = this.config.DATA_MAPPING?.preview?.auditStatusMapping || {
             'completed': 'completed',
@@ -1189,6 +1148,5 @@ class ApiService {
 
 }
 
-// 导出API服务实例
 window.apiService = new ApiService();
 })();

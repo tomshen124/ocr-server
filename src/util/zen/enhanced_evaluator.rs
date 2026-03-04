@@ -1,7 +1,4 @@
-//! 增强版OCR评估器
-//! 集成多阶段并发控制、资源预测和分布式链路追踪
 //!
-//! 暂时禁用以解决编译问题
 
 #[allow(dead_code)]
 pub struct EnhancedOcrEvaluator;
@@ -10,7 +7,6 @@ pub struct EnhancedOcrEvaluator;
 pub struct PreviewEvaluationResult;
 
 /*
-// 暂时注释掉实现，等基础编译通过后再启用
 
 use crate::util::processing::{
     multi_stage_controller::MULTI_STAGE_CONTROLLER,
@@ -27,5 +23,4 @@ use std::time::Instant;
 use std::sync::Arc;
 use tracing::{info, warn, error};
 
-// 实现代码将在后续版本中启用
 */

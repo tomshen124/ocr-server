@@ -1,5 +1,3 @@
-//! 配置结构定义模块
-//! 包含系统配置的所有数据结构
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -24,10 +22,8 @@ pub(crate) fn is_internal_host(host: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// 主配置结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    // 兼容旧配置字段，但标记为deprecated
     #[serde(default)]
     pub host: String,
     #[serde(default)]
@@ -41,7 +37,6 @@ pub struct Config {
     #[serde(default)]
     pub public_base_url: Option<String>,
 
-    // 新的服务器配置
     #[serde(default)]
     pub server: ServerConfig,
 
@@ -54,7 +49,6 @@ pub struct Config {
     #[serde(default)]
     pub dm_sql: DmSql,
 
-    // [brain] 新增：智能数据库配置 (v2024.12)
     #[serde(default)]
     pub database: Option<DatabaseConfig>,
     pub approve: Approve,
@@ -65,49 +59,48 @@ pub struct Config {
     pub monitoring: MonitoringConfig,
     pub third_party_access: ThirdPartyAccessConfig,
     pub failover: FailoverConfig,
-    pub api_enhancement: ApiEnhancementConfig, // 新增：API增强功能开关
+    pub api_enhancement: ApiEnhancementConfig,
     #[serde(default)]
-    pub concurrency: Option<ConcurrencyConfig>, // 新增：并发控制配置
+    pub concurrency: Option<ConcurrencyConfig>,
     #[serde(default)]
-    pub business_metrics: Option<BusinessMetricsConfig>, // 新增：业务指标配置
+    pub business_metrics: Option<BusinessMetricsConfig>,
     #[serde(default)]
-    pub user_data_encryption: UserDataEncryptionConfig, // NEW 用户数据加密配置
+    pub user_data_encryption: UserDataEncryptionConfig,
     #[serde(default)]
-    pub api_call_tracking: Option<ApiCallTrackingConfig>, // NEW API调用记录配置
+    pub api_call_tracking: Option<ApiCallTrackingConfig>,
     #[serde(default)]
-    pub report_export: ReportExportConfig, // NEW 报表导出开关
+    pub report_export: ReportExportConfig,
     #[serde(default)]
-    pub distributed_tracing: Option<DistributedTracingConfig>, // [search] 分布式链路追踪配置
+    pub distributed_tracing: Option<DistributedTracingConfig>,
     #[serde(default)]
-    pub download_limits: DownloadLimitsConfig, // NEW 下载/转换限制配置
+    pub download_limits: DownloadLimitsConfig,
     #[serde(default)]
-    pub ocr_engine: Option<OcrEngineConfig>, // NEW 本地OCR引擎配置（可选）
+    pub ocr_engine: Option<OcrEngineConfig>,
     #[serde(default)]
-    pub ocr_tuning: OcrTuningConfig, // NEW OCR质量调优（阈值/重试策略/日志）
+    pub ocr_tuning: OcrTuningConfig,
     #[serde(default)]
-    pub ocr_pool: OcrPoolConfig, // NEW OCR池配置
+    pub ocr_pool: OcrPoolConfig,
     #[serde(default)]
-    pub task_queue: TaskQueueConfig, // NEW 任务队列配置
+    pub task_queue: TaskQueueConfig,
     #[serde(default)]
-    pub worker_proxy: WorkerProxyConfig, // NEW Worker代理配置
+    pub worker_proxy: WorkerProxyConfig,
     #[serde(default)]
-    pub distributed: DistributedConfig, // NEW 分布式配置
+    pub distributed: DistributedConfig,
     #[serde(default)]
-    pub deployment: DeploymentConfig, // NEW 节点部署角色配置
+    pub deployment: DeploymentConfig,
     #[serde(default)]
-    pub master: MasterNodeConfig, // NEW 主节点专用配置
+    pub master: MasterNodeConfig,
     #[serde(default)]
-    pub dynamic_worker: Option<crate::util::dynamic_worker::DynamicWorkerConfig>, // [target] 动态Worker管理配置
+    pub dynamic_worker: Option<crate::util::dynamic_worker::DynamicWorkerConfig>,
     #[serde(default)]
-    pub outbox: OutboxConfig, // NEW Outbox事件队列配置
+    pub outbox: OutboxConfig,
     #[serde(default)]
-    pub service_watchdog: ServiceWatchdogConfig, // NEW 服务看门狗配置
+    pub service_watchdog: ServiceWatchdogConfig,
 
     #[serde(default)]
-    pub adaptive_concurrency: Option<AdaptiveConcurrencyConfig>, // NEW 自适应并发配置
+    pub adaptive_concurrency: Option<AdaptiveConcurrencyConfig>,
 }
 
-/// 节点部署模式配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploymentConfig {
     #[serde(default = "default_deployment_role")]
@@ -139,7 +132,6 @@ fn default_node_id() -> String {
     "node-01".to_string()
 }
 
-/// 节点角色定义
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum DeploymentRole {
@@ -155,7 +147,6 @@ impl Default for DeploymentRole {
     }
 }
 
-/// Outbox 事件队列配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutboxConfig {
     #[serde(default = "default_outbox_enabled")]
@@ -202,7 +193,6 @@ fn default_outbox_error_len() -> usize {
     512
 }
 
-/// 集群配置（预留扩展）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploymentClusterConfig {
     #[serde(default)]
@@ -227,7 +217,6 @@ fn default_cluster_discovery() -> String {
     "static".to_string()
 }
 
-/// Worker 专属配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerDeploymentConfig {
     pub id: String,
@@ -294,15 +283,11 @@ fn default_worker_rule_cache_capacity() -> usize {
     256
 }
 
-/// 任务队列驱动类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum TaskQueueDriver {
-    /// 使用本地内存通道，适合单机部署或开发环境
     Local,
-    /// 使用 NATS JetStream 作为任务队列，支持多节点分布式处理
     Nats,
-    /// 使用数据库表模拟任务队列（预留，尚未实现）
     Database,
 }
 
@@ -316,19 +301,14 @@ fn default_task_queue_driver() -> TaskQueueDriver {
     TaskQueueDriver::Local
 }
 
-/// 任务队列配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskQueueConfig {
-    /// 队列驱动类型，默认本地内存实现
     #[serde(default = "default_task_queue_driver")]
     pub driver: TaskQueueDriver,
-    /// 本地队列配置
     #[serde(default)]
     pub local: LocalQueueConfig,
-    /// NATS JetStream 队列配置
     #[serde(default)]
     pub nats: Option<NatsQueueConfig>,
-    /// 数据库队列配置（预留）
     #[serde(default)]
     pub database: Option<DatabaseQueueConfig>,
 }
@@ -344,10 +324,8 @@ impl Default for TaskQueueConfig {
     }
 }
 
-/// 本地任务队列配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocalQueueConfig {
-    /// Tokio 通道容量，默认 128
     #[serde(default = "default_local_channel_capacity")]
     pub channel_capacity: usize,
 }
@@ -364,45 +342,31 @@ impl Default for LocalQueueConfig {
     }
 }
 
-/// NATS JetStream 队列配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatsQueueConfig {
-    /// NATS 服务器地址，例如 nats://127.0.0.1:4222
     pub server_url: String,
-    /// 发布/订阅科目（subject），默认 ocr.preview
     #[serde(default = "default_nats_subject")]
     pub subject: String,
-    /// JetStream Stream 名称
     #[serde(default = "default_nats_stream")]
     pub stream: String,
-    /// JetStream 耐久消费者名称
     #[serde(default = "default_nats_durable")]
     pub durable_consumer: String,
-    /// 单条消息最大投递次数，超过后进入死信
     #[serde(default = "default_nats_max_deliver")]
     pub max_deliver: i32,
-    /// Ack 等待时长（毫秒）
     #[serde(default = "default_nats_ack_wait_ms")]
     pub ack_wait_ms: u64,
-    /// 每次批量拉取的最大消息数量
     #[serde(default = "default_nats_max_batch")]
     pub max_batch: usize,
-    /// 拉取请求的等待时间（毫秒）
     #[serde(default = "default_nats_pull_wait_ms")]
     pub pull_wait_ms: u64,
-    /// 是否在主节点进程内同时运行 worker（仅用于开发/回放）
     #[serde(default)]
     pub inline_worker: bool,
-    /// TLS 配置
     #[serde(default)]
     pub tls: Option<NatsTlsConfig>,
-    /// Stream 最大消息数，None 表示不限制
     #[serde(default = "default_nats_max_messages")]
     pub max_messages: Option<i64>,
-    /// Stream 最大存储字节数，None 表示不限制
     #[serde(default = "default_nats_max_bytes")]
     pub max_bytes: Option<i64>,
-    /// 消息最大保留时长（秒），None 表示不限制
     #[serde(default = "default_nats_max_age_seconds")]
     pub max_age_seconds: Option<u64>,
 }
@@ -467,7 +431,6 @@ impl Default for NatsQueueConfig {
     }
 }
 
-/// NATS TLS 配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NatsTlsConfig {
     #[serde(default = "default_true")]
@@ -494,26 +457,19 @@ impl Default for NatsTlsConfig {
     }
 }
 
-/// 数据库任务队列配置（预留）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseQueueConfig {
-    /// 是否启用数据库队列
     pub enabled: bool,
-    /// 队列表名称
     #[serde(default = "default_db_queue_table")]
     pub table_name: String,
-    /// 轮询间隔（毫秒）
     #[serde(default = "default_db_queue_poll_interval_ms")]
     pub poll_interval_ms: u64,
 }
 
-/// Worker代理配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerProxyConfig {
-    /// 允许的worker列表
     #[serde(default)]
     pub workers: Vec<WorkerCredentialConfig>,
-    /// 允许的最大时间漂移（秒）
     #[serde(default = "default_worker_clock_skew")]
     pub max_clock_skew_seconds: i64,
 }
@@ -531,7 +487,6 @@ fn default_worker_clock_skew() -> i64 {
     60
 }
 
-/// Worker凭证配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerCredentialConfig {
     pub worker_id: String,
@@ -542,7 +497,6 @@ pub struct WorkerCredentialConfig {
     pub description: Option<String>,
 }
 
-/// 分布式运行配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DistributedConfig {
     #[serde(default)]
@@ -563,7 +517,6 @@ fn default_db_queue_poll_interval_ms() -> u64 {
     1_000
 }
 
-/// 主节点专用配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MasterNodeConfig {
     #[serde(default = "default_material_cache_dir")]
@@ -648,7 +601,6 @@ fn default_worker_fallback_max_attempts() -> u32 {
     1
 }
 
-/// 后台处理任务（结果处理/材料下载）配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackgroundProcessingConfig {
     #[serde(default)]
@@ -754,7 +706,6 @@ fn default_watchdog_worker_grace() -> u64 {
     180
 }
 
-/// 服务看门狗配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceWatchdogConfig {
     #[serde(default = "default_service_watchdog_enabled")]
@@ -902,7 +853,6 @@ impl Default for DatabaseQueueConfig {
     }
 }
 
-/// 服务器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     pub host: String,
@@ -925,25 +875,18 @@ fn default_protocol() -> String {
     "http".to_string()
 }
 
-/// 下载与转换限制配置
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DownloadLimitsConfig {
-    /// 通用文件最大大小（MB）
     #[serde(default = "default_max_file_mb")]
     pub max_file_mb: u64,
-    /// PDF 文件最大大小（MB），优先于通用限制
     #[serde(default = "default_max_pdf_mb")]
     pub max_pdf_mb: u64,
-    /// PDF 最大页数（超过后按策略处理）
     #[serde(default = "default_pdf_max_pages")]
     pub pdf_max_pages: u32,
-    /// 超限策略（已废弃，默认reject）
     #[serde(default = "default_oversize_action")]
     pub oversize_action: String,
-    /// PDF 渲染 DPI（影响清晰度与内存占用）
     #[serde(default = "default_pdf_render_dpi")]
     pub pdf_render_dpi: u32,
-    /// PDF 渲染 JPEG 质量（1-100）
     #[serde(default = "default_pdf_jpeg_quality")]
     pub pdf_jpeg_quality: u8,
 }
@@ -967,21 +910,15 @@ fn default_pdf_jpeg_quality() -> u8 {
     85
 }
 
-/// 本地OCR引擎配置（可选）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OcrEngineConfig {
-    /// 引擎工作的目录（包含 PaddleOCR-json, lib/, models/）
     pub work_dir: Option<String>,
-    /// 二进制路径（默认 work_dir/PaddleOCR-json）
     pub binary: Option<String>,
-    /// 依赖库目录（默认 work_dir/lib）
     pub lib_path: Option<String>,
-    /// 超时时间（秒），默认 10
     pub timeout_secs: Option<u64>,
 }
 
 impl Config {
-    /// 获取基础URL
     pub fn base_url(&self) -> String {
         if let Some(public) = self
             .public_base_url
@@ -991,14 +928,12 @@ impl Config {
         {
             return public.trim_end_matches('/').to_string();
         }
-        // 如果新配置存在且有效，使用新配置
         let fallback = if !self.server.host.is_empty() && self.server.port > 0 {
             format!(
                 "{}://{}:{}",
                 self.server.protocol, self.server.host, self.server.port
             )
         } else {
-            // 兼容旧配置
             format!("{}:{}", self.host.trim_end_matches('/'), self.port)
         };
 
@@ -1022,9 +957,7 @@ impl Config {
         fallback
     }
 
-    /// 获取回调URL
     pub fn callback_url(&self) -> String {
-        // 如果旧配置中有callback_url且不为空，使用旧配置（兼容性）
         if !self.callback_url.is_empty() {
             self.callback_url.clone()
         } else {
@@ -1032,7 +965,6 @@ impl Config {
         }
     }
 
-    /// 获取第三方结果回调URL（如果已配置）
     pub fn third_party_callback_url(&self) -> Option<String> {
         self.third_party_callback_url
             .as_ref()
@@ -1040,12 +972,10 @@ impl Config {
             .filter(|url| !url.is_empty())
     }
 
-    /// 获取预审视图URL
     pub fn preview_view_url(&self, preview_id: &str) -> String {
         format!("{}/api/preview/view/{}", self.base_url(), preview_id)
     }
 
-    /// 获取服务器监听地址
     pub fn server_address(&self) -> String {
         if !self.server.host.is_empty() && self.server.port > 0 {
             format!("{}:{}", self.server.host, self.server.port)
@@ -1058,7 +988,6 @@ impl Config {
         }
     }
 
-    /// 获取服务器端口
     pub fn get_port(&self) -> u16 {
         if self.server.port > 0 {
             self.server.port
@@ -1068,7 +997,6 @@ impl Config {
     }
 }
 
-/// 登录配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Login {
     pub sso_login_url: String,
@@ -1079,27 +1007,21 @@ pub struct Login {
     pub use_callback: bool,
 }
 
-/// [brain] 智能数据库配置 (v2024.12)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
-    /// 数据库类型: "sqlite", "dm", "smart"
     #[serde(rename = "type")]
     pub database_type: String,
 
-    /// 达梦数据库配置
     #[serde(default)]
     pub dm: Option<DmConfig>,
 
-    /// SQLite数据库配置  
     #[serde(default)]
     pub sqlite: Option<SqliteConfig>,
 
-    /// Go网关配置（用于达梦数据库）
     #[serde(default)]
     pub go_gateway: Option<GoGatewayConfig>,
 }
 
-/// 达梦数据库连接配置 (简化版)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmConfig {
     pub host: String,
@@ -1108,25 +1030,21 @@ pub struct DmConfig {
     pub username: String,
     pub password: String,
 
-    /// 连接池配置
     #[serde(default = "default_dm_max_connections")]
     pub max_connections: u32,
     #[serde(default = "default_dm_connection_timeout")]
     pub connection_timeout: u64,
 
-    /// Go网关配置
     #[serde(default)]
     pub go_gateway: Option<GoGatewayConfig>,
 }
 
-/// Go网关配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GoGatewayConfig {
     #[serde(default = "default_go_gateway_enabled")]
     pub enabled: bool,
     #[serde(default = "default_go_gateway_url")]
     pub url: String,
-    /// X-API-Key 认证密钥
     pub api_key: String,
     #[serde(default = "default_go_gateway_timeout")]
     pub timeout: u64,
@@ -1134,13 +1052,11 @@ pub struct GoGatewayConfig {
     pub health_check_interval: u64,
 }
 
-/// SQLite数据库配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SqliteConfig {
     pub path: String,
 }
 
-// 默认值函数
 fn default_dm_max_connections() -> u32 {
     10
 }
@@ -1148,7 +1064,6 @@ fn default_dm_connection_timeout() -> u64 {
     30
 }
 
-// Go网关默认值函数
 fn default_go_gateway_enabled() -> bool {
     true
 }
@@ -1162,7 +1077,6 @@ fn default_go_gateway_health_check_interval() -> u64 {
     60
 }
 
-/// OSS存储配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Oss {
     pub root: String,
@@ -1174,17 +1088,13 @@ pub struct Oss {
     pub access_key_secret: String,
 }
 
-/// 达梦数据库配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmSql {
-    /// 达梦数据库总开关（false时使用SQLite降级）
     #[serde(default)]
     pub enabled: bool,
-    /// 严格模式：true时连接失败则服务启动失败  
     #[serde(default)]
     pub strict_mode: bool,
 
-    // 基础连接配置
     #[serde(rename = "DATABASE_HOST")]
     pub database_host: String,
     #[serde(rename = "DATABASE_PORT")]
@@ -1196,7 +1106,6 @@ pub struct DmSql {
     #[serde(rename = "DATABASE_NAME")]
     pub database_name: String,
 
-    // 连接超时和重试配置
     #[serde(default = "default_connection_timeout")]
     pub connection_timeout: u64,
     #[serde(default = "default_max_retries")]
@@ -1204,7 +1113,6 @@ pub struct DmSql {
     #[serde(default = "default_retry_delay")]
     pub retry_delay: u64,
 
-    // 连接池配置
     #[serde(default = "default_max_connections")]
     pub max_connections: u32,
     #[serde(default = "default_min_connections")]
@@ -1212,7 +1120,6 @@ pub struct DmSql {
     #[serde(default = "default_idle_timeout")]
     pub idle_timeout: u64,
 
-    // 健康检查配置
     #[serde(default)]
     pub health_check: Option<DmHealthCheckConfig>,
 }
@@ -1238,7 +1145,6 @@ impl Default for DmSql {
     }
 }
 
-/// 达梦数据库健康检查配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmHealthCheckConfig {
     pub enabled: bool,
@@ -1247,7 +1153,6 @@ pub struct DmHealthCheckConfig {
     pub failure_threshold: u32,
 }
 
-// 默认值函数
 fn default_connection_timeout() -> u64 {
     30
 }
@@ -1267,7 +1172,6 @@ fn default_idle_timeout() -> u64 {
     600
 }
 
-/// 审批配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Approve {
     #[serde(rename = "submit-url")]
@@ -1278,7 +1182,6 @@ pub struct Approve {
     pub secret_key: String,
 }
 
-/// 运行时模式配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuntimeModeConfig {
     pub mode: String,
@@ -1287,7 +1190,6 @@ pub struct RuntimeModeConfig {
     pub production: ProductionConfig,
 }
 
-/// 开发环境配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DevelopmentConfig {
     pub debug_enabled: bool,
@@ -1298,7 +1200,6 @@ pub struct DevelopmentConfig {
     pub detailed_logs: bool,
 }
 
-/// 测试环境配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestingConfig {
     pub mock_data: bool,
@@ -1307,7 +1208,6 @@ pub struct TestingConfig {
     pub performance_test: bool,
 }
 
-/// 生产环境配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProductionConfig {
     pub debug_enabled: bool,
@@ -1317,26 +1217,21 @@ pub struct ProductionConfig {
     pub security_strict: bool,
 }
 
-/// 调试配置 - 简化版本，移除多余mock选项
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Debug {
     pub enabled: bool,
-    // 移除enable_mock_login和mock_login_warning - 由debug ticket代替
     pub tools_enabled: DebugToolsConfig,
 }
 
-/// 调试工具配置 - 简化版本
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugToolsConfig {
     pub api_test: bool,
-    // 移除mock_login - 由debug ticket代替
     pub preview_demo: bool,
     pub flow_test: bool,
     pub system_monitor: bool,
     pub data_manager: bool,
 }
 
-/// 测试模式配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestModeConfig {
     pub enabled: bool,
@@ -1346,7 +1241,6 @@ pub struct TestModeConfig {
     pub test_user: TestUserConfig,
 }
 
-/// 测试用户配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestUserConfig {
     pub id: String,
@@ -1355,12 +1249,11 @@ pub struct TestUserConfig {
     pub role: String,
 }
 
-/// 日志配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingConfig {
     pub level: String,
     pub file: LogFileConfig,
-    pub structured: Option<bool>, // 新增：是否启用结构化日志
+    pub structured: Option<bool>,
     #[serde(default)]
     pub business_logging: Option<BusinessLoggingConfig>,
     #[serde(default)]
@@ -1371,7 +1264,6 @@ pub struct LoggingConfig {
     pub enable_debug_file: bool,
 }
 
-/// 日志文件配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogFileConfig {
     pub enabled: bool,
@@ -1379,7 +1271,6 @@ pub struct LogFileConfig {
     pub retention_days: Option<u32>,
 }
 
-/// 监控配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitoringConfig {
     pub enabled: bool,
@@ -1389,7 +1280,6 @@ pub struct MonitoringConfig {
     pub business_metrics: Option<BusinessMetricsMonitorConfig>,
 }
 
-/// 第三方访问配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThirdPartyAccessConfig {
     pub enabled: bool,
@@ -1398,7 +1288,6 @@ pub struct ThirdPartyAccessConfig {
     pub rate_limiting: RateLimitingConfig,
 }
 
-/// 第三方客户端配置 - 简化版本
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThirdPartyClient {
     pub client_id: String,
@@ -1408,10 +1297,9 @@ pub struct ThirdPartyClient {
     pub source_type: String, // "platform_gateway" | "direct_api"
     pub enabled: bool,
     #[serde(default)]
-    pub permissions: Vec<String>, // 权限字段保留但设为可选，向后兼容
+    pub permissions: Vec<String>,
 }
 
-/// 签名配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignatureConfig {
     pub required: bool,
@@ -1422,7 +1310,6 @@ fn default_source_type() -> String {
     "direct_api".to_string()
 }
 
-/// 限流配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RateLimitingConfig {
     pub enabled: bool,
@@ -1430,14 +1317,12 @@ pub struct RateLimitingConfig {
     pub requests_per_hour: u32,
 }
 
-/// 故障转移配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FailoverConfig {
     pub database: DatabaseFailoverConfig,
     pub storage: StorageFailoverConfig,
 }
 
-/// 数据库故障转移配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseFailoverConfig {
     pub enabled: bool,
@@ -1448,7 +1333,6 @@ pub struct DatabaseFailoverConfig {
     pub local_data_dir: String,
 }
 
-/// 存储故障转移配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageFailoverConfig {
     pub enabled: bool,
@@ -1460,17 +1344,14 @@ pub struct StorageFailoverConfig {
     pub local_fallback_dir: String,
 }
 
-/// API功能增强配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiEnhancementConfig {
-    pub enhanced_error_handling: bool, // 启用增强错误处理
-    pub trace_id_enabled: bool,        // 启用请求追踪
-    pub structured_response: bool,     // 启用结构化响应
+    pub enhanced_error_handling: bool,
+    pub trace_id_enabled: bool,
+    pub structured_response: bool,
 }
 
-// ============= 新增配置结构体 =============
 
-/// 性能监控配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceConfig {
     pub enabled: bool,
@@ -1479,7 +1360,6 @@ pub struct PerformanceConfig {
     pub alert_thresholds: AlertThresholdsConfig,
 }
 
-/// 告警阈值配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertThresholdsConfig {
     pub cpu_usage: f64,
@@ -1489,7 +1369,6 @@ pub struct AlertThresholdsConfig {
     pub response_time_ms: u64,
 }
 
-/// 业务指标监控配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BusinessMetricsMonitorConfig {
     pub enabled: bool,
@@ -1499,7 +1378,6 @@ pub struct BusinessMetricsMonitorConfig {
     pub error_rate_threshold: f64,
 }
 
-/// 业务日志配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BusinessLoggingConfig {
     pub trace_id_enabled: bool,
@@ -1544,7 +1422,6 @@ impl Default for AttachmentLoggingConfig {
     }
 }
 
-/// 日志级别配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LevelConfig {
     #[serde(default)]
@@ -1559,40 +1436,28 @@ pub struct LevelConfig {
     pub overrides: HashMap<String, String>,
 }
 
-/// 并发控制配置 - 扩展为多阶段支持
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConcurrencyConfig {
     pub ocr_processing: OcrProcessingConfig,
     pub queue_monitoring: QueueMonitoringConfig,
     pub resource_limits: ResourceLimitsConfig,
-    /// 多阶段并发控制配置
     #[serde(default)]
     pub multi_stage: Option<MultiStageConcurrencyConfig>,
 }
 
-/// 多阶段并发控制配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiStageConcurrencyConfig {
-    /// 是否启用多阶段并发控制
     pub enabled: bool,
-    /// 下载阶段并发数
     pub download_concurrency: u32,
-    /// PDF转换阶段并发数
     pub pdf_conversion_concurrency: u32,
-    /// PDF转换阶段最小并发（资源紧张时降至该值）
     #[serde(default = "MultiStageConcurrencyConfig::default_pdf_min_concurrency")]
     pub pdf_conversion_min_concurrency: u32,
-    /// 提升并发所需的最小可用内存（MB）
     #[serde(default = "MultiStageConcurrencyConfig::default_pdf_min_free_mem_mb")]
     pub pdf_min_free_mem_mb: u32,
-    /// 降档阈值的最大1分钟load（大于则降档）
     #[serde(default = "MultiStageConcurrencyConfig::default_pdf_max_load_one")]
     pub pdf_max_load_one: f64,
-    /// OCR处理阶段并发数
     pub ocr_processing_concurrency: u32,
-    /// 存储阶段并发数
     pub storage_concurrency: u32,
-    /// 资源预测器配置
     #[serde(default)]
     pub resource_predictor: ResourcePredictorConfig,
 }
@@ -1606,7 +1471,7 @@ impl Default for MultiStageConcurrencyConfig {
             pdf_conversion_min_concurrency: 1,
             pdf_min_free_mem_mb: 2048,
             pdf_max_load_one: 1.5,
-            ocr_processing_concurrency: 6, // 与全局OCR信号量保持一致
+            ocr_processing_concurrency: 6,
             storage_concurrency: 10,
             resource_predictor: ResourcePredictorConfig::default(),
         }
@@ -1625,22 +1490,14 @@ impl MultiStageConcurrencyConfig {
     }
 }
 
-/// 资源预测器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourcePredictorConfig {
-    /// 是否启用智能资源预测
     pub enabled: bool,
-    /// PDF转换内存基数（每MB文件使用的内存，MB）
     pub pdf_memory_base_mb: f64,
-    /// PDF转换内存乘数（每页使用的内存，MB）
     pub pdf_memory_per_page_mb: f64,
-    /// OCR处理内存基数（每MB文件使用的内存，MB）
     pub ocr_memory_base_mb: f64,
-    /// OCR处理内存乘数（每页使用的内存，MB）
     pub ocr_memory_per_page_mb: f64,
-    /// 高风险任务内存阈值（MB）
     pub high_risk_memory_threshold_mb: f64,
-    /// 临界风险任务内存阈值（MB）
     pub critical_risk_memory_threshold_mb: f64,
 }
 
@@ -1658,7 +1515,6 @@ impl Default for ResourcePredictorConfig {
     }
 }
 
-/// OCR处理配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OcrProcessingConfig {
     pub max_concurrent_tasks: u32,
@@ -1668,7 +1524,6 @@ pub struct OcrProcessingConfig {
     pub max_retries: u32,
 }
 
-/// 队列监控配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueMonitoringConfig {
     pub enabled: bool,
@@ -1677,7 +1532,6 @@ pub struct QueueMonitoringConfig {
     pub max_queue_length: u32,
 }
 
-/// 资源限制配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceLimitsConfig {
     pub max_memory_per_task: u64,
@@ -1685,7 +1539,6 @@ pub struct ResourceLimitsConfig {
     pub cleanup_interval: u64,
 }
 
-/// 业务指标配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BusinessMetricsConfig {
     pub preview_metrics: PreviewMetricsConfig,
@@ -1693,7 +1546,6 @@ pub struct BusinessMetricsConfig {
     pub integration_metrics: IntegrationMetricsConfig,
 }
 
-/// 预审指标配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewMetricsConfig {
     pub track_processing_time: bool,
@@ -1702,7 +1554,6 @@ pub struct PreviewMetricsConfig {
     pub track_theme_usage: bool,
 }
 
-/// 系统指标配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMetricsConfig {
     pub cpu_monitoring: bool,
@@ -1711,7 +1562,6 @@ pub struct SystemMetricsConfig {
     pub network_monitoring: bool,
 }
 
-/// 集成指标配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntegrationMetricsConfig {
     pub sso_performance: bool,
@@ -1719,33 +1569,26 @@ pub struct IntegrationMetricsConfig {
     pub external_api_latency: bool,
 }
 
-/// [lock] 用户数据加密配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserDataEncryptionConfig {
-    /// 是否启用用户数据加密
     pub enabled: bool,
 
-    /// 加密密钥 (32字节hex字符串，或密钥文件路径)
     pub encryption_key: String,
 
-    /// 加密密钥文件路径 (优先级高于encryption_key)
     pub key_file_path: Option<String>,
 
-    /// 密钥版本标识 (用于密钥轮换)
     pub key_version: String,
 
-    /// 加密算法标识
     pub algorithm: String,
 
-    /// 强制加密的字段列表
     pub force_encrypt_fields: Vec<String>,
 }
 
 impl Default for UserDataEncryptionConfig {
     fn default() -> Self {
         Self {
-            enabled: true,                  // [locked] 默认启用加密
-            encryption_key: "".to_string(), // 需要在配置中指定
+            enabled: true,
+            encryption_key: "".to_string(),
             key_file_path: None,
             key_version: "v1".to_string(),
             algorithm: "AES-256-GCM".to_string(),
@@ -1759,31 +1602,22 @@ impl Default for UserDataEncryptionConfig {
     }
 }
 
-/// [lab] OCR质量调优配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OcrTuningConfig {
-    /// 是否启用详细日志（记录每批次/页面的关键参数）
     #[serde(default = "default_true")]
     pub logging_detail: bool,
-    /// 低置信度阈值（平均score低于该值将提示调高DPI或重试）
     #[serde(default = "default_low_conf_threshold")]
     pub low_confidence_threshold: f64,
-    /// 最小字符数阈值（过低提示质量不足）
     #[serde(default = "default_min_char_threshold")]
     pub min_char_threshold: usize,
-    /// 是否启用低质页面的二次尝试（按步进提升DPI）
     #[serde(default)]
     pub retry_enabled: bool,
-    /// 单请求允许重试的最大页面数
     #[serde(default = "default_retry_pages_limit")]
     pub retry_pages_limit: usize,
-    /// 每次重试提升的DPI步进
     #[serde(default = "default_retry_dpi_step")]
     pub retry_dpi_step: u32,
-    /// 最大允许的DPI（不超过该值）
     #[serde(default = "default_max_dpi")]
     pub max_dpi: u32,
-    /// 预热引擎数量（服务启动时预创建），0 表示不预热
     #[serde(default = "default_prewarm_engines")]
     pub prewarm_engines: u32,
 }
@@ -1843,22 +1677,16 @@ const fn default_ocr_pool_max_engines() -> usize {
     6
 }
 
-/// NEW API调用记录配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiCallTrackingConfig {
-    /// 是否启用API调用记录
     pub enabled: bool,
 
-    /// 是否记录详细请求头
     pub record_headers: bool,
 
-    /// 是否记录到数据库
     pub save_to_database: bool,
 
-    /// 内存中保留的记录数量
     pub memory_retention: usize,
 
-    /// 需要记录的API路径模式
     pub tracked_paths: Vec<String>,
 }
 
@@ -1867,14 +1695,13 @@ impl Default for ApiCallTrackingConfig {
         Self {
             enabled: true,
             record_headers: true,
-            save_to_database: false, // 默认不存数据库
+            save_to_database: false,
             memory_retention: 1000,
             tracked_paths: vec!["/api/preview".to_string()],
         }
     }
 }
 
-/// 报表导出/回传配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReportExportConfig {
     #[serde(default)]
@@ -1889,61 +1716,41 @@ impl Default for ReportExportConfig {
     }
 }
 
-/// [search] 分布式链路追踪配置 - 扩展版
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DistributedTracingConfig {
-    /// 是否启用分布式追踪
     pub enabled: bool,
 
-    /// 采样率 (0.0-1.0)
     pub sampling_rate: f64,
 
-    /// 最大span数量
     pub max_spans: usize,
 
-    /// 追踪数据保留时间（秒）
     pub retention_seconds: u64,
 
-    /// 是否启用详细日志
     pub verbose_logging: bool,
 
-    /// 是否启用HTTP中间件追踪
     pub http_middleware_enabled: bool,
 
-    /// 是否追踪数据库操作
     pub trace_database_operations: bool,
 
-    /// 是否追踪存储操作
     pub trace_storage_operations: bool,
 
-    /// 是否追踪OCR处理过程
     pub trace_ocr_processing: bool,
 
-    /// 指标收集配置
     #[serde(default)]
     pub metrics_collection: Option<MetricsCollectionConfig>,
 
-    /// 慢操作阈值配置
     #[serde(default)]
     pub slow_operation_thresholds: Option<SlowOperationThresholdsConfig>,
 }
 
-/// 指标收集配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsCollectionConfig {
-    /// 是否启用指标收集
     pub enabled: bool,
-    /// 是否收集HTTP请求指标
     pub collect_http_metrics: bool,
-    /// 是否收集OCR处理指标
     pub collect_ocr_metrics: bool,
-    /// 是否收集系统资源指标
     pub collect_system_metrics: bool,
-    /// 是否收集业务指标
     pub collect_business_metrics: bool,
-    /// 指标聚合间隔（秒）
     pub aggregation_interval: u64,
-    /// 内存中保留的最大指标数量
     pub max_metrics_in_memory: usize,
 }
 
@@ -1961,29 +1768,23 @@ impl Default for MetricsCollectionConfig {
     }
 }
 
-/// 慢操作阈值配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlowOperationThresholdsConfig {
-    /// HTTP请求慢操作阈值（毫秒）
     pub http_request_slow_threshold_ms: u64,
-    /// 文件下载慢操作阈值（毫秒）
     pub file_download_slow_threshold_ms: u64,
-    /// PDF转换慢操作阈值（毫秒）
     pub pdf_conversion_slow_threshold_ms: u64,
-    /// OCR处理慢操作阈值（毫秒）
     pub ocr_processing_slow_threshold_ms: u64,
-    /// 数据库操作慢操作阈值（毫秒）
     pub database_operation_slow_threshold_ms: u64,
 }
 
 impl Default for SlowOperationThresholdsConfig {
     fn default() -> Self {
         Self {
-            http_request_slow_threshold_ms: 5000,       // 5秒
-            file_download_slow_threshold_ms: 10000,     // 10秒
-            pdf_conversion_slow_threshold_ms: 30000,    // 30秒
-            ocr_processing_slow_threshold_ms: 60000,    // 60秒
-            database_operation_slow_threshold_ms: 1000, // 1秒
+            http_request_slow_threshold_ms: 5000,
+            file_download_slow_threshold_ms: 10000,
+            pdf_conversion_slow_threshold_ms: 30000,
+            ocr_processing_slow_threshold_ms: 60000,
+            database_operation_slow_threshold_ms: 1000,
         }
     }
 }
@@ -1992,9 +1793,9 @@ impl Default for DistributedTracingConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            sampling_rate: 1.0, // 开发环境100%采样
+            sampling_rate: 1.0,
             max_spans: 10000,
-            retention_seconds: 3600, // 1小时
+            retention_seconds: 3600,
             verbose_logging: false,
             http_middleware_enabled: true,
             trace_database_operations: true,

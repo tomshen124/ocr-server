@@ -1,5 +1,3 @@
-//! 故障转移状态查询API
-//! 提供数据库和存储的故障转移状态查询
 
 use axum::{extract::State, response::Json, routing::get, Router};
 use serde::{Deserialize, Serialize};
@@ -7,7 +5,6 @@ use tracing::{info, warn};
 
 use crate::AppState;
 
-/// 故障转移状态响应
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FailoverStatusResponse {
     pub success: bool,
@@ -15,7 +12,6 @@ pub struct FailoverStatusResponse {
     pub data: FailoverStatusData,
 }
 
-/// 故障转移状态数据
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FailoverStatusData {
     pub database: DatabaseStatus,
@@ -24,29 +20,26 @@ pub struct FailoverStatusData {
     pub recommendations: Vec<String>,
 }
 
-/// 数据库状态
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DatabaseStatus {
-    pub current_state: String,        // "主数据库", "备用数据库", "恢复中"
-    pub is_using_primary: bool,       // 是否使用主数据库
-    pub has_primary_configured: bool, // 是否配置了主数据库
-    pub health_check_result: bool,    // 当前数据库健康检查结果
-    pub last_failover_time: Option<String>, // 上次故障转移时间
-    pub auto_recovery_enabled: bool,  // 是否启用自动恢复
+    pub current_state: String,
+    pub is_using_primary: bool,
+    pub has_primary_configured: bool,
+    pub health_check_result: bool,
+    pub last_failover_time: Option<String>,
+    pub auto_recovery_enabled: bool,
 }
 
-/// 存储状态
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StorageStatus {
-    pub current_state: String,        // "OSS存储", "本地存储", "恢复中"
-    pub is_using_primary: bool,       // 是否使用主存储(OSS)
-    pub has_primary_configured: bool, // 是否配置了主存储
-    pub health_check_result: bool,    // 当前存储健康检查结果
-    pub pending_sync_files: u32,      // 待同步文件数量
-    pub auto_recovery_enabled: bool,  // 是否启用自动恢复
+    pub current_state: String,
+    pub is_using_primary: bool,
+    pub has_primary_configured: bool,
+    pub health_check_result: bool,
+    pub pending_sync_files: u32,
+    pub auto_recovery_enabled: bool,
 }
 
-/// 配置故障转移状态查询路由
 pub fn configure_failover_status_routes() -> Router<AppState> {
     Router::new()
         .route("/api/failover/status", get(get_failover_status))
@@ -58,7 +51,6 @@ pub fn configure_failover_status_routes() -> Router<AppState> {
         )
 }
 
-/// 获取完整故障转移状态
 pub async fn get_failover_status(
     State(_app_state): State<AppState>,
 ) -> Json<FailoverStatusResponse> {
@@ -87,7 +79,6 @@ pub async fn get_failover_status(
     Json(response)
 }
 
-/// 获取数据库状态
 pub async fn get_database_status(State(_app_state): State<AppState>) -> Json<DatabaseStatus> {
     info!(
         target: "failover.status",
@@ -96,7 +87,6 @@ pub async fn get_database_status(State(_app_state): State<AppState>) -> Json<Dat
     Json(get_database_status_internal().await)
 }
 
-/// 获取存储状态
 pub async fn get_storage_status(State(_app_state): State<AppState>) -> Json<StorageStatus> {
     info!(
         target: "failover.status",
@@ -105,7 +95,6 @@ pub async fn get_storage_status(State(_app_state): State<AppState>) -> Json<Stor
     Json(get_storage_status_internal().await)
 }
 
-/// 触发手动恢复
 pub async fn trigger_manual_recovery(
     State(_app_state): State<AppState>,
 ) -> Json<serde_json::Value> {
@@ -114,7 +103,6 @@ pub async fn trigger_manual_recovery(
         event = "failover.recovery.trigger"
     );
 
-    // 实际实现中，这里会调用恢复逻辑
     warn!(
         target: "failover.status",
         event = "failover.recovery.unsupported",
@@ -128,10 +116,7 @@ pub async fn trigger_manual_recovery(
     }))
 }
 
-/// 获取数据库状态（内部实现）
 async fn get_database_status_internal() -> DatabaseStatus {
-    // 实际实现中，这里会从全局的数据库管理器获取状态
-    // 目前提供模拟数据用于演示
 
     DatabaseStatus {
         current_state: "主数据库".to_string(),
@@ -143,10 +128,7 @@ async fn get_database_status_internal() -> DatabaseStatus {
     }
 }
 
-/// 获取存储状态（内部实现）
 async fn get_storage_status_internal() -> StorageStatus {
-    // 实际实现中，这里会从全局的存储管理器获取状态
-    // 目前提供模拟数据用于演示
 
     StorageStatus {
         current_state: "OSS存储".to_string(),
@@ -158,7 +140,6 @@ async fn get_storage_status_internal() -> StorageStatus {
     }
 }
 
-/// 确定整体健康状态
 fn determine_overall_health(db_status: &DatabaseStatus, storage_status: &StorageStatus) -> String {
     match (
         db_status.is_using_primary && db_status.health_check_result,
@@ -171,7 +152,6 @@ fn determine_overall_health(db_status: &DatabaseStatus, storage_status: &Storage
     }
 }
 
-/// 生成操作建议
 fn generate_recommendations(
     db_status: &DatabaseStatus,
     storage_status: &StorageStatus,

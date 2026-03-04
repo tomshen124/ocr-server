@@ -9,7 +9,6 @@ use super::cache::RuleCache;
 use super::model::MatterRuleConfig;
 use super::repository::RuleRepository;
 
-/// 规则引擎入口
 pub struct RuleEngine {
     repository: RuleRepository,
     cache: Arc<RuleCache>,

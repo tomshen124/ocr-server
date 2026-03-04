@@ -1,7 +1,4 @@
-//! OCR预审评估器 - 传统版本
 //!
-//! 这是原有的PreviewEvaluator实现，用于向后兼容
-//! 新的多阶段并发控制功能在 enhanced_evaluator.rs 中实现
 
 use crate::db::traits::{Database as DbTrait, MaterialFileFilter, MaterialFileRecord};
 use crate::model::evaluation::ProcessingStatus;
@@ -36,7 +33,6 @@ use ocr_conn::CURRENT_DIR;
 use std::path::PathBuf;
 use tokio::fs;
 
-/// 传统的OCR预审评估器
 pub struct PreviewEvaluator {
     pub preview: Preview,
     pub storage: Option<Arc<dyn Storage>>,
@@ -90,7 +86,6 @@ impl PreviewEvaluator {
 
         let ocr_start = Instant::now();
         let ocr_text = if download.is_pdf && download.local_path.is_some() {
-            // 使用优化后的磁盘PDF处理流水线
             let path = download.local_path.as_ref().unwrap();
             let results = OPTIMIZED_PIPELINE
                 .process_pdf_optimized(
@@ -103,7 +98,6 @@ impl PreviewEvaluator {
 
             results.join("\n\n")
         } else {
-            // 传统内存处理 (图片或无路径PDF)
             self.process_ocr(
                 &download.bytes,
                 &material.code,
@@ -121,7 +115,6 @@ impl PreviewEvaluator {
             text_length = ocr_text.len()
         );
 
-        // 清理临时PDF文件（仅删除我们生成的临时文件）
         if let Some(path) = download.local_path.as_ref() {
             let temp_root = CURRENT_DIR.join("runtime").join("temp_pdfs");
             if path.starts_with(&temp_root) {
@@ -154,7 +147,6 @@ impl PreviewEvaluator {
         let mut local_path: Option<PathBuf> = None;
         let mut source_label: Option<String> = None;
 
-        // 1. 尝试获取本地路径（优先）
         if let Some(path_result) = worker::fetch_material_path(
             url,
             Some(&self.preview.request_id),
@@ -165,7 +157,7 @@ impl PreviewEvaluator {
         {
             match path_result {
                 Ok(path) => {
-                    bytes = fs::read(&path).await?; // 读取内容以兼容后续流程
+                    bytes = fs::read(&path).await?;
                     local_path = Some(path);
                     source_label = Some("worker_path".to_string());
                     METRICS_COLLECTOR.record_preview_download(
@@ -477,7 +469,6 @@ impl PreviewEvaluator {
             path = %path.display()
         );
 
-        // 异步清理过期临时文件，避免磁盘持续膨胀
         let cleanup_root = temp_root.clone();
         let ttl_hours = CONFIG.master.temp_pdf_ttl_hours;
         tokio::spawn(async move {
@@ -620,7 +611,6 @@ impl PreviewEvaluator {
 
         Ok(None)
     }
-    /// 创建新的评估器实例
     pub fn new(preview: Preview) -> Self {
         Self {
             preview,
@@ -635,7 +625,6 @@ impl PreviewEvaluator {
         }
     }
 
-    /// 创建带存储的评估器实例
     pub fn new_with_storage(preview: Preview, storage: Arc<dyn Storage>) -> Self {
         Self {
             preview,
@@ -650,7 +639,6 @@ impl PreviewEvaluator {
         }
     }
 
-    /// 创建带追踪器的评估器实例
     pub fn new_with_tracker(
         preview: Preview,
         storage: Option<Arc<dyn Storage>>,
@@ -670,7 +658,6 @@ impl PreviewEvaluator {
         }
     }
 
-    /// 创建带存储和数据库的评估器实例（不启用追踪）
     pub fn new_with_resources(
         preview: Preview,
         storage: Option<Arc<dyn Storage>>,
@@ -803,7 +790,6 @@ impl PreviewEvaluator {
         );
     }
 
-    /// 简化的评估入口方法 - 调用evaluate_all
     pub async fn evaluate(&mut self) -> Result<Vec<MaterialEvaluationResult>> {
         if let Err(err) = self.ensure_rule_config().await {
             warn!(
@@ -925,7 +911,6 @@ impl PreviewEvaluator {
         false
     }
 
-    /// 评估并返回完整的预审结果
     pub async fn evaluate_complete(
         &mut self,
     ) -> Result<crate::model::evaluation::PreviewEvaluationResult> {
@@ -936,16 +921,13 @@ impl PreviewEvaluator {
 
         let material_results_local = self.evaluate().await?;
 
-        // 预先构建材料URL映射（material_code -> 公网URL）
         let material_url_map = self.build_material_url_map().await;
 
-        // 转换MaterialEvaluationResult为模型类型
         let material_results = material_results_local
             .into_iter()
             .map(|r| self.convert_material_result(r, &material_url_map))
             .collect::<Vec<_>>();
 
-        // 构建基础信息
         let subject = &self.preview.subject_info;
         let agent = &self.preview.agent_info;
         let applicant_name = subject
@@ -986,7 +968,6 @@ impl PreviewEvaluator {
             theme_name: self.preview.matter_name.clone(),
         };
 
-        // 构建评估摘要
         let total_materials = material_results.len();
         let passed_materials = material_results
             .iter()
@@ -1006,7 +987,7 @@ impl PreviewEvaluator {
             total_materials,
             passed_materials,
             failed_materials,
-            warning_materials: 0, // 简化版本暂时为0
+            warning_materials: 0,
             overall_result,
             overall_suggestions: Vec::new(),
         };
@@ -1027,7 +1008,6 @@ impl PreviewEvaluator {
         }
     }
 
-    /// 构建材料URL映射，从数据库查询stored_original_key并生成公网URL
     async fn build_material_url_map(&self) -> HashMap<String, String> {
         let mut url_map = HashMap::new();
 
@@ -1056,14 +1036,12 @@ impl PreviewEvaluator {
                 continue;
             }
 
-            // 使用 material_code + attachment_name 作为复合 key
             let lookup_key = if let Some(attach_name) = &record.attachment_name {
                 format!("{}:{}", record.material_code, attach_name)
             } else {
                 record.material_code.clone()
             };
 
-            // 安全加固：统一使用受保护的存储代理地址，不暴露存储公网URL
             let base = CONFIG.base_url();
             let proxy_url = format!(
                 "{}/api/storage/files/{}",
@@ -1082,7 +1060,6 @@ impl PreviewEvaluator {
         url_map
     }
 
-    /// 转换本地MaterialEvaluationResult为模型类型
     fn convert_material_result(
         &self,
         local_result: MaterialEvaluationResult,
@@ -1118,19 +1095,16 @@ impl PreviewEvaluator {
                             )
                             .map(|v| v as u32);
 
-                        // 优先从预构建的URL映射中获取OSS公网URL
                         let composite_key = format!("{}:{}", material.code, attachment.attach_name);
                         let oss_public_url = material_url_map
                             .get(&composite_key)
                             .or_else(|| material_url_map.get(&material.code))
                             .cloned();
 
-                        // 如果有OSS URL则使用，否则回退到原始URL
                         let resolved_file_url = oss_public_url
                             .clone()
                             .unwrap_or_else(|| attachment.attach_url.clone());
 
-                        // preview_url 优先使用 extra 中的配置，其次使用 OSS URL
                         let preview_url = self
                             .extract_string_multi(
                                 &attachment.extra,
@@ -1409,7 +1383,6 @@ impl PreviewEvaluator {
             .map(|m| m.to_string())
     }
 
-    /// 评估所有材料
     pub async fn evaluate_all(&mut self) -> Result<Vec<MaterialEvaluationResult>> {
         let evaluation_start = Instant::now();
         let material_total = self.preview.material_data.len();
@@ -1504,7 +1477,6 @@ impl PreviewEvaluator {
         Ok(results)
     }
 
-    /// 评估单个材料
     async fn evaluate_single_material(
         &mut self,
         material: &MaterialValue,
@@ -1591,7 +1563,6 @@ impl PreviewEvaluator {
         Ok(result)
     }
 
-    /// 解码Base64内容
     fn decode_base64_content(&self, data_url: &str) -> Result<Vec<u8>> {
         let data_part = data_url
             .split(',')
@@ -1606,9 +1577,7 @@ impl PreviewEvaluator {
         Ok(content)
     }
 
-    /// 从URL下载文件
     async fn download_from_url(&self, url: &str) -> Result<Vec<u8>> {
-        // 使用通用下载器，支持 http/https/file 协议
         debug!(
             target: "attachment.pipeline",
             event = events::ATTACHMENT_DOWNLOAD_START,
@@ -1626,7 +1595,6 @@ impl PreviewEvaluator {
         Ok(bytes)
     }
 
-    /// 处理OCR
     async fn process_ocr(
         &mut self,
         file_content: &[u8],
@@ -1634,7 +1602,6 @@ impl PreviewEvaluator {
         record_id: Option<&str>,
     ) -> Result<String> {
         let ocr_start = Instant::now();
-        // 构建本地引擎启动参数（自动探测 + 可选配置）
         let engine_opts = if let Some(cfg) = &crate::CONFIG.ocr_engine {
             let work_dir = cfg.work_dir.as_ref().map(|s| std::path::PathBuf::from(s));
             let binary = cfg.binary.as_ref().map(|s| std::path::PathBuf::from(s));
@@ -1648,15 +1615,12 @@ impl PreviewEvaluator {
         } else {
             OcrEngineOptions::default()
         };
-        // 配置全局池的启动参数（仅首次生效）
         GLOBAL_POOL.set_options_if_empty(engine_opts);
-        // 简易自适应：在任务开始前做一次内存水位调节
         let mem = get_memory_usage();
         MULTI_STAGE_CONTROLLER
             .adaptive_tune_once(mem.usage_percent as f64)
             .await;
 
-        // 简单魔数检测PDF: 以 %PDF- 开头
         let is_pdf = file_content.len() > 4 && &file_content[0..4] == b"%PDF";
         let text_content = if is_pdf {
             debug!(
@@ -1666,7 +1630,6 @@ impl PreviewEvaluator {
                 size_kb = file_content.len() / 1024
             );
             let limits = &crate::CONFIG.download_limits;
-            // 页数与策略
             let total_pages = pdf_page_count(file_content)
                 .unwrap_or_else(|_| estimate_pdf_pages(file_content).unwrap_or(0) as u32);
             let allowed_pages = total_pages.min(limits.pdf_max_pages);
@@ -1691,7 +1654,6 @@ impl PreviewEvaluator {
                 ));
             }
 
-            // 每请求OCR水位（默认20页）
             let window = crate::CONFIG
                 .concurrency
                 .as_ref()
@@ -1720,7 +1682,6 @@ impl PreviewEvaluator {
                     allowed_pages
                 );
 
-                // PDF转换许可
                 let _pdf_permit = MULTI_STAGE_CONTROLLER
                     .acquire_pdf_convert_permit()
                     .await
@@ -1775,7 +1736,6 @@ impl PreviewEvaluator {
 
                 let mut converted_keys: Vec<String> = Vec::new();
                 for (offset, image) in image_paths.iter().enumerate() {
-                    // 记录图片尺寸/大小，辅助DPI调参
                     if crate::CONFIG.ocr_tuning.logging_detail {
                         match image::image_dimensions(image) {
                             Ok((w, h)) => {
@@ -1798,8 +1758,6 @@ impl PreviewEvaluator {
                             }
                         }
                     }
-                    // 注意：OCR许可已在上层(preview.rs)获取，这里不需要重复获取
-                    // 避免双重信号量导致死锁
                     let mut engine = GLOBAL_POOL
                         .acquire()
                         .await
@@ -1823,7 +1781,6 @@ impl PreviewEvaluator {
                                 Some(stage_labels.clone()),
                                 None,
                             );
-                            // 质量评估与日志
                             let mut total_score = 0.0f64;
                             let mut scored = 0usize;
                             let mut chars = 0usize;
@@ -1868,7 +1825,6 @@ impl PreviewEvaluator {
                                 .collect::<Vec<_>>()
                                 .join("\n");
                             all_text.push(page_text);
-                            // 可选：上传转换后的图片
                             if let Some(storage) = &self.storage {
                                 if let Ok(bytes) = std::fs::read(&image) {
                                     let key = format!(
@@ -1939,7 +1895,6 @@ impl PreviewEvaluator {
                     }
                 }
 
-                // 记录转换后的keys
                 if let (Some(db), Some(id)) = (&self.database, record_id) {
                     if !converted_keys.is_empty() {
                         let keys_json =
@@ -1987,10 +1942,6 @@ impl PreviewEvaluator {
             );
             all_text.join("\n\n")
         } else {
-            // 非PDF：优先尝试 base64；失败则落盘为临时文件，改用 image_path 模式
-            // 非PDF：一次性借用引擎
-            // 注意：OCR许可已在上层(preview.rs)获取，这里不需要重复获取
-            // 避免双重信号量导致死锁
             let mut engine = GLOBAL_POOL
                 .acquire()
                 .await
@@ -2014,7 +1965,6 @@ impl PreviewEvaluator {
                         METRICS_COLLECTOR.record_preview_ocr_timeout(material_code);
                     }
                     warn!("Base64 OCR失败，切换为路径模式: {}", err_msg);
-                    // 落盘：CURRENT_DIR/images/tmp-<material>-<uuid>.bin
                     let tmp_dir = ocr_conn::CURRENT_DIR.join("images");
                     let _ = std::fs::create_dir_all(&tmp_dir);
                     let tmp_path = tmp_dir.join(format!(
@@ -2026,8 +1976,6 @@ impl PreviewEvaluator {
                         METRICS_COLLECTOR.record_preview_persistence_failure("write_tmp_image");
                         return Err(anyhow!("写入临时文件失败: {}", w));
                     }
-                    // 使用路径模式再次尝试
-                    // 再借用一次引擎
                     let mut engine = GLOBAL_POOL
                         .acquire()
                         .await
@@ -2038,7 +1986,6 @@ impl PreviewEvaluator {
                     METRICS_COLLECTOR.record_ocr_invocation(ocr_result.is_ok(), duration);
                     match ocr_result {
                         Ok(contents) => {
-                            // 清理临时文件（忽略错误）
                             let _ = std::fs::remove_file(&tmp_path);
                             contents
                                 .into_iter()
@@ -2047,7 +1994,6 @@ impl PreviewEvaluator {
                                 .join("\n")
                         }
                         Err(e2) => {
-                            // 保留文件用于排查
                             let err_msg = e2.to_string();
                             if err_msg.contains("超时")
                                 || err_msg.contains("无响应")
@@ -2075,7 +2021,6 @@ impl PreviewEvaluator {
             text_length = text_content.len()
         );
 
-        // 将OCR文本持久化（可选）
         if let Some(storage) = &self.storage {
             let key = format!(
                 "uploads/{}/{}/ocr/{}.txt",
@@ -2114,7 +2059,6 @@ impl PreviewEvaluator {
         Ok(text_content)
     }
 
-    /// 处理评估结果
     async fn process_evaluation_result(
         &mut self,
         ocr_text: String,
@@ -2123,10 +2067,8 @@ impl PreviewEvaluator {
     ) -> Result<MaterialEvaluationResult> {
         let process_start = Instant::now();
 
-        // 创建材料评估结果
         let mut material_result = MaterialEvaluationResult::new(material.code.clone());
 
-        // 结构化抽取 + 关键信息摘要
         let extracted_struct = extract::extract_all(&ocr_text);
         self.extracted_map
             .insert(material.code.clone(), extracted_struct.clone());
@@ -2135,7 +2077,6 @@ impl PreviewEvaluator {
         extracted_info.extend(self.describe_extracted_fields(&extracted_struct));
         material_result.set_ocr_content(ocr_text.clone());
 
-        // 执行规则匹配评估
         let rule_start = Instant::now();
         let evaluation = self.evaluate_material_with_rules(&ocr_text, material).await;
         let rule_duration = rule_start.elapsed();
@@ -2172,7 +2113,6 @@ impl PreviewEvaluator {
             }
         }
 
-        // 一致性校验（申请人/经办人/合同/证照）
         let (consistency_notes, consistency_tags, severe) =
             self.run_consistency_checks(&extracted_struct, material.code.as_str());
         if !consistency_notes.is_empty() {
@@ -2232,12 +2172,9 @@ impl PreviewEvaluator {
         Ok(material_result)
     }
 
-    /// 从OCR内容中提取关键信息
     fn extract_key_information(&self, ocr_text: &str) -> Vec<String> {
-        // 简化的信息提取逻辑
         let mut extracted = Vec::new();
 
-        // 提取关键词
         if ocr_text.contains("身份证") {
             extracted.push("发现身份证信息".to_string());
         }
@@ -2405,7 +2342,6 @@ impl PreviewEvaluator {
         }
 
         if let Some(contract) = &extracted.contract {
-            // 甲方/出租人 ↔ 申请人 或 法人；乙方/承租人 ↔ 经办人/申请人
             if let Some(party_a) = &contract.party_a {
                 if !name_candidates.is_empty() && !matches_any(party_a, &name_candidates) {
                     notes.push(format!(
@@ -2450,7 +2386,6 @@ impl PreviewEvaluator {
         (notes, tags, severe)
     }
 
-    /// 使用规则引擎评估材料
     async fn evaluate_material_with_rules(
         &self,
         _ocr_text: &str,
@@ -2643,7 +2578,6 @@ fn attachment_log_settings() -> AttachmentLogSettings {
         slow_threshold_ms: snapshot.slow_threshold_ms,
     }
 }
-/// 简单文件名清洗，保留字母数字、下划线、连字符和点，其他替换为下划线
 fn sanitize_name(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
     for c in name.chars() {
@@ -2717,7 +2651,6 @@ fn classify_download_source(url: &str) -> &str {
     }
 }
 
-/// 材料评估结果
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MaterialEvaluationResult {
     pub material_code: String,
@@ -2728,19 +2661,16 @@ pub struct MaterialEvaluationResult {
     pub is_success: bool,
 }
 
-/// 估算PDF页数（简单扫描）
 fn estimate_pdf_pages(data: &[u8]) -> Option<usize> {
     if data.len() < 8 {
         return None;
     }
     let s = if data.len() > 4 * 1024 * 1024 {
-        // 最多扫描前4MB
         &data[..4 * 1024 * 1024]
     } else {
         data
     };
     let hay = std::str::from_utf8(s).ok()?;
-    // 粗略统计 '/Type /Page' 出现次数
     Some(hay.matches("/Type /Page").count())
 }
 
@@ -2790,7 +2720,6 @@ impl MaterialEvaluationResult {
     }
 }
 
-/// 规则评估结果
 #[derive(Debug)]
 struct RuleEvaluationResult {
     pub code: u16,

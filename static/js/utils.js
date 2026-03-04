@@ -1,6 +1,4 @@
-// 工具函數模塊
 (() => {
-// 格式化日期
 function formatDate(date) {
     if (!date) return '';
     
@@ -15,19 +13,16 @@ function formatDate(date) {
     return `${year}年${month}月${day}日`;
 }
 
-// 格式化數字
 function formatNumber(num) {
     if (num === undefined || num === null) return '';
     
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-// 生成唯一ID
 function generateUniqueId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 }
 
-// 防抖函數
 function debounce(func, wait) {
     let timeout;
     return function(...args) {
@@ -37,7 +32,6 @@ function debounce(func, wait) {
     };
 }
 
-// 節流函數
 function throttle(func, limit) {
     let inThrottle;
     return function(...args) {
@@ -50,7 +44,6 @@ function throttle(func, limit) {
     };
 }
 
-// 深拷貝對象
 function deepClone(obj) {
     if (obj === null || typeof obj !== 'object') {
         return obj;
@@ -73,7 +66,6 @@ function deepClone(obj) {
     }
 }
 
-// 獲取狀態顏色
 function getStatusColor(status) {
     switch(status) {
         case 'passed': return '#52c41a';
@@ -84,7 +76,6 @@ function getStatusColor(status) {
     }
 }
 
-// 獲取狀態圖標
 function getStatusIcon(status) {
     switch(status) {
         case 'passed': return '✓';
@@ -95,7 +86,6 @@ function getStatusIcon(status) {
     }
 }
 
-// 獲取狀態文本
 function getStatusText(status) {
     switch(status) {
         case 'passed': return '通過';
@@ -106,7 +96,6 @@ function getStatusText(status) {
     }
 }
 
-// 創建SVG圖標
 function createSvgIcon(type) {
     const icons = {
         success: `
@@ -143,7 +132,6 @@ function createSvgIcon(type) {
     return icons[type] || icons.success;
 }
 
-// 創建模擬文檔圖像
 function createDocumentImage(type, data = {}) {
     if (type === 'license') {
         return createLicenseImage(data);
@@ -154,7 +142,6 @@ function createDocumentImage(type, data = {}) {
     }
 }
 
-// 創建營業執照圖像
 function createLicenseImage(data = {}) {
     const {
         companyName = '示例企业有限公司',
@@ -190,7 +177,6 @@ function createLicenseImage(data = {}) {
     `)}`;
 }
 
-// 創建表格圖像
 function createTableImage(data = {}) {
     return `data:image/svg+xml;base64,${btoa(`
         <svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
@@ -198,7 +184,6 @@ function createTableImage(data = {}) {
             <rect x="50" y="50" width="500" height="300" fill="white" stroke="#ccc"/>
             <text x="300" y="80" text-anchor="middle" font-size="18" font-weight="bold" fill="#333">杭州市工商主管部門設立登記申請清單</text>
             
-            <!-- 表格頭部 -->
             <rect x="80" y="100" width="440" height="30" fill="#f0f0f0" stroke="#ccc"/>
             <text x="100" y="120" font-size="12" fill="#333">序號</text>
             <text x="150" y="120" font-size="12" fill="#333">事項</text>
@@ -206,7 +191,6 @@ function createTableImage(data = {}) {
             <text x="350" y="120" font-size="12" fill="#333">份數</text>
             <text x="400" y="120" font-size="12" fill="#333">審核結果</text>
             
-            <!-- 表格內容 -->
             <rect x="80" y="130" width="440" height="25" fill="white" stroke="#ccc"/>
             <text x="100" y="147" font-size="11" fill="#333">1</text>
             <text x="150" y="147" font-size="11" fill="#333">法人代表</text>
@@ -231,7 +215,6 @@ function createTableImage(data = {}) {
     `)}`;
 }
 
-// 創建默認文檔圖像
 function createDefaultDocumentImage() {
     return `data:image/svg+xml;base64,${btoa(`
         <svg width="400" height="500" xmlns="http://www.w3.org/2000/svg">
@@ -242,7 +225,6 @@ function createDefaultDocumentImage() {
     `)}`;
 }
 
-// 導出工具函數
 window.utils = {
     formatDate,
     formatNumber,

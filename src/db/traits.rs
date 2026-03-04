@@ -4,7 +4,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
-/// 预审请求记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewRequestRecord {
     pub id: String,
@@ -27,7 +26,6 @@ pub struct PreviewRequestRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 预审请求查询过滤条件
 #[derive(Debug, Clone, Default)]
 pub struct PreviewRequestFilter {
     pub user_id: Option<String>,
@@ -43,7 +41,6 @@ pub struct PreviewRequestFilter {
     pub offset: Option<u32>,
 }
 
-/// 预审记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewRecord {
     pub id: String,
@@ -83,7 +80,6 @@ pub struct PreviewRecord {
     pub next_callback_after: Option<DateTime<Utc>>,
 }
 
-/// 预审材料评估结果记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewMaterialResultRecord {
     pub id: String,
@@ -101,7 +97,6 @@ pub struct PreviewMaterialResultRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 预审规则评估结果记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewRuleResultRecord {
     pub id: String,
@@ -122,7 +117,6 @@ pub struct PreviewRuleResultRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 事项规则配置记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatterRuleConfigRecord {
     pub id: String,
@@ -139,7 +133,6 @@ pub struct MatterRuleConfigRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 预审状态
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PreviewStatus {
     Pending,
@@ -188,7 +181,6 @@ impl FromStr for PreviewStatus {
     }
 }
 
-/// API调用统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiStats {
     pub id: String,
@@ -204,7 +196,6 @@ pub struct ApiStats {
     pub created_at: DateTime<Utc>,
 }
 
-/// 预审记录过滤条件
 #[derive(Debug, Clone, Default)]
 pub struct PreviewFilter {
     pub user_id: Option<String>,
@@ -217,7 +208,6 @@ pub struct PreviewFilter {
     pub offset: Option<u32>,
 }
 
-/// 预审状态计数
 #[derive(Debug, Clone, Default)]
 pub struct PreviewStatusCounts {
     pub total: u64,
@@ -241,7 +231,6 @@ impl PreviewStatusCounts {
     }
 }
 
-/// API统计过滤条件
 #[derive(Debug, Clone, Default)]
 pub struct StatsFilter {
     pub endpoint: Option<String>,
@@ -253,25 +242,19 @@ pub struct StatsFilter {
     pub offset: Option<u32>,
 }
 
-/// 数据库操作trait
 #[async_trait]
 pub trait Database: Send + Sync {
-    /// 类型转换方法 - 用于访问具体实现的方法
     fn as_any(&self) -> &dyn std::any::Any;
 
-    /// 保存预审请求基础信息
     async fn save_preview_request(&self, request: &PreviewRequestRecord) -> Result<()>;
 
-    /// 获取预审请求
     async fn get_preview_request(&self, id: &str) -> Result<Option<PreviewRequestRecord>>;
 
-    /// 根据第三方请求ID查询预审请求
     async fn find_preview_request_by_third_party(
         &self,
         third_party_request_id: &str,
     ) -> Result<Option<PreviewRequestRecord>>;
 
-    /// 更新预审请求的最新结果指针
     async fn update_preview_request_latest(
         &self,
         request_id: &str,
@@ -279,29 +262,23 @@ pub trait Database: Send + Sync {
         latest_status: Option<PreviewStatus>,
     ) -> Result<()>;
 
-    /// 查询预审请求列表
     async fn list_preview_requests(
         &self,
         filter: &PreviewRequestFilter,
     ) -> Result<Vec<PreviewRequestRecord>>;
 
-    /// 保存预审记录
     async fn save_preview_record(&self, record: &PreviewRecord) -> Result<()>;
 
-    /// 获取预审记录
     async fn get_preview_record(&self, id: &str) -> Result<Option<PreviewRecord>>;
 
-    /// 更新预审状态
     async fn update_preview_status(&self, id: &str, status: PreviewStatus) -> Result<()>;
 
-    /// 更新预审的evaluation_result字段
     async fn update_preview_evaluation_result(
         &self,
         id: &str,
         evaluation_result: &str,
     ) -> Result<()>;
 
-    /// 标记预审任务进入Processing状态，并记录worker/attempt信息
     async fn mark_preview_processing(
         &self,
         id: &str,
@@ -309,7 +286,6 @@ pub trait Database: Send + Sync {
         attempt_id: &str,
     ) -> Result<()>;
 
-    /// 更新预审记录的文件信息（文件名、访问URL等）
     async fn update_preview_artifacts(
         &self,
         id: &str,
@@ -319,27 +295,22 @@ pub trait Database: Send + Sync {
         preview_download_url: Option<&str>,
     ) -> Result<()>;
 
-    /// 替换预审材料评估结果
     async fn replace_preview_material_results(
         &self,
         preview_id: &str,
         records: &[PreviewMaterialResultRecord],
     ) -> Result<()>;
 
-    /// 替换预审规则评估结果
     async fn replace_preview_rule_results(
         &self,
         preview_id: &str,
         records: &[PreviewRuleResultRecord],
     ) -> Result<()>;
 
-    /// 更新预审失败上下文信息（失败原因、错误码、慢附件等）
     async fn update_preview_failure_context(&self, update: &PreviewFailureUpdate) -> Result<()>;
 
-    /// 查询预审记录列表
     async fn list_preview_records(&self, filter: &PreviewFilter) -> Result<Vec<PreviewRecord>>;
 
-    /// 预审去重：记录指纹并判断是否需要复用已有结果（仅 DM 实现，SQLite 返回允许）
     async fn check_and_update_preview_dedup(
         &self,
         fingerprint: &str,
@@ -348,7 +319,6 @@ pub trait Database: Send + Sync {
         limit: i32,
     ) -> Result<PreviewDedupDecision>;
 
-    /// 获取预审状态计数（默认实现基于 list_preview_records，可由具体实现覆盖优化）
     async fn get_preview_status_counts(&self) -> Result<PreviewStatusCounts> {
         let records = self.list_preview_records(&PreviewFilter::default()).await?;
         let mut counts = PreviewStatusCounts::default();
@@ -358,29 +328,22 @@ pub trait Database: Send + Sync {
         Ok(counts)
     }
 
-    /// 根据第三方请求ID和用户ID查找预审记录
     async fn find_preview_by_third_party_id(
         &self,
         third_party_id: &str,
         user_id: &str,
     ) -> Result<Option<PreviewRecord>>;
 
-    /// 保存API调用统计
     async fn save_api_stats(&self, stats: &ApiStats) -> Result<()>;
 
-    /// 查询API统计数据
     async fn get_api_stats(&self, filter: &StatsFilter) -> Result<Vec<ApiStats>>;
 
-    /// 获取API调用汇总统计
     async fn get_api_summary(&self, filter: &StatsFilter) -> Result<ApiSummary>;
 
-    /// 健康检查
     async fn health_check(&self) -> Result<bool>;
 
-    /// 初始化数据库（创建表等）
     async fn initialize(&self) -> Result<()>;
 
-    /// 保存用户登录审计记录
     #[allow(clippy::too_many_arguments)]
     async fn save_user_login_record(
         &self,
@@ -401,12 +364,10 @@ pub trait Database: Send + Sync {
         raw_data: &str,
     ) -> Result<()>;
 
-    /// 写入材料缓存记录
     async fn upsert_cached_material_record(&self, record: &CachedMaterialRecord) -> Result<()> {
         Err(anyhow!("cached material persistence not supported"))
     }
 
-    /// 更新材料缓存状态
     async fn update_cached_material_status(
         &self,
         id: &str,
@@ -417,7 +378,6 @@ pub trait Database: Send + Sync {
         Err(anyhow!("cached material persistence not supported"))
     }
 
-    /// 查询材料缓存记录
     async fn list_cached_material_records(
         &self,
         _filter: &CachedMaterialFilter,
@@ -425,20 +385,16 @@ pub trait Database: Send + Sync {
         Err(anyhow!("cached material persistence not supported"))
     }
 
-    /// 删除单个材料缓存记录
     async fn delete_cached_material_record(&self, _id: &str) -> Result<()> {
         Err(anyhow!("cached material persistence not supported"))
     }
 
-    /// 清理指定预审的缓存记录
     async fn delete_cached_materials_by_preview(&self, _preview_id: &str) -> Result<()> {
         Err(anyhow!("cached material persistence not supported"))
     }
 
-    /// 保存材料文件记录
     async fn save_material_file_record(&self, record: &MaterialFileRecord) -> Result<()>;
 
-    /// 更新材料文件状态
     async fn update_material_file_status(
         &self,
         id: &str,
@@ -446,7 +402,6 @@ pub trait Database: Send + Sync {
         error: Option<&str>,
     ) -> Result<()>;
 
-    /// 更新材料文件处理信息
     async fn update_material_file_processing(
         &self,
         id: &str,
@@ -455,67 +410,50 @@ pub trait Database: Send + Sync {
         ocr_text_length: Option<i64>,
     ) -> Result<()>;
 
-    /// 查询材料文件列表
     async fn list_material_files(
         &self,
         filter: &MaterialFileFilter,
     ) -> Result<Vec<MaterialFileRecord>>;
 
-    /// 保存任务payload
     async fn save_task_payload(&self, preview_id: &str, payload: &str) -> Result<()>;
 
-    /// 获取任务payload
     async fn load_task_payload(&self, preview_id: &str) -> Result<Option<String>>;
 
-    /// 删除任务payload
     async fn delete_task_payload(&self, preview_id: &str) -> Result<()>;
 
-    /// 更新预审回调状态
     async fn update_preview_callback_state(&self, update: &PreviewCallbackUpdate) -> Result<()>;
 
-    /// 列出需要回调的预审记录
     async fn list_due_callbacks(&self, limit: u32) -> Result<Vec<PreviewRecord>>;
 
-    /// 写入 Outbox 事件
     async fn enqueue_outbox_event(&self, event: &NewOutboxEvent) -> Result<()>;
 
-    /// 拉取待处理 Outbox 事件
     async fn fetch_pending_outbox_events(&self, limit: u32) -> Result<Vec<OutboxEvent>>;
 
-    /// 标记 Outbox 事件成功
     async fn mark_outbox_event_applied(&self, event_id: &str) -> Result<()>;
 
-    /// 标记 Outbox 事件失败
     async fn mark_outbox_event_failed(&self, event_id: &str, error: &str) -> Result<()>;
 
-    /// 获取事项规则配置
     async fn get_matter_rule_config(
         &self,
         matter_id: &str,
     ) -> Result<Option<MatterRuleConfigRecord>>;
 
-    /// 保存事项规则配置
     async fn upsert_matter_rule_config(&self, config: &MatterRuleConfigRecord) -> Result<()>;
 
-    /// 列出事项规则配置
     async fn list_matter_rule_configs(
         &self,
         status: Option<&str>,
     ) -> Result<Vec<MatterRuleConfigRecord>>;
 
-    // 监控系统相关方法
 
-    /// 根据用户名查找监控用户
     async fn find_monitor_user_by_username(&self, username: &str) -> Result<Option<MonitorUser>> {
         Err(anyhow!("find_monitor_user_by_username not implemented"))
     }
 
-    /// 获取监控用户密码哈希
     async fn get_monitor_user_password_hash(&self, user_id: &str) -> Result<String> {
         Err(anyhow!("get_monitor_user_password_hash not implemented"))
     }
 
-    /// 创建监控会话
     async fn create_monitor_session(
         &self,
         session_id: &str,
@@ -528,42 +466,34 @@ pub trait Database: Send + Sync {
         Err(anyhow!("create_monitor_session not implemented"))
     }
 
-    /// 根据会话ID查找监控会话
     async fn find_monitor_session_by_id(&self, session_id: &str) -> Result<Option<MonitorSession>> {
         Err(anyhow!("find_monitor_session_by_id not implemented"))
     }
 
-    /// 更新监控用户登录信息
     async fn update_monitor_login_info(&self, user_id: &str, now: &str) -> Result<()> {
         Err(anyhow!("update_monitor_login_info not implemented"))
     }
 
-    /// 更新监控会话活动时间
     async fn update_monitor_session_activity(&self, session_id: &str, now: &str) -> Result<()> {
         Err(anyhow!("update_monitor_session_activity not implemented"))
     }
 
-    /// 删除监控会话
     async fn delete_monitor_session(&self, session_id: &str) -> Result<()> {
         Err(anyhow!("delete_monitor_session not implemented"))
     }
 
-    /// 清理过期监控会话
     async fn cleanup_expired_monitor_sessions(&self, now: &str) -> Result<u64> {
         Err(anyhow!("cleanup_expired_monitor_sessions not implemented"))
     }
 
-    /// 获取活跃监控会话数量
     async fn get_active_monitor_sessions_count(&self, now: &str) -> Result<i64> {
         Err(anyhow!("get_active_monitor_sessions_count not implemented"))
     }
 
-    /// 列出监控用户
     async fn list_monitor_users(&self) -> Result<Vec<MonitorUser>> {
         Err(anyhow!("list_monitor_users not implemented"))
     }
 
-    /// 创建监控用户
     async fn create_monitor_user(
         &self,
         id: &str,
@@ -575,12 +505,10 @@ pub trait Database: Send + Sync {
         Err(anyhow!("create_monitor_user not implemented"))
     }
 
-    /// 更新监控用户角色
     async fn update_monitor_user_role(&self, user_id: &str, role: &str, now: &str) -> Result<()> {
         Err(anyhow!("update_monitor_user_role not implemented"))
     }
 
-    /// 更新监控用户密码
     async fn update_monitor_user_password(
         &self,
         user_id: &str,
@@ -590,7 +518,6 @@ pub trait Database: Send + Sync {
         Err(anyhow!("update_monitor_user_password not implemented"))
     }
 
-    /// 设置监控用户是否启用
     async fn set_monitor_user_active(
         &self,
         user_id: &str,
@@ -600,24 +527,19 @@ pub trait Database: Send + Sync {
         Err(anyhow!("set_monitor_user_active not implemented"))
     }
 
-    /// 统计活跃管理员数量
     async fn count_active_monitor_admins(&self) -> Result<i64> {
         Err(anyhow!("count_active_monitor_admins not implemented"))
     }
 
-    /// 根据ID查找监控用户
     async fn find_monitor_user_by_id(&self, user_id: &str) -> Result<Option<MonitorUser>> {
         Err(anyhow!("find_monitor_user_by_id not implemented"))
     }
 
-    // Worker结果异步处理队列相关方法
 
-    /// 入队Worker结果
     async fn enqueue_worker_result(&self, preview_id: &str, payload: &str) -> Result<()> {
         Err(anyhow!("enqueue_worker_result not implemented"))
     }
 
-    /// 拉取待处理的Worker结果
     async fn fetch_pending_worker_results(
         &self,
         limit: u32,
@@ -625,7 +547,6 @@ pub trait Database: Send + Sync {
         Err(anyhow!("fetch_pending_worker_results not implemented"))
     }
 
-    /// 更新Worker结果处理状态
     async fn update_worker_result_status(
         &self,
         id: &str,
@@ -633,7 +554,6 @@ pub trait Database: Send + Sync {
         last_error: Option<&str>,
     ) -> Result<()>;
 
-    /// 按 preview_id 查询 Worker 结果队列记录（用于回补 evaluation_result）
     async fn get_worker_result_by_preview_id(
         &self,
         preview_id: &str,
@@ -655,7 +575,6 @@ pub trait Database: Send + Sync {
     ) -> Result<()>;
     async fn update_material_download_payload(&self, id: &str, payload: &str) -> Result<()>;
 
-    // 持久化跨请求去重缓存（按URL→token）
     async fn get_download_cache_token(
         &self,
         url: &str,
@@ -667,7 +586,6 @@ pub trait Database: Send + Sync {
         ttl_secs: i64,
     ) -> Result<()>;
 
-    // 外部分享一次性访问token（DM实现，SQLite可忽略）
     async fn create_preview_share_token(
         &self,
         preview_id: &str,
@@ -678,7 +596,6 @@ pub trait Database: Send + Sync {
         Err(anyhow!("create_preview_share_token not implemented"))
     }
 
-    /// 消费一次性分享token：原子标记已使用并返回token记录
     async fn consume_preview_share_token(
         &self,
         token: &str,
@@ -694,7 +611,6 @@ pub struct MaterialDownloadCacheEntry {
     pub expires_at: DateTime<Utc>,
 }
 
-/// 外部分享一次性访问token记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewShareTokenRecord {
     pub token: String,
@@ -704,7 +620,6 @@ pub struct PreviewShareTokenRecord {
     pub used_at: Option<DateTime<Utc>>,
 }
 
-/// 监控用户
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitorUser {
     pub id: String,
@@ -715,7 +630,6 @@ pub struct MonitorUser {
     pub is_active: bool,
 }
 
-/// 监控会话
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitorSession {
     pub id: String,
@@ -725,7 +639,6 @@ pub struct MonitorSession {
     pub ip_address: Option<String>,
 }
 
-/// API调用汇总统计
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiSummary {
     pub total_calls: u64,
@@ -736,7 +649,6 @@ pub struct ApiSummary {
     pub total_response_size: u64,
 }
 
-/// Outbox事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutboxEvent {
     pub id: String,
@@ -751,7 +663,6 @@ pub struct OutboxEvent {
     pub last_error: Option<String>,
 }
 
-/// Outbox事件入队结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewOutboxEvent {
     pub table_name: String,
@@ -761,7 +672,6 @@ pub struct NewOutboxEvent {
     pub payload: String,
 }
 
-/// 材料文件记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MaterialFileRecord {
     pub id: String,
@@ -782,14 +692,12 @@ pub struct MaterialFileRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 材料文件查询条件
 #[derive(Debug, Clone, Default)]
 pub struct MaterialFileFilter {
     pub preview_id: Option<String>,
     pub material_code: Option<String>,
 }
 
-/// 材料缓存状态
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CachedMaterialStatus {
     Downloaded,
@@ -821,7 +729,6 @@ impl CachedMaterialStatus {
     }
 }
 
-/// 材料缓存记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedMaterialRecord {
     pub id: String,
@@ -839,7 +746,6 @@ pub struct CachedMaterialRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 材料缓存查询条件
 #[derive(Debug, Clone, Default)]
 pub struct CachedMaterialFilter {
     pub preview_id: Option<String>,
@@ -847,7 +753,6 @@ pub struct CachedMaterialFilter {
     pub limit: Option<u32>,
 }
 
-/// 第三方回调状态更新
 #[derive(Debug, Clone, Default)]
 pub struct PreviewCallbackUpdate {
     pub preview_id: String,
@@ -874,7 +779,6 @@ pub struct PreviewFailureUpdate {
     pub ocr_stderr_summary: Option<Option<String>>,
 }
 
-/// Worker结果队列记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerResultQueueRecord {
     pub id: String,
@@ -887,7 +791,6 @@ pub struct WorkerResultQueueRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-/// 材料下载队列记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MaterialDownloadQueueRecord {
     pub id: String,
@@ -919,6 +822,3 @@ pub enum PreviewDedupDecision {
     },
 }
 
-// 在 Database trait 中添加以下方法
-// 注意：由于 Database trait 定义在上面，我们需要修改上面的 Database trait 定义
-// 这里我将使用 multi_replace_file_content 来同时修改 trait 定义和添加 struct 定义

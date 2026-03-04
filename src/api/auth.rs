@@ -1,5 +1,3 @@
-//! 认证和用户管理模块
-//! 处理SSO登录、用户验证、会话管理等功能
 
 use crate::model::user::User;
 use crate::model::{SessionUser, Ticket, TicketId, Token};
@@ -18,8 +16,6 @@ use tokio::task;
 use tower_sessions::Session;
 use url::Url;
 
-/// 构建第三方SSO登录URL的辅助函数
-/// 生成API请求的签名头部
 fn generate_signature_headers(
     url_str: &str,
     method: &str,
@@ -29,16 +25,13 @@ fn generate_signature_headers(
     let access_key = &CONFIG.login.access_key;
     let secret_key = &CONFIG.login.secret_key;
 
-    // 生成GMT时间戳
     let now = chrono::Utc::now();
     let date = now.format("%a, %d %b %Y %H:%M:%S GMT").to_string();
 
-    // 解析URL
     let url = Url::parse(url_str)?;
     let path = url.path();
     let query = url.query().unwrap_or("");
 
-    // 构建签名字符串
     let signing_string = format!(
         "{}\n{}\n{}\n{}\n{}\n",
         method.to_uppercase(),
@@ -50,7 +43,6 @@ fn generate_signature_headers(
 
     tracing::debug!("签名字符串: {}", signing_string);
 
-    // 计算HMAC-SHA256签名
     let mut mac = HmacSha256::new_from_slice(secret_key.as_bytes())?;
     mac.update(signing_string.as_bytes());
     let result = mac.finalize();
@@ -66,15 +58,12 @@ fn generate_signature_headers(
     Ok(headers)
 }
 
-/// 使用curl命令调用SSO API（避免reqwest SSL问题）
 async fn call_sso_api_with_curl(url: &str, json_data: &str) -> anyhow::Result<String> {
     tracing::info!("使用curl调用SSO API: {}", url);
     tracing::debug!("请求数据: {}", json_data);
 
-    // 生成签名头部
     let signature_headers = generate_signature_headers(url, "POST")?;
 
-    // 构建curl命令
     let curl_cmd = if cfg!(target_os = "windows") {
         "curl.exe"
     } else {
@@ -85,7 +74,7 @@ async fn call_sso_api_with_curl(url: &str, json_data: &str) -> anyhow::Result<St
     command
         .arg("-X")
         .arg("POST")
-        .arg("-k") // 跳过SSL证书验证
+        .arg("-k")
         .arg("--connect-timeout")
         .arg("30")
         .arg("--max-time")
@@ -96,14 +85,12 @@ async fn call_sso_api_with_curl(url: &str, json_data: &str) -> anyhow::Result<St
         .arg(json_data)
         .arg(url);
 
-    // 添加签名头部
     for (key, value) in signature_headers {
         command.arg("-H").arg(format!("{}: {}", key, value));
     }
 
     tracing::debug!("执行curl命令: {:?}", command);
 
-    // 在异步环境中执行同步命令
     let output = task::spawn_blocking(move || command.output()).await??;
 
     tracing::debug!("curl命令执行完成，状态码: {:?}", output.status);
@@ -125,12 +112,9 @@ pub fn build_sso_login_url(return_url: Option<&str>, user_type: Option<&str>) ->
     let app_id = &CONFIG.app_id;
 
     if CONFIG.login.use_callback {
-        // 回调模式：使用新的参数格式
         let callback_url = CONFIG.callback_url();
 
-        // 构建sp参数（需要URL编码）
         let sp_param = if let Some(return_url) = return_url {
-            // 如果有返回URL，附加到回调地址后面
             format!(
                 "{}?return_url={}",
                 callback_url,
@@ -147,24 +131,21 @@ pub fn build_sso_login_url(return_url: Option<&str>, user_type: Option<&str>) ->
             urlencoding::encode(&sp_param)
         );
 
-        // 添加用户类型参数（默认为个人用户）
         let user_type = user_type.unwrap_or("person");
         url.push_str(&format!("&userType={}", user_type));
 
         url
     } else {
-        // 直跳模式：不添加任何参数，直接使用基础URL
         base_sso_url.to_string()
     }
 }
 
-/// 创建简化的SessionUser（从票据ID）
 pub async fn create_session_user_from_ticket(ticket_id: &str) -> SessionUser {
     let now = Utc::now().to_rfc3339();
     SessionUser {
         user_id: ticket_id.to_string(),
-        user_name: None,                    // 简化模式下为空，等待后续请求提供
-        certificate_type: "01".to_string(), // 默认身份证
+        user_name: None,
+        certificate_type: "01".to_string(),
         certificate_number: None,
         phone_number: None,
         email: None,
@@ -175,7 +156,6 @@ pub async fn create_session_user_from_ticket(ticket_id: &str) -> SessionUser {
     }
 }
 
-/// 带重试机制的SSO用户信息获取
 pub async fn get_user_info_from_sso_with_retry(ticket_id: &str) -> anyhow::Result<SessionUser> {
     const MAX_RETRIES: u32 = 2;
     let mut last_error = None;
@@ -208,14 +188,12 @@ pub async fn get_user_info_from_sso_with_retry(ticket_id: &str) -> anyhow::Resul
     }
 }
 
-/// 从SSO获取完整用户信息（使用curl命令避免SSL问题）
 pub async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUser> {
     tracing::info!("=== 开始SSO用户信息获取（使用curl命令） ===");
     tracing::info!("票据ID: {}", ticket_id);
     tracing::info!("access_token_url: {}", CONFIG.login.access_token_url);
     tracing::info!("get_user_info_url: {}", CONFIG.login.get_user_info_url);
 
-    // 第一步：使用 ticket 获取 access_token
     let token_params = serde_json::json!({
         "ticketId": ticket_id,
         "appId": CONFIG.app_id
@@ -223,7 +201,6 @@ pub async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUs
 
     tracing::info!("正在获取 access_token...");
 
-    // 使用curl命令调用API
     let token_text =
         call_sso_api_with_curl(&CONFIG.login.access_token_url, &token_params.to_string()).await?;
 
@@ -233,7 +210,6 @@ pub async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUs
         anyhow::anyhow!("解析access_token响应失败: {} - 响应内容: {}", e, token_text)
     })?;
 
-    // 检查响应是否成功
     if let Some(success) = token_result.get("success").and_then(|s| s.as_bool()) {
         if !success {
             let error_msg = token_result
@@ -244,7 +220,6 @@ pub async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUs
         }
     }
 
-    // 从响应中提取 access_token
     let access_token = token_result
         .get("data")
         .and_then(|d| d.get("accessToken"))
@@ -257,14 +232,12 @@ pub async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUs
         &access_token[..std::cmp::min(10, access_token.len())]
     );
 
-    // 第二步：使用 access_token 获取用户信息
     let user_params = serde_json::json!({
         "token": access_token
     });
 
     tracing::info!("正在获取用户信息...");
 
-    // 使用curl命令调用用户信息API
     let user_text =
         call_sso_api_with_curl(&CONFIG.login.get_user_info_url, &user_params.to_string()).await?;
 
@@ -273,7 +246,6 @@ pub async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUs
     let user_result: serde_json::Value = serde_json::from_str(&user_text)
         .map_err(|e| anyhow::anyhow!("解析用户信息响应失败: {} - 响应内容: {}", e, user_text))?;
 
-    // 检查响应是否成功
     if let Some(success) = user_result.get("success").and_then(|s| s.as_bool()) {
         if !success {
             let error_msg = user_result
@@ -284,12 +256,10 @@ pub async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUs
         }
     }
 
-    // 从响应中提取用户信息
     let user_data = user_result
         .get("data")
         .ok_or_else(|| anyhow::anyhow!("响应中未找到 data 字段"))?;
 
-    // 构建 SessionUser 对象
     let now = Utc::now().to_rfc3339();
     let session_user = SessionUser {
         user_id: user_data
@@ -309,7 +279,7 @@ pub async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUs
             .get("certificateType")
             .or_else(|| user_data.get("idType"))
             .and_then(|v| v.as_str())
-            .unwrap_or("01") // 默认身份证
+            .unwrap_or("01")
             .to_string(),
         certificate_number: user_data
             .get("certificateNumber")
@@ -354,25 +324,21 @@ pub async fn get_user_info_from_sso(ticket_id: &str) -> anyhow::Result<SessionUs
     Ok(session_user)
 }
 
-/// 用户保存接口
 pub async fn user_save(session: Session, Json(ticket_id): Json<TicketId>) -> impl IntoResponse {
     let result = User::user_save(session, ticket_id).await;
     result.into_json()
 }
 
-/// 获取Token接口
 pub async fn get_token(Json(ticket): Json<Ticket>) -> impl IntoResponse {
     let result = User::get_token_by_ticket(ticket).await;
     result.into_json()
 }
 
-/// 用户信息接口
 pub async fn user_info(session: Session, Json(token): Json<Token>) -> impl IntoResponse {
     let result = User::get_user_by_token(session, token).await;
     result.into_json()
 }
 
-/// SSO回调处理 (GET方式)
 pub async fn sso_callback(
     State(app_state): State<AppState>,
     headers: HeaderMap,
@@ -383,7 +349,6 @@ pub async fn sso_callback(
     tracing::info!("回调URL参数: {:?}", params);
     tracing::info!("参数数量: {}", params.len());
 
-    // 记录所有可能的票据参数名
     let possible_ticket_params = [
         "ticketId",
         "ticket",
@@ -398,7 +363,6 @@ pub async fn sso_callback(
         }
     }
 
-    // 尝试从不同的参数名中获取票据ID
     let ticket_id = params
         .get("ticketId")
         .or_else(|| params.get("ticket"))
@@ -411,14 +375,11 @@ pub async fn sso_callback(
         tracing::info!("[ok] 成功提取票据ID: {}", ticket_id);
         tracing::info!("票据长度: {} 字符", ticket_id.len());
 
-        // 创建SessionUser对象
         let session_user = create_session_user_from_ticket(ticket_id).await;
 
-        // 保存完整的用户信息到会话中
         tracing::info!("正在保存用户信息到会话...");
         if let Err(e) = session.insert("session_user", &session_user).await {
             tracing::error!("[fail] 保存用户信息到会话失败: {}", e);
-            // 会话保存失败，重新尝试SSO登录
             let sso_url = build_sso_login_url(None, Some("person"));
             return Redirect::to(&sso_url);
         }
@@ -446,13 +407,11 @@ pub async fn sso_callback(
             session_user.user_name.as_deref().unwrap_or("未知")
         );
 
-        // 提取返回URL（新规范中可能在redirectURL参数中）
         let return_url_from_params = params
             .get("redirectURL")
             .or_else(|| params.get("return_url"))
             .or_else(|| params.get("state"));
 
-        // 确定重定向URL的优先级：URL参数 > 会话中的待访问记录 > 会话中的返回URL > 默认主页
         let redirect_url = if let Some(url) = return_url_from_params {
             tracing::info!("从回调参数中获取返回URL: {}", url);
             url.to_string()
@@ -460,18 +419,15 @@ pub async fn sso_callback(
             session.get::<String>("pending_request_id").await
         {
             tracing::info!("发现待访问预审记录: {}", pending_request_id);
-            // 清除待访问记录
             if let Err(e) = session.remove::<String>("pending_request_id").await {
                 tracing::warn!("清除待访问预审记录失败: {}", e);
             }
-            // 重定向到静态页面而不是API接口
             format!(
                 "/static/index.html?previewId={}&verified=true",
                 pending_request_id
             )
         } else if let Ok(Some(return_url)) = session.get::<String>("return_url").await {
             tracing::info!("发现保存的返回URL: {}", return_url);
-            // 清除返回URL
             if let Err(e) = session.remove::<String>("return_url").await {
                 tracing::warn!("清除返回URL失败: {}", e);
             }
@@ -495,19 +451,16 @@ pub async fn sso_callback(
         tracing::warn!("3. 回调URL配置不正确");
         tracing::info!("=== SSO回调结束（失败）===");
 
-        // SSO回调失败，重新尝试SSO登录
         let sso_url = build_sso_login_url(None, Some("person"));
         Redirect::to(&sso_url)
     }
 }
 
-/// 验证用户票据
 pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> impl IntoResponse {
     tracing::info!("=== 用户票据验证开始 ===");
     tracing::info!("收到票据ID: {}", ticket_id.ticket_id);
     tracing::info!("票据长度: {} 字符", ticket_id.ticket_id.len());
 
-    // 检查是否是调试/测试票据（开发环境）
     let is_debug_ticket = ticket_id.ticket_id.starts_with("debug_tk_")
         || ticket_id.ticket_id.starts_with("test_tk_")
         || ticket_id.ticket_id == "debug_test_ticket";
@@ -515,19 +468,15 @@ pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> i
     if is_debug_ticket {
         tracing::info!("[lab] 检测到调试票据，使用开发模式认证");
 
-        // 检查是否启用了调试模式
         let debug_enabled = CONFIG.debug.enabled || CONFIG.runtime_mode.mode == "development";
 
         if debug_enabled {
             tracing::info!("[ok] 调试模式已启用，创建调试用户会话");
 
-            // 解析调试票据中可能包含的测试数据
-            // 格式: debug_tk_{基础ID}#{用户信息JSON}
             let (base_id, user_data) = if let Some(hash_pos) = ticket_id.ticket_id.find('#') {
                 let base_part = &ticket_id.ticket_id[..hash_pos];
                 let data_part = &ticket_id.ticket_id[hash_pos + 1..];
 
-                // 尝试解析用户数据JSON
                 match serde_json::from_str::<serde_json::Value>(&String::from_utf8_lossy(
                     &base64::engine::general_purpose::STANDARD
                         .decode(data_part)
@@ -541,7 +490,6 @@ pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> i
                 (ticket_id.ticket_id.as_str(), None)
             };
 
-            // 从票据数据创建调试用户，无硬编码默认值
             let debug_user = SessionUser {
                 user_id: format!("debug_user_{}", &base_id[9..19.min(base_id.len())]),
                 user_name: user_data
@@ -577,7 +525,6 @@ pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> i
                 last_active: Utc::now().to_rfc3339(),
             };
 
-            // 保存调试用户信息到会话
             if let Err(e) = session.insert("session_user", &debug_user).await {
                 tracing::error!("[fail] 保存调试用户信息到会话失败: {}", e);
                 return Json(serde_json::json!({
@@ -620,7 +567,6 @@ pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> i
         }
     }
 
-    // 检查是否配置了第三方SSO（增强版本）
     let has_sso_config = !CONFIG.login.access_token_url.is_empty()
         && !CONFIG.login.get_user_info_url.is_empty()
         && !CONFIG.login.access_key.is_empty()
@@ -677,7 +623,6 @@ pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> i
         tracing::info!("  access_token_url: {}", CONFIG.login.access_token_url);
         tracing::info!("  get_user_info_url: {}", CONFIG.login.get_user_info_url);
 
-        // 调用第三方API获取完整用户信息（带重试机制）
         match get_user_info_from_sso_with_retry(&ticket_id.ticket_id).await {
             Ok(user) => {
                 tracing::info!("[ok] 完整SSO模式认证成功");
@@ -691,7 +636,6 @@ pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> i
         }
     };
 
-    // 保存用户信息到会话
     tracing::info!("正在保存用户信息到会话...");
     if let Err(e) = session.insert("session_user", &session_user).await {
         tracing::error!("[fail] 保存用户信息到会话失败: {}", e);
@@ -712,22 +656,18 @@ pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> i
         session_user.user_name.as_deref().unwrap_or("未知")
     );
 
-    // 确定重定向URL的优先级：待访问预审记录 > 保存的返回URL > 默认主页
     let redirect_url =
         if let Ok(Some(pending_request_id)) = session.get::<String>("pending_request_id").await {
             tracing::info!("发现待访问预审记录: {}", pending_request_id);
-            // 清除待访问记录
             if let Err(e) = session.remove::<String>("pending_request_id").await {
                 tracing::warn!("清除待访问预审记录失败: {}", e);
             }
-            // 重定向到静态页面而不是API接口
             format!(
                 "/static/index.html?previewId={}&verified=true",
                 pending_request_id
             )
         } else if let Ok(Some(return_url)) = session.get::<String>("return_url").await {
             tracing::info!("发现保存的返回URL: {}", return_url);
-            // 清除返回URL
             if let Err(e) = session.remove::<String>("return_url").await {
                 tracing::warn!("清除返回URL失败: {}", e);
             }
@@ -740,7 +680,6 @@ pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> i
     tracing::info!("重定向URL: {}", redirect_url);
     tracing::info!("=== 用户票据验证结束 ===");
 
-    // 返回JSON响应而不是重定向，让前端处理跳转
     Json(serde_json::json!({
         "success": true,
         "errorCode": 200,
@@ -763,9 +702,7 @@ pub async fn verify_user(session: Session, Json(ticket_id): Json<TicketId>) -> i
     .into_response()
 }
 
-/// 认证状态检查
 pub async fn auth_status(session: Session) -> impl IntoResponse {
-    // 检查会话中是否有用户信息
     match session.get::<SessionUser>("session_user").await {
         Ok(Some(session_user)) => {
             tracing::info!(
@@ -774,7 +711,6 @@ pub async fn auth_status(session: Session) -> impl IntoResponse {
                 session_user.user_name.as_deref().unwrap_or("未知用户")
             );
 
-            // 用户已登录，返回完整信息
             Json(serde_json::json!({
                 "authenticated": true,
                 "user": {
@@ -793,7 +729,6 @@ pub async fn auth_status(session: Session) -> impl IntoResponse {
         }
         _ => {
             tracing::info!("用户未认证或会话已过期");
-            // 用户未登录，直接跳转SSO
             Json(serde_json::json!({
                 "authenticated": false,
                 "error": "用户未登录或会话已过期",
@@ -803,11 +738,9 @@ pub async fn auth_status(session: Session) -> impl IntoResponse {
     }
 }
 
-/// 用户登出
 pub async fn auth_logout(session: Session) -> impl IntoResponse {
     tracing::info!("用户登出请求");
 
-    // 获取当前用户信息（用于日志记录）
     if let Ok(Some(session_user)) = session.get::<SessionUser>("session_user").await {
         tracing::info!(
             "用户 {} ({}) 正在登出",
@@ -816,11 +749,9 @@ pub async fn auth_logout(session: Session) -> impl IntoResponse {
         );
     }
 
-    // 清除会话 - session.clear() 返回 ()，不是 Result
     session.clear().await;
     tracing::info!("[ok] 用户会话已清除");
 
-    // 返回成功响应
     Json(serde_json::json!({
         "success": true,
         "errorCode": 200,
@@ -831,21 +762,18 @@ pub async fn auth_logout(session: Session) -> impl IntoResponse {
     }))
 }
 
-/// SSO登录跳转端点
 pub async fn sso_login_redirect(
     session: Session,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     tracing::info!("=== SSO登录跳转请求 ===");
 
-    // 获取可选的返回URL参数
     let return_url = params.get("return_url");
     let pending_request_id = params.get("request_id");
 
     tracing::info!("返回URL: {:?}", return_url);
     tracing::info!("待访问预审ID: {:?}", pending_request_id);
 
-    // 如果有待访问的预审ID，保存到会话中
     if let Some(request_id) = pending_request_id {
         if let Err(e) = session.insert("pending_request_id", request_id).await {
             tracing::warn!("保存待访问预审记录ID失败: {}", e);
@@ -854,7 +782,6 @@ pub async fn sso_login_redirect(
         }
     }
 
-    // 如果有返回URL，保存到会话中
     if let Some(url) = return_url {
         if let Err(e) = session.insert("return_url", url).await {
             tracing::warn!("保存返回URL失败: {}", e);
@@ -863,12 +790,10 @@ pub async fn sso_login_redirect(
         }
     }
 
-    // 构建SSO登录URL
     let sso_url = build_sso_login_url(return_url.map(|s| s.as_str()), Some("person"));
 
     tracing::info!("构建的SSO登录URL: {}", sso_url);
     tracing::info!("=== SSO登录跳转执行 ===");
 
-    // 重定向到第三方SSO登录
     Redirect::to(&sso_url)
 }

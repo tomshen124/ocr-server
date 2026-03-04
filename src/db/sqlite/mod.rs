@@ -1,5 +1,3 @@
-//! SQLite模块
-//! 重构后的模块化SQLite数据库实现
 
 pub mod connection;
 pub mod monitor_queries;
@@ -23,24 +21,20 @@ use queries::{
 };
 use schemas::SchemaManager;
 
-/// SQLite数据库实现
 pub struct SqliteDatabase {
     pool: SqlitePool,
 }
 
 impl SqliteDatabase {
-    /// 创建新的SQLite数据库实例
     pub async fn new(db_path: &str) -> Result<Self> {
         let pool = ConnectionManager::create_pool(db_path).await?;
         Ok(Self { pool })
     }
 
-    /// 获取连接池引用
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
 
-    /// 获取连接池信息
     pub fn pool_info(&self) -> connection::PoolInfo {
         ConnectionManager::get_pool_info(&self.pool)
     }
@@ -168,7 +162,6 @@ impl Database for SqliteDatabase {
         _meta: &PreviewDedupMeta,
         _limit: i32,
     ) -> Result<PreviewDedupDecision> {
-        // SQLite 路径不做持久化去重，默认允许
         Ok(PreviewDedupDecision::Allowed { repeat_count: 1 })
     }
 
@@ -377,18 +370,14 @@ impl Database for SqliteDatabase {
         MatterRuleConfigQueries::list(&self.pool, status).await
     }
 
-    // 监控系统数据库方法
-    /// 根据用户名查找监控用户
     async fn find_monitor_user_by_username(&self, username: &str) -> Result<Option<MonitorUser>> {
         MonitorQueries::find_user_by_username(&self.pool, username).await
     }
 
-    /// 获取监控用户密码哈希
     async fn get_monitor_user_password_hash(&self, user_id: &str) -> Result<String> {
         MonitorQueries::get_user_password_hash(&self.pool, user_id).await
     }
 
-    /// 创建监控会话
     async fn create_monitor_session(
         &self,
         session_id: &str,
@@ -404,42 +393,34 @@ impl Database for SqliteDatabase {
         .await
     }
 
-    /// 根据会话ID查找监控会话
     async fn find_monitor_session_by_id(&self, session_id: &str) -> Result<Option<MonitorSession>> {
         MonitorQueries::find_session_by_id(&self.pool, session_id).await
     }
 
-    /// 更新监控用户登录信息
     async fn update_monitor_login_info(&self, user_id: &str, now: &str) -> Result<()> {
         MonitorQueries::update_login_info(&self.pool, user_id, now).await
     }
 
-    /// 更新监控会话活动时间
     async fn update_monitor_session_activity(&self, session_id: &str, now: &str) -> Result<()> {
         MonitorQueries::update_session_activity(&self.pool, session_id, now).await
     }
 
-    /// 删除监控会话
     async fn delete_monitor_session(&self, session_id: &str) -> Result<()> {
         MonitorQueries::delete_session(&self.pool, session_id).await
     }
 
-    /// 清理过期监控会话
     async fn cleanup_expired_monitor_sessions(&self, now: &str) -> Result<u64> {
         MonitorQueries::cleanup_expired_sessions(&self.pool, now).await
     }
 
-    /// 获取活跃监控会话数量
     async fn get_active_monitor_sessions_count(&self, now: &str) -> Result<i64> {
         MonitorQueries::get_active_sessions_count(&self.pool, now).await
     }
 
-    /// 列出监控用户
     async fn list_monitor_users(&self) -> Result<Vec<MonitorUser>> {
         MonitorQueries::list_users(&self.pool).await
     }
 
-    /// 创建监控用户
     async fn create_monitor_user(
         &self,
         id: &str,
@@ -451,12 +432,10 @@ impl Database for SqliteDatabase {
         MonitorQueries::create_user(&self.pool, id, username, password_hash, role, now).await
     }
 
-    /// 更新监控用户角色
     async fn update_monitor_user_role(&self, user_id: &str, role: &str, now: &str) -> Result<()> {
         MonitorQueries::update_user_role(&self.pool, user_id, role, now).await
     }
 
-    /// 更新监控用户密码
     async fn update_monitor_user_password(
         &self,
         user_id: &str,
@@ -466,7 +445,6 @@ impl Database for SqliteDatabase {
         MonitorQueries::update_user_password(&self.pool, user_id, password_hash, now).await
     }
 
-    /// 设置监控用户是否启用
     async fn set_monitor_user_active(
         &self,
         user_id: &str,
@@ -476,17 +454,14 @@ impl Database for SqliteDatabase {
         MonitorQueries::set_user_active(&self.pool, user_id, is_active, now).await
     }
 
-    /// 统计活跃管理员数量
     async fn count_active_monitor_admins(&self) -> Result<i64> {
         MonitorQueries::count_active_admins(&self.pool).await
     }
 
-    /// 根据ID查找监控用户
     async fn find_monitor_user_by_id(&self, user_id: &str) -> Result<Option<MonitorUser>> {
         MonitorQueries::find_user_by_id(&self.pool, user_id).await
     }
 
-    // Worker结果异步处理队列相关方法
     async fn enqueue_worker_result(&self, preview_id: &str, payload: &str) -> Result<()> {
         sqlx::query(
             r#"

@@ -13,7 +13,6 @@ use crate::util::task_queue::{PreviewTask, TaskQueue, PREVIEW_QUEUE_NAME};
 use crate::util::tracing::metrics_collector::METRICS_COLLECTOR;
 use crate::AppState;
 
-/// 启动处理超时任务的看门狗
 pub fn spawn_processing_watchdog(app_state: &AppState, cfg: &ProcessingWatchdogConfig) {
     if !cfg.enabled {
         info!("Processing watchdog 已禁用");
@@ -30,7 +29,7 @@ pub fn spawn_processing_watchdog(app_state: &AppState, cfg: &ProcessingWatchdogC
 
     tokio::spawn(async move {
         let mut ticker = interval(interval_duration);
-        ticker.tick().await; // 跳过首次延迟
+        ticker.tick().await;
         loop {
             ticker.tick().await;
             if let Err(err) = check_processing_timeouts(

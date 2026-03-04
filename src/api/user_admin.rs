@@ -1,5 +1,3 @@
-//! 用户信息管理API
-//! 提供管理员查询用户信息和解密敏感数据的功能
 
 use crate::model::user_info::{UserInfo, UserInfoFilter};
 use crate::util::crypto::AesEncryption;
@@ -12,29 +10,27 @@ use std::collections::HashMap;
 const DEFAULT_PAGE_SIZE: u32 = 20;
 const MAX_PAGE_SIZE: u32 = 100;
 
-/// 管理员用户查询请求
 #[derive(Debug, Deserialize)]
 pub struct AdminUserQuery {
     pub user_id: Option<String>,
-    pub user_name: Option<String>,         // 可以按姓名搜索 (明文字段)
-    pub organization_code: Option<String>, // 按组织筛选
-    pub certificate_type: Option<String>,  // 按证件类型筛选
+    pub user_name: Option<String>,
+    pub organization_code: Option<String>,
+    pub certificate_type: Option<String>,
     pub page: Option<u32>,
     pub page_size: Option<u32>,
-    pub decrypt_sensitive: Option<bool>, // 是否解密敏感信息
+    pub decrypt_sensitive: Option<bool>,
 }
 
-/// 用户信息响应 (管理员视图)
 #[derive(Debug, Serialize)]
 pub struct AdminUserResponse {
     pub user_id: String,
-    pub user_name: String,                   // 姓名 (明文)
+    pub user_name: String,
     pub certificate_type: String,
-    pub certificate_number: Option<String>,  // 解密后的身份证号
-    pub certificate_number_masked: String,   // 脱敏显示
-    pub phone_number: Option<String>,        // 解密后的手机号
-    pub phone_number_masked: String,         // 脱敏显示
-    pub email: Option<String>,               // 邮箱 (明文)
+    pub certificate_number: Option<String>,
+    pub certificate_number_masked: String,
+    pub phone_number: Option<String>,
+    pub phone_number_masked: String,
+    pub email: Option<String>,
     pub organization_name: Option<String>,
     pub organization_code: Option<String>,
     pub login_count: i64,
@@ -44,7 +40,6 @@ pub struct AdminUserResponse {
     pub data_source: String,
 }
 
-/// 用户信息管理服务
 pub struct UserInfoAdminService {
     encryption: AesEncryption,
 }
@@ -54,7 +49,6 @@ impl UserInfoAdminService {
         Self { encryption }
     }
 
-    /// 管理员查询用户列表
     pub async fn list_users(
         &self,
         database: &std::sync::Arc<dyn crate::db::Database>,
@@ -66,7 +60,6 @@ impl UserInfoAdminService {
             .and_then(|p| p.checked_mul(page_size))
             .unwrap_or(0);
 
-        // 构建查询过滤器
         let filter = UserInfoFilter {
             user_id: query.user_id,
             organization_code: query.organization_code,
@@ -76,11 +69,9 @@ impl UserInfoAdminService {
             ..Default::default()
         };
 
-        // TODO: 调用数据库查询
         // let users = database.list_user_info(&filter).await?;
 
-        // 模拟查询结果
-        let users = vec![]; // 实际实现中从数据库获取
+        let users = vec![];
 
         let mut result = Vec::new();
         for user in users {
@@ -98,18 +89,15 @@ impl UserInfoAdminService {
         }))))
     }
 
-    /// 获取单个用户详情 (管理员权限)
     pub async fn get_user_detail(
         &self,
         database: &std::sync::Arc<dyn crate::db::Database>,
         user_id: &str,
         decrypt_sensitive: bool,
     ) -> anyhow::Result<Json<WebResult>> {
-        // TODO: 从数据库获取用户信息
         // let user = database.get_user_info(user_id).await?;
         
-        // 模拟用户数据
-        let user = None; // 实际实现中从数据库获取
+        let user = None;
         
         match user {
             Some(user_info) => {
@@ -120,23 +108,19 @@ impl UserInfoAdminService {
         }
     }
     
-    /// 解密用户敏感信息 (高权限操作)
     pub async fn decrypt_user_sensitive_info(
         &self,
         user_id: &str,
         database: &std::sync::Arc<dyn crate::db::Database>,
     ) -> anyhow::Result<Json<WebResult>> {
-        // TODO: 记录解密操作审计日志
         tracing::warn!("[lock] 管理员正在解密用户敏感信息: {}", user_id);
         
-        // TODO: 从数据库获取用户信息
         // let user = database.get_user_info(user_id).await?;
         
-        let user = None; // 实际实现中从数据库获取
+        let user = None;
         
         match user {
             Some(user_info) => {
-                // 解密敏感信息
                 let certificate_number = if !user_info.certificate_number_encrypted.is_empty() {
                     Some(self.encryption.decrypt(&user_info.certificate_number_encrypted)?)
                 } else {
@@ -164,14 +148,12 @@ impl UserInfoAdminService {
         }
     }
     
-    /// 转换为管理员响应格式
     async fn convert_to_admin_response(
         &self,
         user_info: UserInfo,
         decrypt_sensitive: bool,
     ) -> anyhow::Result<AdminUserResponse> {
         let (certificate_number, phone_number) = if decrypt_sensitive {
-            // [unlocked] 管理员请求解密
             let cert = if !user_info.certificate_number_encrypted.is_empty() {
                 Some(self.encryption.decrypt(&user_info.certificate_number_encrypted)?)
             } else {
@@ -186,7 +168,6 @@ impl UserInfoAdminService {
             
             (cert, phone)
         } else {
-            // [locked] 不解密，只返回脱敏信息
             (None, None)
         };
         
@@ -209,7 +190,6 @@ impl UserInfoAdminService {
         })
     }
 
-    /// 身份证号脱敏显示
     fn mask_certificate(cert: &Option<String>) -> String {
         match cert {
             Some(cert_num) if cert_num.len() >= 18 => {
@@ -222,7 +202,6 @@ impl UserInfoAdminService {
         }
     }
     
-    /// 手机号脱敏显示
     fn mask_phone(phone: &Option<String>) -> String {
         match phone {
             Some(phone_num) if phone_num.len() == 11 => {
@@ -236,7 +215,6 @@ impl UserInfoAdminService {
     }
 }
 
-/// 用户统计信息
 #[derive(Debug, Serialize)]
 pub struct UserStatsResponse {
     pub total_users: u64,

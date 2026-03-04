@@ -47,7 +47,6 @@ pub mod events {
     pub const ATTACHMENT_UPLOAD_PROFILE: &str = "attachment.upload_profile";
     pub const ATTACHMENT_PROFILE: &str = "attachment.profile";
 
-    /// 队列与 Worker。
     pub const QUEUE_ENQUEUE: &str = "queue.enqueue";
     pub const QUEUE_DEQUEUE: &str = "queue.dequeue";
     pub const WORKER_FETCH_MATERIAL: &str = "worker.fetch_material";

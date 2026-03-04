@@ -8,7 +8,6 @@ use tokio::sync::RwLock;
 use super::model::MatterRuleConfig;
 use super::repository::RuleRepository;
 
-/// 规则缓存，减少频繁的数据库访问
 pub struct RuleCache {
     ttl: Duration,
     inner: RwLock<HashMap<String, CachedRule>>,

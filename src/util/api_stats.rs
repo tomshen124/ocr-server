@@ -1,5 +1,3 @@
-//! API调用统计记录模块
-//! 统一记录所有API调用到数据库
 
 use crate::db::traits::{ApiStats, Database};
 use chrono::Utc;
@@ -8,7 +6,6 @@ use std::time::Instant;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-/// 记录API调用统计到数据库
 pub async fn record_api_call(
     database: Arc<dyn Database>,
     endpoint: &str,
@@ -37,7 +34,6 @@ pub async fn record_api_call(
         created_at: Utc::now(),
     };
 
-    // 异步记录，不阻塞主流程
     let db_clone = database.clone();
     tokio::spawn(async move {
         if let Err(e) = db_clone.save_api_stats(&stats).await {
@@ -51,7 +47,6 @@ pub async fn record_api_call(
     });
 }
 
-/// API统计记录器 - 可以在中间件中使用
 pub struct ApiStatsRecorder {
     pub database: Arc<dyn Database>,
     pub endpoint: String,
@@ -75,22 +70,18 @@ impl ApiStatsRecorder {
         }
     }
 
-    /// 设置用户ID
     pub fn set_user(&mut self, user_id: String) {
         self.user_id = Some(user_id);
     }
 
-    /// 设置客户端ID
     pub fn set_client(&mut self, client_id: String) {
         self.client_id = Some(client_id);
     }
 
-    /// 设置请求大小
     pub fn set_request_size(&mut self, size: u32) {
         self.request_size = size;
     }
 
-    /// 完成记录并保存到数据库
     pub async fn finish(self, status_code: u16, response_size: u32, error_message: Option<String>) {
         record_api_call(
             self.database,

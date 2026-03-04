@@ -1,58 +1,42 @@
-//! 64G内存资源精确分配策略
-//! 针对无GPU环境的CPU+内存优化方案
 
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
-/// [stats] 内存资源分配管理器
 /// 
-/// 64G内存分配策略:
 /// ========================================
-/// [brain] 系统基础:           8GB  (12.5%)
-/// [doc] PDF缓存池:          8GB  (12.5%) 
-/// [image] 图片转换池:        25GB  (39.1%)
-/// [search] OCR处理池:         18GB  (28.1%)
-/// [cloud] 网络上传缓存:       3GB  (4.7%)
-/// [tool] 应用程序:           2GB  (3.1%)
 /// ========================================
-/// 总计:                64GB  (100%)
 pub struct MemoryResourceManager {
-    /// [stats] 各阶段内存配额 (MB)
-    pub system_reserved: usize,     // 8192MB - 系统预留
-    pub pdf_cache_pool: usize,      // 8192MB - PDF文件缓存
-    pub image_convert_pool: usize,  // 25600MB - 图片转换内存池
-    pub ocr_process_pool: usize,    // 18432MB - OCR处理内存池
-    pub upload_buffer_pool: usize,  // 3072MB - 上传缓冲池
-    pub application_pool: usize,    // 2048MB - 应用程序内存
+    pub system_reserved: usize,
+    pub pdf_cache_pool: usize,
+    pub image_convert_pool: usize,
+    pub ocr_process_pool: usize,
+    pub upload_buffer_pool: usize,
+    pub application_pool: usize,
     
-    /// [control] 并发控制策略
-    pub max_pdf_concurrent: usize,      // PDF处理: 4个并发
-    pub max_convert_concurrent: usize,  // 图片转换: 5个并发
-    pub max_ocr_concurrent: usize,      // OCR处理: 3个并发
-    pub max_upload_concurrent: usize,   // 上传任务: 15个并发
+    pub max_pdf_concurrent: usize,
+    pub max_convert_concurrent: usize,
+    pub max_ocr_concurrent: usize,
+    pub max_upload_concurrent: usize,
 }
 
 impl Default for MemoryResourceManager {
     fn default() -> Self {
         Self {
-            // [stats] 内存分配 (MB)
-            system_reserved: 8192,      // 8GB 系统+缓存
-            pdf_cache_pool: 8192,       // 8GB PDF缓存池
-            image_convert_pool: 25600,  // 25GB 图片转换池
-            ocr_process_pool: 18432,    // 18GB OCR处理池
-            upload_buffer_pool: 3072,   // 3GB 上传缓冲
-            application_pool: 2048,     // 2GB 应用内存
+            system_reserved: 8192,
+            pdf_cache_pool: 8192,
+            image_convert_pool: 25600,
+            ocr_process_pool: 18432,
+            upload_buffer_pool: 3072,
+            application_pool: 2048,
             
-            // [control] 并发配置
-            max_pdf_concurrent: 4,      // PDF: 4并发 (2GB each)
-            max_convert_concurrent: 5,  // 转换: 5并发 (5GB each)
-            max_ocr_concurrent: 3,      // OCR: 3并发 (6GB each)
-            max_upload_concurrent: 15,  // 上传: 15并发 (200MB each)
+            max_pdf_concurrent: 4,
+            max_convert_concurrent: 5,
+            max_ocr_concurrent: 3,
+            max_upload_concurrent: 15,
         }
     }
 }
 
-/// [chart_up] 资源使用分析报告
 pub struct ResourceAnalysis {
     pub stage: String,
     pub memory_per_task: usize,
@@ -64,14 +48,13 @@ pub struct ResourceAnalysis {
 
 #[derive(Debug, Clone)]
 pub enum RiskLevel {
-    Low,     // 低风险 < 70%
-    Medium,  // 中等风险 70-85%
-    High,    // 高风险 85-95%
-    Critical,// 危险 > 95%
+    Low,
+    Medium,
+    High,
+    Critical,
 }
 
 impl MemoryResourceManager {
-    /// [stats] 生成详细的资源分析报告
     pub fn generate_analysis_report(&self) -> Vec<ResourceAnalysis> {
         vec![
             ResourceAnalysis {
@@ -84,7 +67,7 @@ impl MemoryResourceManager {
             },
             ResourceAnalysis {
                 stage: "图片转换".to_string(),
-                memory_per_task: 5120, // 5GB per conversion (50页PDF)
+                memory_per_task: 5120,
                 max_concurrent: self.max_convert_concurrent,
                 total_memory: self.image_convert_pool,
                 utilization_rate: (self.max_convert_concurrent * 5120) as f64 / self.image_convert_pool as f64,
@@ -92,7 +75,7 @@ impl MemoryResourceManager {
             },
             ResourceAnalysis {
                 stage: "OCR处理".to_string(),
-                memory_per_task: 6144, // 6GB per OCR (PaddleOCR + 图片数据)
+                memory_per_task: 6144,
                 max_concurrent: self.max_ocr_concurrent,
                 total_memory: self.ocr_process_pool,
                 utilization_rate: (self.max_ocr_concurrent * 6144) as f64 / self.ocr_process_pool as f64,
@@ -109,7 +92,6 @@ impl MemoryResourceManager {
         ]
     }
     
-    /// [target] 动态调整并发数 - 根据当前内存使用情况
     pub fn adaptive_concurrency_control(&self, current_memory_usage: f64) -> AdaptiveLimits {
         match current_memory_usage {
             usage if usage < 0.7 => AdaptiveLimits {
@@ -146,11 +128,9 @@ pub struct AdaptiveLimits {
     pub mode: String,
 }
 
-/// [search] 内存瓶颈分析 - 关键性能问题识别
 pub struct BottleneckAnalyzer;
 
 impl BottleneckAnalyzer {
-    /// [chart_up] 分析处理流水线的内存瓶颈
     pub fn analyze_pipeline_bottlenecks() -> Vec<BottleneckReport> {
         vec![
             BottleneckReport {
@@ -179,7 +159,7 @@ impl BottleneckAnalyzer {
                 stage: "内存碎片".to_string(),
                 severity: "Medium".to_string(),
                 description: "频繁的大块内存分配释放可能导致内存碎片".to_string(),
-                memory_impact: 6400, // 预估10%内存损失
+                memory_impact: 6400,
                 optimization_suggestions: vec![
                     "[build] 使用内存池预分配固定大小的内存块".to_string(),
                     "[loop] 实现内存复用策略，避免频繁分配释放".to_string(),
@@ -189,7 +169,6 @@ impl BottleneckAnalyzer {
         ]
     }
     
-    /// [hint] 生成优化建议
     pub fn generate_optimization_recommendations() -> OptimizationPlan {
         OptimizationPlan {
             immediate_actions: vec![
@@ -233,9 +212,7 @@ pub struct OptimizationPlan {
     pub expected_improvements: Vec<String>,
 }
 
-/// [target] 实际使用建议
 pub const RECOMMENDED_CONFIG: &str = r#"
-# [target] 生产环境推荐配置
 concurrency:
   ocr_processing:
     max_concurrent_tasks: 2      # 降低到2，确保稳定性
@@ -252,7 +229,6 @@ concurrency:
     auto_throttle: true          # 自动限流
     gc_interval: 300             # GC间隔(秒)
 
-# [stats] 内存监控告警
 monitoring:
   memory_alerts:
     warning_threshold: 0.75      # 75%内存使用率告警

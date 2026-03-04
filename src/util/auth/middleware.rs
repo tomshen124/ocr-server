@@ -1,5 +1,3 @@
-//! HTTP中间件模块
-//! 处理第三方认证的HTTP中间件逻辑
 
 use super::client::{AuthError, AuthResult, ThirdPartyAuthService};
 use super::global_throttle::{GlobalThrottleGuard, ThrottleCheckResult};
@@ -17,11 +15,6 @@ use tracing::{info, warn};
 
 static OPEN_WARNED: AtomicBool = AtomicBool::new(false);
 
-/// 第三方系统认证中间件 - 最大兼容模式
-/// 支持多种调用方式：
-/// 1. 开放模式：无任何认证信息，直接放行（直接API调用）
-/// 2. 标识模式：有AK标识但无签名，仅做来源识别（平台路由但平台不支持签名）
-/// 3. 认证模式：有完整AK/SK签名信息，进行完整验证（支持签名的平台路由）
 pub async fn third_party_auth_middleware(
     headers: HeaderMap,
     Query(params): Query<HashMap<String, String>>,
@@ -31,7 +24,6 @@ pub async fn third_party_auth_middleware(
     let api_path = request.uri().path().to_string();
     let remote_addr = extract_remote_addr(&request);
 
-    // 全局限流检查 (在所有其他检查之前)
     if let ThrottleCheckResult::Blocked { current, max } = GlobalThrottleGuard::global().check() {
         warn!(
             event = "global_throttle",
@@ -53,7 +45,6 @@ pub async fn third_party_auth_middleware(
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
 
-    // 检查是否启用第三方访问控制
     if !CONFIG.third_party_access.enabled {
         if strict_auth && !is_dev_mode {
             warn!(
@@ -78,26 +69,21 @@ pub async fn third_party_auth_middleware(
         return Ok(next.run(request).await);
     }
 
-    // 检查是否有AK标识（不管是否有完整签名信息）
     let access_key = extract_access_key(&headers, &params);
 
     match access_key {
         Some(ak) => {
-            // 有AK标识 - 尝试识别为第三方平台调用
             log_platform_access_start(&api_path, &remote_addr, &ak);
 
-            // 查找对应的客户端配置
             let client = find_client_by_access_key(&ak);
 
             match client {
                 Some(client) => {
-                    // 找到客户端配置，尝试完整认证（如果有签名信息）
                     let auth_info_result =
                         ThirdPartyAuthService::extract_auth_info(&headers, &params);
 
                     match auth_info_result {
                         Ok(auth_info) => {
-                            // 有完整认证信息，进行签名验证（如果启用了签名验证）
                             if CONFIG.third_party_access.signature.required {
                                 let auth_result = ThirdPartyAuthService::authenticate_client(
                                     &auth_info,
@@ -129,7 +115,6 @@ pub async fn third_party_auth_middleware(
                                     }
                                 }
                             } else {
-                                // 签名验证未启用，仅做来源识别
                                 let identified_client = super::client::AuthenticatedClient {
                                     client_id: client.client_id.clone(),
                                     client_name: client.name.clone(),
@@ -148,7 +133,6 @@ pub async fn third_party_auth_middleware(
                             }
                         }
                         Err(error) => {
-                            // 强校验模式：要求签名时，缺少认证参数直接拒绝
                             if strict_auth && !is_dev_mode && CONFIG.third_party_access.signature.required
                             {
                                 warn!(
@@ -163,7 +147,6 @@ pub async fn third_party_auth_middleware(
                                 );
                                 return Err(StatusCode::UNAUTHORIZED);
                             }
-                            // 仅有AK但没有完整签名信息，作为平台标识处理
                             let identified_client = super::client::AuthenticatedClient {
                                 client_id: client.client_id.clone(),
                                 client_name: client.name.clone(),
@@ -183,9 +166,7 @@ pub async fn third_party_auth_middleware(
                     }
                 }
                 None => {
-                    // 有AK但不在配置中，记录为未知第三方
                     log_unknown_third_party(&api_path, &remote_addr, &ak);
-                    // 强校验模式：未知AK直接拒绝
                     if strict_auth && !is_dev_mode {
                         warn!(
                             event = "third_party_access",
@@ -203,7 +184,6 @@ pub async fn third_party_auth_middleware(
             }
         }
         None => {
-            // 无AK标识 - 开放模式（直接API调用）
             if strict_auth && !is_dev_mode {
                 warn!(
                     event = "third_party_access",
@@ -221,7 +201,6 @@ pub async fn third_party_auth_middleware(
     }
 }
 
-/// 提取远程地址
 fn extract_remote_addr(request: &Request) -> String {
     request
         .headers()
@@ -232,14 +211,11 @@ fn extract_remote_addr(request: &Request) -> String {
         .to_string()
 }
 
-/// 提取访问密钥（仅AK，不要求完整签名信息）
 fn extract_access_key(headers: &HeaderMap, params: &HashMap<String, String>) -> Option<String> {
-    // 优先从请求头获取
     if let Some(ak) = headers.get("X-Access-Key").and_then(|v| v.to_str().ok()) {
         return Some(ak.to_string());
     }
 
-    // 否则从查询参数获取
     if let Some(ak) = params.get("access_key") {
         return Some(ak.clone());
     }
@@ -247,7 +223,6 @@ fn extract_access_key(headers: &HeaderMap, params: &HashMap<String, String>) -> 
     None
 }
 
-/// 根据AK查找客户端配置
 fn find_client_by_access_key(
     access_key: &str,
 ) -> Option<&crate::util::config::types::ThirdPartyClient> {
@@ -258,7 +233,6 @@ fn find_client_by_access_key(
         .find(|client| client.client_id == access_key && client.enabled)
 }
 
-/// 记录平台访问开始日志
 fn log_platform_access_start(api_path: &str, remote_addr: &str, access_key: &str) {
     info!(
         event = "third_party_access",
@@ -273,7 +247,6 @@ fn log_platform_access_start(api_path: &str, remote_addr: &str, access_key: &str
     );
 }
 
-/// 记录完整认证成功日志
 fn log_full_auth_success(
     api_path: &str,
     remote_addr: &str,
@@ -299,7 +272,6 @@ fn log_full_auth_success(
     );
 }
 
-/// 记录标识访问成功日志（无签名验证）
 fn log_identified_access_success(
     api_path: &str,
     remote_addr: &str,
@@ -331,7 +303,6 @@ fn log_identified_access_success(
     );
 }
 
-/// 记录未知第三方访问日志
 fn log_unknown_third_party(api_path: &str, remote_addr: &str, access_key: &str) {
     warn!(
         event = "third_party_access",
@@ -347,7 +318,6 @@ fn log_unknown_third_party(api_path: &str, remote_addr: &str, access_key: &str) 
     );
 }
 
-/// 记录开放访问日志
 fn log_open_access(api_path: &str, remote_addr: &str) {
     info!(
         event = "third_party_access",
@@ -361,7 +331,6 @@ fn log_open_access(api_path: &str, remote_addr: &str) {
     );
 }
 
-/// 记录安全模式访问开始日志
 fn log_secured_access_start(api_path: &str, remote_addr: &str) {
     info!(
         event = "third_party_access",
@@ -374,7 +343,6 @@ fn log_secured_access_start(api_path: &str, remote_addr: &str) {
     );
 }
 
-/// 记录认证失败日志
 fn log_auth_failure(api_path: &str, remote_addr: &str, reason: &str, error: &str) {
     warn!(
         event = "third_party_access",
@@ -392,7 +360,6 @@ fn log_auth_failure(api_path: &str, remote_addr: &str, reason: &str, error: &str
     );
 }
 
-/// 记录频率限制超出日志
 fn log_rate_limit_exceeded(
     api_path: &str,
     remote_addr: &str,
@@ -420,7 +387,6 @@ fn log_rate_limit_exceeded(
     );
 }
 
-/// 记录认证成功日志
 fn log_auth_success(
     api_path: &str,
     remote_addr: &str,
@@ -453,7 +419,6 @@ fn log_auth_success(
     );
 }
 
-/// 将认证错误映射到HTTP状态码
 fn map_auth_error_to_status(error: &AuthError) -> StatusCode {
     match error {
         AuthError::MissingParameters(_) => StatusCode::BAD_REQUEST,
@@ -465,11 +430,9 @@ fn map_auth_error_to_status(error: &AuthError) -> StatusCode {
     }
 }
 
-/// 安全审计日志记录器
 pub struct SecurityAuditor;
 
 impl SecurityAuditor {
-    /// 记录可疑活动
     pub fn log_suspicious_activity(api_path: &str, remote_addr: &str, reason: &str, details: &str) {
         warn!(
             event = "security_audit",
@@ -485,7 +448,6 @@ impl SecurityAuditor {
         );
     }
 
-    /// 记录访问模式异常
     pub fn log_access_pattern_anomaly(client_id: &str, pattern_type: &str, description: &str) {
         warn!(
             event = "security_audit",
@@ -499,7 +461,6 @@ impl SecurityAuditor {
         );
     }
 
-    /// 记录配置变更
     pub fn log_config_change(admin_user: Option<&str>, change_type: &str, details: &str) {
         info!(
             event = "security_audit",
@@ -514,12 +475,9 @@ impl SecurityAuditor {
     }
 }
 
-/// 请求上下文扩展
 pub trait RequestExt {
-    /// 获取认证的客户端信息
     fn authenticated_client(&self) -> Option<&super::client::AuthenticatedClient>;
 
-    /// 检查客户端是否有特定权限
     fn has_permission(&self, permission: &str) -> bool;
 }
 

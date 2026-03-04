@@ -7,7 +7,6 @@ pub mod preview;
 pub mod user;
 pub mod user_info;
 
-// 会话中存储的用户信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionUser {
     pub user_id: String,
@@ -18,8 +17,8 @@ pub struct SessionUser {
     pub email: Option<String>,
     pub organization_name: Option<String>,
     pub organization_code: Option<String>,
-    pub login_time: String,  // 登录时间
-    pub last_active: String, // 最后活跃时间
+    pub login_time: String,
+    pub last_active: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -68,7 +67,6 @@ pub struct PreviewInfo {
     user_id: String,
     #[serde(rename = "previewUrl")]
     preview_url: String,
-    /// 预审结果PDF下载地址（可选）
     #[serde(rename = "approvePdfFile", skip_serializing_if = "Option::is_none")]
     approve_pdf_file: Option<String>,
 }
@@ -77,7 +75,6 @@ pub struct Goto {
     pub goto: String,
 }
 
-// 健康检查相关的数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthStatus {
     pub status: String,

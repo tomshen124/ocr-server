@@ -11,7 +11,6 @@ fn estimate_pdf_pages_quick(data: &[u8]) -> Option<usize> {
         return None;
     }
     let s = if data.len() > 4 * 1024 * 1024 {
-        // 最多扫描前4MB
         &data[..4 * 1024 * 1024]
     } else {
         data
@@ -22,7 +21,6 @@ fn estimate_pdf_pages_quick(data: &[u8]) -> Option<usize> {
 
 pub async fn upload(mut multipart: Multipart) -> anyhow::Result<WebResult> {
     let mut data = vec![];
-    // 构建OCR引擎启动选项（支持配置覆盖）
     let engine_opts = if let Some(cfg) = &crate::CONFIG.ocr_engine {
         let work_dir = cfg.work_dir.as_ref().map(|s| std::path::PathBuf::from(s));
         let binary = cfg.binary.as_ref().map(|s| std::path::PathBuf::from(s));
@@ -36,7 +34,6 @@ pub async fn upload(mut multipart: Multipart) -> anyhow::Result<WebResult> {
     } else {
         OcrEngineOptions::default()
     };
-    // 配置全局池参数并获取一个引擎句柄
     GLOBAL_POOL.set_options_if_empty(engine_opts);
     while let Some(field) = multipart.next_field().await? {
         let file = PathBuf::from(field.file_name().unwrap_or_default());
@@ -46,11 +43,10 @@ pub async fn upload(mut multipart: Multipart) -> anyhow::Result<WebResult> {
             .is_some_and(|ext| ext.to_string_lossy().eq("pdf"))
         {
             let limits = &crate::CONFIG.download_limits;
-            // 大小与页数超限直接拒绝
             let size_ok = (bytes.len() as u64) <= limits.max_pdf_mb * 1024 * 1024;
             let pages_ok = match estimate_pdf_pages_quick(&bytes) {
                 Some(p) => (p as u32) <= limits.pdf_max_pages,
-                None => true, // 无法估算页数则放行，由渲染层再判断
+                None => true,
             };
             if !size_ok || !pages_ok {
                 let msg = format!(
@@ -72,7 +68,6 @@ pub async fn upload(mut multipart: Multipart) -> anyhow::Result<WebResult> {
             ) else {
                 continue;
             };
-            // 逐页识别（每次短借用池中的引擎，避免长时间占用）
             for image in image_paths {
                 let mut handle = match GLOBAL_POOL.acquire().await {
                     Ok(h) => h,

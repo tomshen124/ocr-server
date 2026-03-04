@@ -2,7 +2,6 @@ use chrono::{DateTime, Utc};
 #[cfg(feature = "monitoring")]
 use serde::{Deserialize, Serialize};
 
-/// 系统指标数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMetrics {
     #[serde(with = "chrono::serde::ts_seconds")]
@@ -29,7 +28,6 @@ impl SystemMetrics {
     }
 }
 
-/// OCR服务指标
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OcrMetrics {
     pub timestamp: DateTime<Utc>,
@@ -57,7 +55,6 @@ impl OcrMetrics {
     }
 }
 
-/// 监控统计数据
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitoringStats {
     pub system: SystemMetrics,
@@ -77,7 +74,6 @@ impl MonitoringStats {
     }
 }
 
-/// 告警级别
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AlertLevel {
     Info,
@@ -86,7 +82,6 @@ pub enum AlertLevel {
     Critical,
 }
 
-/// 告警信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Alert {
     pub timestamp: DateTime<Utc>,
@@ -116,7 +111,6 @@ impl Alert {
     }
 }
 
-/// 性能指标历史记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsHistory {
     pub system_metrics: Vec<SystemMetrics>,

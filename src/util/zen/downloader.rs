@@ -1,5 +1,3 @@
-//! 文件下载器 - 简化版，支持 MUSL 编译
-//! 处理HTTP/HTTPS和file://协议的文件下载，兼容静态编译
 
 use anyhow::{anyhow, Result};
 use std::collections::{HashMap, VecDeque};
@@ -115,7 +113,6 @@ fn start_retry_worker() {
                 queue.pop_front()
             };
             let Some(url) = next else {
-                // 无任务，休眠后再检查
                 tokio::time::sleep(Duration::from_secs(2)).await;
                 continue;
             };
@@ -169,7 +166,6 @@ fn spawn_mark_done(url: String) {
     let _ = url;
 }
 
-/// 下载文件的主入口函数
 pub async fn download_file_content(url: &str) -> Result<Vec<u8>> {
     let stage_start = Instant::now();
     let source_label = get_url_type(url).to_string();
@@ -249,7 +245,6 @@ pub async fn download_file_content(url: &str) -> Result<Vec<u8>> {
     }
 }
 
-/// 处理HTTP/HTTPS URL
 async fn download_http_url(url: &str) -> Result<Vec<u8>> {
     #[cfg(feature = "reqwest")]
     {
@@ -260,7 +255,6 @@ async fn download_http_url(url: &str) -> Result<Vec<u8>> {
             url = %url
         );
 
-        // 先进行连接测试
         match test_network_connectivity(url).await {
             Ok(_) => {
                 tracing::debug!(
@@ -283,11 +277,9 @@ async fn download_http_url(url: &str) -> Result<Vec<u8>> {
             }
         }
 
-        // 增加重试机制
         let mut attempts = 0;
         let max_attempts = 3;
 
-        // 检查HTTP客户端是否可用
         let client = match crate::CLIENT.as_ref() {
             Some(client) => client,
             None => {
@@ -317,11 +309,9 @@ async fn download_http_url(url: &str) -> Result<Vec<u8>> {
                         if attempts == max_attempts {
                             return Err(anyhow!("HTTP请求失败: {}", response.status()));
                         }
-                        // 等待后重试
                         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                         continue;
                     }
-                    // 基于Content-Type/URL估计类型，决定大小上限
                     let ct = response
                         .headers()
                         .get(reqwest::header::CONTENT_TYPE)
@@ -342,7 +332,6 @@ async fn download_http_url(url: &str) -> Result<Vec<u8>> {
                             return Err(anyhow!("文件过大: {} bytes, 超过上限 {} MB", len, max_mb));
                         }
                     }
-                    // 逐块读取，强制限流
                     let mut stream = response.bytes_stream();
                     use futures::StreamExt;
                     let mut out: Vec<u8> = Vec::with_capacity(128 * 1024);
@@ -380,7 +369,6 @@ async fn download_http_url(url: &str) -> Result<Vec<u8>> {
                 Err(e) => {
                     tracing::warn!("HTTP连接失败: {} (尝试 {}/{})", e, attempts, max_attempts);
 
-                    // 提供网络诊断信息
                     if e.is_timeout() {
                         tracing::warn!("连接超时，可能是网络延迟问题");
                     } else if e.is_connect() {
@@ -392,14 +380,12 @@ async fn download_http_url(url: &str) -> Result<Vec<u8>> {
                     }
 
                     if attempts == max_attempts {
-                        // 入队重试但不阻塞当前流程
                         enqueue_retry(url);
                         return Err(anyhow!("HTTP连接失败: {}。已加入后台重试队列", e));
                     }
                 }
             }
 
-            // 等待后重试
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
 
@@ -413,7 +399,6 @@ async fn download_http_url(url: &str) -> Result<Vec<u8>> {
     }
 }
 
-/// 测试网络连接性
 #[cfg(feature = "reqwest")]
 async fn test_network_connectivity(url: &str) -> Result<()> {
     use tokio::time::timeout;
@@ -433,7 +418,6 @@ async fn test_network_connectivity(url: &str) -> Result<()> {
         port
     );
 
-    // 简单的TCP连接测试（带超时，避免阻塞过久）
     match timeout(
         Duration::from_secs(download_timeout_secs().max(1)),
         tokio::net::TcpStream::connect(format!("{}:{}", host, port)),
@@ -455,9 +439,8 @@ async fn test_network_connectivity(url: &str) -> Result<()> {
     }
 }
 
-/// 处理 file:// URL
 async fn download_file_url(url: &str) -> Result<Vec<u8>> {
-    let file_path = &url[7..]; // 去掉 "file://" 前缀
+    let file_path = &url[7..];
     debug!(
         target: "material.downloader",
         event = events::ATTACHMENT_START,
@@ -465,7 +448,6 @@ async fn download_file_url(url: &str) -> Result<Vec<u8>> {
         path = %file_path
     );
 
-    // 大小限制
     if let Ok(meta) = tokio::fs::metadata(file_path).await {
         let limits = &crate::CONFIG.download_limits;
         let max_bytes = (limits.max_file_mb as u64) * 1024 * 1024;
@@ -491,7 +473,6 @@ async fn download_file_url(url: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-/// 获取URL类型（兼容性函数）
 pub fn get_url_type(url: &str) -> &'static str {
     if url.starts_with("http://") || url.starts_with("https://") {
         "http"

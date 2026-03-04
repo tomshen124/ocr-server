@@ -1,51 +1,40 @@
-//! 报告模板管理模块
-//! 提供可配置的报告模板和数据绑定功能
 
 use crate::model::evaluation::*;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-/// 报告模板引擎
 pub struct TemplateEngine {
     templates: HashMap<String, String>,
 }
 
 impl TemplateEngine {
-    /// 创建新的模板引擎
     pub fn new() -> Self {
         let mut engine = Self {
             templates: HashMap::new(),
         };
 
-        // 加载默认模板
         engine.load_default_templates();
         engine
     }
 
-    /// 加载默认模板
     fn load_default_templates(&mut self) {
-        // 标准报告模板
         self.templates
             .insert("standard_report".to_string(), Self::get_standard_template());
 
-        // 简化预览模板
         self.templates
             .insert("simple_preview".to_string(), Self::get_simple_template());
 
-        // 政务格式模板
         self.templates.insert(
             "government_format".to_string(),
             Self::get_government_template(),
         );
 
-        // 统计报告模板
         self.templates.insert(
             "statistics_report".to_string(),
             Self::get_statistics_template(),
         );
     }
 
-    /// 使用模板生成报告
     pub fn render_template(
         &self,
         template_name: &str,
@@ -56,24 +45,19 @@ impl TemplateEngine {
             .get(template_name)
             .ok_or_else(|| format!("模板不存在: {}", template_name))?;
 
-        // 将评估结果转换为模板数据
         let template_data = self.convert_to_template_data(data);
 
-        // 简单的模板替换（实际项目中可以使用handlebars或tera等模板引擎）
         Ok(self.simple_template_replace(template, &template_data))
     }
 
-    /// 注册自定义模板
     pub fn register_template(&mut self, name: String, template: String) {
         self.templates.insert(name, template);
     }
 
-    /// 列出所有可用模板
     pub fn list_templates(&self) -> Vec<&String> {
         self.templates.keys().collect()
     }
 
-    /// 将评估结果转换为模板数据
     fn convert_to_template_data(&self, result: &PreviewEvaluationResult) -> Value {
         json!({
             "basic_info": {
@@ -122,11 +106,9 @@ impl TemplateEngine {
         })
     }
 
-    /// 简单的模板变量替换
     fn simple_template_replace(&self, template: &str, data: &Value) -> String {
         let mut result = template.to_string();
 
-        // 替换基础信息变量
         if let Some(basic_info) = data.get("basic_info") {
             result = result.replace(
                 "{{applicant_name}}",
@@ -154,7 +136,6 @@ impl TemplateEngine {
             );
         }
 
-        // 替换评估摘要变量
         if let Some(summary) = data.get("evaluation_summary") {
             result = result.replace(
                 "{{total_materials}}",
@@ -178,7 +159,6 @@ impl TemplateEngine {
             );
         }
 
-        // 替换时间变量
         result = result.replace(
             "{{evaluation_time}}",
             data["evaluation_time"].as_str().unwrap_or(""),
@@ -191,7 +171,6 @@ impl TemplateEngine {
         result
     }
 
-    /// 标准报告模板
     fn get_standard_template() -> String {
         r#"
         <!DOCTYPE html>
@@ -200,7 +179,6 @@ impl TemplateEngine {
             <meta charset="utf-8">
             <title>预审报告</title>
             <style>
-                /* 这里会插入CSS样式 */
             </style>
         </head>
         <body>
@@ -238,7 +216,6 @@ impl TemplateEngine {
         "#.to_string()
     }
 
-    /// 简化预览模板
     fn get_simple_template() -> String {
         r#"
         <!DOCTYPE html>
@@ -259,7 +236,6 @@ impl TemplateEngine {
         .to_string()
     }
 
-    /// 政务格式模板
     fn get_government_template() -> String {
         r#"
         <!DOCTYPE html>
@@ -304,7 +280,6 @@ impl TemplateEngine {
         "#.to_string()
     }
 
-    /// 统计报告模板
     fn get_statistics_template() -> String {
         r#"
         <!DOCTYPE html>

@@ -229,10 +229,8 @@ impl SystemMonitor {
     }
 }
 
-// 服务启动时间
 static START_TIME: AtomicU64 = AtomicU64::new(0);
 
-// 初始化服务启动时间
 pub fn init_start_time() {
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -241,7 +239,6 @@ pub fn init_start_time() {
     START_TIME.store(now, Ordering::SeqCst);
 }
 
-// 获取服务运行时间（秒）
 pub fn get_uptime_seconds() -> u64 {
     let start_time = START_TIME.load(Ordering::SeqCst);
     if start_time == 0 {
@@ -256,17 +253,14 @@ pub fn get_uptime_seconds() -> u64 {
     now.saturating_sub(start_time)
 }
 
-// 获取内存使用情况
 pub fn get_memory_usage() -> MemoryStatus {
     system_monitor().snapshot(|cache| cache.cached_memory.clone())
 }
 
-// 获取CPU使用情况
 pub fn get_cpu_usage() -> CpuStatus {
     system_monitor().snapshot(|cache| cache.cached_cpu.clone())
 }
 
-// 获取磁盘使用情况
 pub fn get_disk_usage() -> DiskStatus {
     system_monitor().snapshot(|cache| cache.cached_disk.clone())
 }
@@ -279,17 +273,11 @@ pub fn get_network_usage() -> NetworkUsage {
     system_monitor().snapshot(|cache| cache.cached_network.clone())
 }
 
-// 检查数据库连接（示例函数，需要根据实际情况实现）
 pub async fn check_database_connection() -> bool {
-    // 这里应该实现实际的数据库连接检查
-    // 由于当前项目可能没有数据库，这里只是一个示例
     true
 }
 
-// 获取队列状态（示例函数，需要根据实际情况实现）
 pub async fn get_queue_status() -> crate::model::QueueStatus {
-    // 这里应该实现实际的队列状态获取
-    // 由于当前项目可能没有队列，这里只是一个示例
     crate::model::QueueStatus {
         pending: 0,
         processing: 0,

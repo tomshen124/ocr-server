@@ -1,4 +1,3 @@
-/* 全局样式重置 */
 * {
     margin: 0;
     padding: 0;
@@ -13,7 +12,6 @@ body {
     font-size: 14px;
 }
 
-/* 顶部导航 */
 .header {
     background: linear-gradient(135deg, #4a90e2 0%, #4a90e2 100%);
     color: white;
@@ -52,7 +50,6 @@ body {
     border-color: #E67A00;
 }
 
-/* 结果提示 */
 .result-notice {
     background: #fff3cd;
     border: 1px solid #ffeaa7;
@@ -70,7 +67,6 @@ body {
     font-size: 16px;
 }
 
-/* 主容器 */
 .main-container {
     max-width: 1200px;
     margin: 24px auto;
@@ -81,14 +77,12 @@ body {
     min-height: calc(100vh - 200px);
 }
 
-/* 左侧面板 */
 .left-panel {
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
 
-/* 卡片通用样式 */
 .basic-info-card,
 .materials-card,
 .passed-materials-card {
@@ -108,7 +102,6 @@ body {
     padding-left: 12px;
 }
 
-/* 基本信息 */
 .info-item {
     display: flex;
     margin-bottom: 12px;
@@ -127,7 +120,6 @@ body {
     font-weight: 500;
 }
 
-/* 材料卡片 */
 .materials-header {
     display: flex;
     justify-content: space-between;
@@ -182,7 +174,6 @@ body {
     font-weight: 600;
 }
 
-/* 下載按鈕 */
 .download-actions {
     display: flex;
     gap: 12px;
@@ -214,7 +205,6 @@ body {
     background: rgba(74, 144, 226, 0.08);
 }
 
-/* 右側面板 */
 .right-panel {
     background: white;
     border-radius: 8px;
@@ -226,7 +216,6 @@ body {
     min-height: 500px;
 }
 
-/* 状态显示样式 */
 .status-display {
     text-align: center;
     padding: 40px 20px;
@@ -251,7 +240,6 @@ body {
     line-height: 1.5;
 }
 
-/* 重试按钮样式 */
 .retry-btn {
     background: #1890FF;
     color: white;
@@ -276,7 +264,6 @@ body {
     box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
 }
 
-/* 響應式設計 */
 @media (max-width: 768px) {
     .main-container {
         grid-template-columns: 1fr;
@@ -342,7 +329,6 @@ body {
     }
 }
 
-/* 動畫效果 */
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(20px); }
     to { opacity: 1; transform: translateY(0); }
@@ -353,7 +339,6 @@ body {
     50% { transform: scale(1.05); }
 }
 
-/* 滾動條樣式 */
 ::-webkit-scrollbar {
     width: 6px;
 }

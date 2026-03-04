@@ -1,5 +1,3 @@
-//! 监控系统认证服务
-//! 负责监控用户的登录、会话管理和权限控制
 
 use anyhow::{anyhow, ensure, Context, Result};
 use chrono::{DateTime, Duration, Utc};
@@ -10,8 +8,6 @@ use uuid::Uuid;
 #[cfg(feature = "monitoring")]
 use bcrypt::{hash, verify};
 
-/// 默认监控管理员初始密码（部署后请及时重置）
-/// 生产环境务必通过环境变量 MONITOR_ADMIN_PASSWORD 覆盖
 pub const DEFAULT_MONITOR_ADMIN_PASSWORD: &str = "CHANGE_ME_ADMIN_PASSWORD";
 
 #[cfg(feature = "dm_go")]
@@ -20,14 +16,12 @@ use crate::db::sqlite::SqliteDatabase;
 
 use crate::db::models::{MonitorSession, MonitorUser};
 
-/// 登录请求
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
     pub username: String,
     pub password: String,
 }
 
-/// 登录响应
 #[derive(Debug, Serialize)]
 pub struct LoginResponse {
     pub success: bool,
@@ -35,7 +29,6 @@ pub struct LoginResponse {
     pub session: Option<MonitorSession>,
 }
 
-/// 监控认证服务
 pub struct MonitorAuthService {
     database: Arc<dyn crate::db::Database>,
 }
@@ -66,7 +59,7 @@ impl MonitorAuthService {
     fn canonical_role(role: &str) -> String {
         let normalized = Self::normalize_role(role);
         match normalized.as_str() {
-            "admin" => "super_admin".to_string(), // 兼容旧值
+            "admin" => "super_admin".to_string(),
             other => other.to_string(),
         }
     }
@@ -137,7 +130,6 @@ impl MonitorAuthService {
         Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
     }
 
-    /// 用户登录
     pub async fn login(
         &self,
         username: &str,
@@ -145,7 +137,6 @@ impl MonitorAuthService {
         ip: &str,
         user_agent: &str,
     ) -> Result<LoginResponse> {
-        // 查找用户
         let user = match self.find_user_by_username(username).await? {
             Some(user) => user,
             None => {
@@ -165,7 +156,6 @@ impl MonitorAuthService {
             });
         }
 
-        // 验证密码
         let password_hash = self.get_user_password_hash(&user.id).await?;
         let password_valid = self.verify_password(password, &password_hash)?;
 
@@ -177,10 +167,8 @@ impl MonitorAuthService {
             });
         }
 
-        // 创建会话 (12小时有效期)
         let session = self.create_session(&user, ip, user_agent).await?;
 
-        // 更新登录信息
         self.update_login_info(&user.id).await?;
 
         Ok(LoginResponse {
@@ -190,17 +178,14 @@ impl MonitorAuthService {
         })
     }
 
-    /// 验证会话
     pub async fn verify_session(&self, session_id: &str) -> Result<Option<MonitorSession>> {
         let session = self.find_session_by_id(session_id).await?;
 
         if let Some(session) = session {
-            // 检查是否过期
             let expires_at = parse_db_datetime(&session.expires_at)
                 .with_context(|| format!("解析会话过期时间失败: {}", session.expires_at))?;
 
             if expires_at > Utc::now() {
-                // 更新最后活动时间
                 self.update_session_activity(session_id).await?;
                 return Ok(Some(session));
             } else {
@@ -210,7 +195,6 @@ impl MonitorAuthService {
                     expires_at = %session.expires_at,
                     "Monitor session expired"
                 );
-                // 会话已过期，删除
                 self.delete_session(session_id).await?;
             }
         } else {
@@ -224,22 +208,18 @@ impl MonitorAuthService {
         Ok(None)
     }
 
-    /// 用户登出
     pub async fn logout(&self, session_id: &str) -> Result<()> {
         self.delete_session(session_id).await
     }
 
-    /// 根据用户名查找用户
     async fn find_user_by_username(&self, username: &str) -> Result<Option<MonitorUser>> {
         self.database.find_monitor_user_by_username(username).await
     }
 
-    /// 获取用户密码哈希
     async fn get_user_password_hash(&self, user_id: &str) -> Result<String> {
         self.database.get_monitor_user_password_hash(user_id).await
     }
 
-    /// 验证密码
     fn verify_password(&self, password: &str, hash: &str) -> Result<bool> {
         #[cfg(feature = "monitoring")]
         {
@@ -247,12 +227,10 @@ impl MonitorAuthService {
         }
         #[cfg(not(feature = "monitoring"))]
         {
-            // 简单字符串比较 (仅用于非监控模式)
             Ok(password == hash)
         }
     }
 
-    /// 创建会话
     async fn create_session(
         &self,
         user: &MonitorUser,
@@ -261,7 +239,7 @@ impl MonitorAuthService {
     ) -> Result<MonitorSession> {
         let session_id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        let expires_at = now + Duration::hours(12); // 12小时有效期
+        let expires_at = now + Duration::hours(12);
 
         let created_at = now.format("%Y-%m-%d %H:%M:%S").to_string();
         let expires_at_str = expires_at.format("%Y-%m-%d %H:%M:%S").to_string();
@@ -286,18 +264,15 @@ impl MonitorAuthService {
         })
     }
 
-    /// 根据会话ID查找会话
     async fn find_session_by_id(&self, session_id: &str) -> Result<Option<MonitorSession>> {
         self.database.find_monitor_session_by_id(session_id).await
     }
 
-    /// 更新登录信息
     async fn update_login_info(&self, user_id: &str) -> Result<()> {
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
         self.database.update_monitor_login_info(user_id, &now).await
     }
 
-    /// 更新会话活动时间
     async fn update_session_activity(&self, session_id: &str) -> Result<()> {
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
         self.database
@@ -305,31 +280,26 @@ impl MonitorAuthService {
             .await
     }
 
-    /// 删除会话
     async fn delete_session(&self, session_id: &str) -> Result<()> {
         self.database.delete_monitor_session(session_id).await
     }
 
-    /// 清理过期会话
     pub async fn cleanup_expired_sessions(&self) -> Result<u64> {
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
         self.database.cleanup_expired_monitor_sessions(&now).await
     }
 
-    /// 获取活跃会话数量
     pub async fn get_active_sessions_count(&self) -> Result<i64> {
         let now = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
         self.database.get_active_monitor_sessions_count(&now).await
     }
 
-    /// 列出所有监控用户
     pub async fn list_users(&self) -> Result<Vec<MonitorUser>> {
         let mut users = self.database.list_monitor_users().await?;
         users.sort_by(|a, b| a.username.cmp(&b.username));
         Ok(users)
     }
 
-    /// 创建监控用户
     pub async fn create_user(
         &self,
         username: &str,
@@ -361,7 +331,6 @@ impl MonitorAuthService {
             .ok_or_else(|| anyhow!("创建用户失败"))
     }
 
-    /// 更新监控用户角色
     pub async fn update_user_role(&self, user_id: &str, role: &str) -> Result<()> {
         let normalized_role = Self::validate_role(role)?;
         let user = self
@@ -390,7 +359,6 @@ impl MonitorAuthService {
         Ok(())
     }
 
-    /// 重置监控用户密码
     pub async fn reset_user_password(&self, user_id: &str, password: &str) -> Result<()> {
         Self::validate_password(password)?;
         let password_hash = Self::hash_password(password)?;
@@ -411,7 +379,6 @@ impl MonitorAuthService {
         Ok(())
     }
 
-    /// 禁用监控用户
     pub async fn deactivate_user(&self, user_id: &str) -> Result<()> {
         let user = self
             .database
@@ -437,7 +404,6 @@ impl MonitorAuthService {
         Ok(())
     }
 
-    /// 重新启用监控用户
     pub async fn activate_user(&self, user_id: &str) -> Result<()> {
         if self
             .database
@@ -455,32 +421,23 @@ impl MonitorAuthService {
         Ok(())
     }
 
-    /// 执行监控查询（临时实现，后续优化）
     async fn execute_monitor_query(
         &self,
         sql: &str,
         params: &[&str],
     ) -> Result<Vec<MonitorQueryRow>> {
-        // 这是一个临时实现，用于避免sqlx宏的编译问题
-        // 实际部署时会直接使用数据库连接
         tracing::warn!("监控查询执行: {} 参数: {:?}", sql, params);
 
-        // 返回空结果（临时）
         Ok(vec![])
     }
 
-    /// 执行监控更新（临时实现，后续优化）
     async fn execute_monitor_update(&self, sql: &str, params: &[&str]) -> Result<usize> {
-        // 这是一个临时实现，用于避免sqlx宏的编译问题
-        // 实际部署时会直接使用数据库连接
         tracing::warn!("监控更新执行: {} 参数: {:?}", sql, params);
 
-        // 返回影响行数（临时）
         Ok(1)
     }
 }
 
-/// 临时查询结果行结构
 #[derive(Debug, Clone)]
 pub struct MonitorQueryRow {
     data: std::collections::HashMap<String, String>,

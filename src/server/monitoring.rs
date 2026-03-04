@@ -1,16 +1,12 @@
-//! 监控服务管理模块
-//! 负责启动和管理监控相关服务
 
 use crate::util::config::Config;
 use anyhow::Result;
 use tokio::time::{timeout, Duration};
 use tracing::{error, info, warn};
 
-/// 监控服务管理器
 pub struct MonitoringManager;
 
 impl MonitoringManager {
-    /// 启动监控服务
     pub async fn start_monitoring_services(config: &Config) -> Result<MonitoringServices> {
         info!("[stats] 启动监控服务...");
         let t0 = std::time::Instant::now();
@@ -44,7 +40,6 @@ impl MonitoringManager {
             }
         }
 
-        // 启动系统信息收集器（软超时）
         info!("[hourglass] 启动系统信息收集器...");
         match timeout(Duration::from_secs(2), Self::start_system_info_collector()).await {
             Ok(Ok(system_info_collector)) => {
@@ -55,7 +50,6 @@ impl MonitoringManager {
             Err(_) => warn!("[warn] 启动系统信息收集器超时2s，跳过"),
         }
 
-        // 启动性能监控器（软超时）
         info!("[hourglass] 启动性能监控器...");
         match timeout(Duration::from_secs(2), Self::start_performance_monitor()).await {
             Ok(Ok(performance_monitor)) => {
@@ -73,7 +67,6 @@ impl MonitoringManager {
         Ok(services)
     }
 
-    /// 启动内置监控服务
     #[cfg(feature = "monitoring")]
     async fn start_built_in_monitoring() -> Result<BuiltInMonitor> {
         let monitor = std::sync::Arc::new(crate::monitor::MonitorService::new());
@@ -85,7 +78,6 @@ impl MonitoringManager {
         })
     }
 
-    /// 启动系统信息收集器
     async fn start_system_info_collector() -> Result<SystemInfoCollector> {
         info!("[monitor] 启动系统信息收集器...");
 
@@ -95,7 +87,6 @@ impl MonitoringManager {
         })
     }
 
-    /// 启动性能监控器
     async fn start_performance_monitor() -> Result<PerformanceMonitor> {
         info!("[fast] 启动性能监控器...");
 
@@ -105,7 +96,6 @@ impl MonitoringManager {
         })
     }
 
-    /// 停止监控服务
     pub async fn stop_monitoring_services(services: MonitoringServices) -> Result<()> {
         info!("[stop] 停止监控服务...");
 
@@ -118,7 +108,6 @@ impl MonitoringManager {
             }
         }
 
-        // 停止其他监控服务
         if services.system_info_collector.is_some() {
             info!("[ok] 系统信息收集器已停止");
         }
@@ -131,7 +120,6 @@ impl MonitoringManager {
         Ok(())
     }
 
-    /// 获取监控服务状态
     pub fn get_monitoring_status(services: &MonitoringServices) -> MonitoringStatus {
         MonitoringStatus {
             #[cfg(feature = "monitoring")]
@@ -145,7 +133,6 @@ impl MonitoringManager {
         }
     }
 
-    /// 统计运行中的服务数量
     fn count_running_services(services: &MonitoringServices) -> u32 {
         let mut count = 0;
 
@@ -166,11 +153,9 @@ impl MonitoringManager {
         count
     }
 
-    /// 计算运行时间
     fn calculate_uptime(services: &MonitoringServices) -> std::time::Duration {
         let now = chrono::Utc::now();
 
-        // 取最早启动的服务时间作为整体启动时间
         let earliest_start = services
             .system_info_collector
             .as_ref()
@@ -182,7 +167,6 @@ impl MonitoringManager {
     }
 }
 
-/// 监控服务集合
 pub struct MonitoringServices {
     #[cfg(feature = "monitoring")]
     pub built_in_monitor: Option<BuiltInMonitor>,
@@ -201,26 +185,22 @@ impl MonitoringServices {
     }
 }
 
-/// 内置监控服务
 #[cfg(feature = "monitoring")]
 pub struct BuiltInMonitor {
     pub service: std::sync::Arc<crate::monitor::MonitorService>,
     pub start_time: chrono::DateTime<chrono::Utc>,
 }
 
-/// 系统信息收集器
 pub struct SystemInfoCollector {
     pub start_time: chrono::DateTime<chrono::Utc>,
     pub collection_interval: std::time::Duration,
 }
 
-/// 性能监控器
 pub struct PerformanceMonitor {
     pub start_time: chrono::DateTime<chrono::Utc>,
     pub metrics_history: Vec<PerformanceMetric>,
 }
 
-/// 性能指标
 #[derive(Debug, Clone)]
 pub struct PerformanceMetric {
     pub timestamp: chrono::DateTime<chrono::Utc>,
@@ -230,7 +210,6 @@ pub struct PerformanceMetric {
     pub response_time_avg: f64,
 }
 
-/// 监控服务状态
 #[derive(Debug, Clone)]
 pub struct MonitoringStatus {
     pub built_in_monitor_running: bool,

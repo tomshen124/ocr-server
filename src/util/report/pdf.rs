@@ -1,5 +1,3 @@
-//! PDF报告生成模块
-//! 负责将HTML内容转换为PDF格式
 
 use anyhow::Result;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -21,11 +19,9 @@ use crate::util::logging::standards::events;
 const INLINE_FETCH_CONCURRENCY: usize = 8;
 const WKHTML_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// PDF生成器
 pub struct PdfGenerator;
 
 impl PdfGenerator {
-    /// 将HTML转换为PDF
     pub async fn html_to_pdf(html_content: &str, output_path: &Path) -> Result<()> {
         debug!(
             target: "report.pdf",
@@ -36,16 +32,13 @@ impl PdfGenerator {
 
         let inlined = Self::inline_images(html_content).await;
 
-        // 先保存HTML到临时文件
         let temp_html_path = output_path.with_extension("temp.html");
         tokio::fs::write(&temp_html_path, inlined.as_bytes())
             .await
             .map_err(|e| anyhow::anyhow!("无法写入临时HTML文件: {}", e))?;
 
-        // 使用wkhtmltopdf转换
         let result = Self::convert_with_wkhtmltopdf(&temp_html_path, output_path).await;
 
-        // 清理临时文件
         if let Err(e) = tokio::fs::remove_file(&temp_html_path).await {
             warn!("清理临时文件失败: {} - {}", temp_html_path.display(), e);
         }
@@ -53,7 +46,6 @@ impl PdfGenerator {
         result
     }
 
-    /// 生成带水印的PDF
     pub async fn html_to_pdf_with_watermark(
         html_content: &str,
         output_path: &Path,
@@ -66,13 +58,11 @@ impl PdfGenerator {
             path = %output_path.display()
         );
 
-        // 在HTML内容中添加水印样式
         let watermarked_html = Self::add_watermark_to_html(html_content, watermark_text);
 
         Self::html_to_pdf(&watermarked_html, output_path).await
     }
 
-    /// 内联HTML中的图片，减少PDF生成时的外链加载失败
     async fn inline_images(html_content: &str) -> String {
         let re = Regex::new(r#"(?i)<img[^>]+src=["']([^"']+)["'][^>]*>"#).ok();
         if re.is_none() {
@@ -168,7 +158,6 @@ impl PdfGenerator {
         Some(format!("data:{};base64,{}", mime, encoded))
     }
 
-    /// 批量生成PDF报告
     pub async fn batch_generate_pdfs(
         reports: Vec<(String, &Path)>,
     ) -> Result<Vec<Result<(), anyhow::Error>>> {
@@ -189,7 +178,6 @@ impl PdfGenerator {
         Ok(results)
     }
 
-    /// 使用wkhtmltopdf转换HTML到PDF
     async fn convert_with_wkhtmltopdf(html_path: &Path, output_path: &Path) -> Result<()> {
         let run_attempt = |attempt: usize| {
             let html = html_path.to_path_buf();
@@ -215,7 +203,6 @@ impl PdfGenerator {
         Ok(())
     }
 
-    /// 在HTML中添加水印
     fn add_watermark_to_html(html_content: &str, watermark_text: &str) -> String {
         let watermark_style = format!(
             r#"
@@ -238,7 +225,6 @@ impl PdfGenerator {
             watermark_text
         );
 
-        // 在HTML body标签后插入水印
         if let Some(body_pos) = html_content.find("<body") {
             if let Some(body_end) = html_content[body_pos..].find('>') {
                 let insert_pos = body_pos + body_end + 1;
@@ -248,13 +234,10 @@ impl PdfGenerator {
             }
         }
 
-        // 如果找不到body标签，直接追加到末尾
         format!("{}{}", html_content, watermark_style)
     }
 
-    /// 检查PDF转换工具是否可用
     pub fn check_pdf_tools() -> Result<()> {
-        // 检查wkhtmltopdf是否安装
         let status = Command::new("wkhtmltopdf").arg("--version").status();
 
         match status {
@@ -273,7 +256,6 @@ impl PdfGenerator {
         }
     }
 
-    /// 优化PDF设置（用于大文件）
     pub async fn html_to_pdf_optimized(
         html_content: &str,
         output_path: &Path,
@@ -323,7 +305,6 @@ impl PdfGenerator {
 
         let output = command.output()?;
 
-        // 清理临时文件
         let _ = tokio::fs::remove_file(&temp_html_path).await;
 
         if !output.status.success() {

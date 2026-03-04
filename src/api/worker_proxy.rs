@@ -77,7 +77,6 @@ struct WorkerActivity {
     last_assignment: DateTime<Utc>,
 }
 
-/// Worker 材料下载请求
 #[derive(Debug, Deserialize)]
 pub struct MaterialFetchRequest {
     pub token: String,
@@ -312,7 +311,6 @@ async fn fetch_material_handler(
                 "worker 材料读取失败，尝试回退"
             );
 
-            // 回退：如果提供了 preview_id/material_code，尝试从存储/DB 获取
             if let Some(preview_id) = payload.preview_id.as_deref() {
                 let mut filter = MaterialFileFilter::default();
                 filter.preview_id = Some(preview_id.to_string());
@@ -325,7 +323,6 @@ async fn fetch_material_handler(
                     {
                         match app_state.storage.get(&record.stored_original_key).await {
                             Ok(Some(bytes)) => {
-                                // 回填到缓存路径（如果能定位到）
                                 if let Some(path) =
                                     material_cache::get_material_path(&payload.token).await
                                 {
@@ -927,8 +924,8 @@ fn guess_mime_from_key(key: &str) -> Option<String> {
         .map(|mime| mime.to_string())
 }
 
-const WORKER_CACHE_MAX_INLINE_BYTES: usize = 1_000_000; // 1MB以内才内联
-const WORKER_CACHE_MAX_DISK_BYTES: usize = 20 * 1024 * 1024; // 20MB以内落盘
+const WORKER_CACHE_MAX_INLINE_BYTES: usize = 1_000_000;
+const WORKER_CACHE_MAX_DISK_BYTES: usize = 20 * 1024 * 1024;
 
 #[derive(Clone)]
 struct WorkerCacheResolution {
@@ -1822,8 +1819,6 @@ async fn presign_handler(
     }
 }
 
-/// 异步处理 Worker 结果的核心逻辑
-/// 异步处理 Worker 结果的核心逻辑
 pub async fn process_worker_result_logic(
     app_state: &AppState,
     preview_id: &str,
@@ -1836,7 +1831,7 @@ pub async fn process_worker_result_logic(
         Ok(Some(record)) => record,
         Ok(None) => {
             warn!(preview_id = %preview_id, "预审记录不存在，无法处理 Worker 结果");
-            return Ok(()); // 记录不存在，视为处理完成（丢弃）
+            return Ok(());
         }
         Err(err) => {
             return Err(anyhow!("查询预审记录失败: {}", err));
@@ -1965,7 +1960,6 @@ pub async fn process_worker_result_logic(
                             );
                         }
 
-                        // 回退成功，视为处理完成
                         return Ok(());
                     }
                     Err(err) => {
@@ -2000,7 +1994,6 @@ pub async fn process_worker_result_logic(
             }
         };
 
-        // 写入 evaluation_result，若失败则中断流程，避免状态已完成但结果缺失
         let mut written = false;
         for attempt in 1..=2 {
             match database
@@ -2055,14 +2048,12 @@ pub async fn process_worker_result_logic(
                 for file in &files {
                     if file.file_type == "html" {
                         preview_view_url = Some(file.view_url.clone());
-                        // 如果还没有更优的下载链接，则用 HTML
                         if preview_download_url.is_none() {
                             preview_download_url = Some(file.download_url.clone());
                         }
                     }
 
                     if file.file_type == "pdf" {
-                        // 下载优先使用 PDF
                         preview_download_url = Some(file.download_url.clone());
                     }
                 }
@@ -2188,7 +2179,6 @@ async fn worker_result_handler(
 
     let database = app_state.database.clone();
 
-    // 先检查预审记录是否存在，避免无效入队
     let record = match database.get_preview_record(&preview_id).await {
         Ok(Some(record)) => record,
         Ok(None) => {
@@ -2202,7 +2192,6 @@ async fn worker_result_handler(
         }
     };
 
-    // 避免过期 attempt_id 进入队列
     if let Some(expected_attempt) = record.last_attempt_id.as_deref() {
         if let Some(request_attempt) = payload.attempt_id.as_deref() {
             if request_attempt != expected_attempt {
@@ -2230,7 +2219,6 @@ async fn worker_result_handler(
         }
     }
 
-    // 优先尝试入队，交给后台异步处理器处理
     let payload_json = match serde_json::to_string(&payload) {
         Ok(json) => json,
         Err(err) => {
@@ -2270,7 +2258,6 @@ async fn worker_result_handler(
         }
     }
 
-    // 入队失败则走同步处理逻辑，避免结果丢失
     let sync_result =
         process_worker_result_logic(&app_state, &preview_id, payload, &worker_id).await;
 
@@ -2626,7 +2613,6 @@ async fn worker_recently_active(worker_id: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// 启动 worker 心跳监控后台任务（仅 Master 节点）
 pub fn spawn_heartbeat_watchdog(app_state: &AppState) {
     if app_state.config.deployment.role != DeploymentRole::Master {
         return;
@@ -2781,7 +2767,6 @@ async fn record_heartbeat_success_log(
     }
 }
 
-/// 心跳状态快照（用于监控接口）
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkerHeartbeatSnapshot {
     pub worker_id: String,
@@ -2835,7 +2820,6 @@ fn detect_ocr_restart_burst(
     None
 }
 
-/// Worker 心跳的最新信息，供 watchdog / 监控等内部逻辑使用
 #[derive(Debug, Clone)]
 pub struct WorkerHeartbeatInfo {
     pub worker_id: String,
@@ -2846,7 +2830,6 @@ pub struct WorkerHeartbeatInfo {
     pub restart_cooldown_until: Option<DateTime<Utc>>,
 }
 
-/// 查询 Worker 心跳信息，如果尚未上报则返回 None
 pub async fn get_worker_heartbeat_info(worker_id: &str) -> Option<WorkerHeartbeatInfo> {
     let now = Utc::now();
     let guard = WORKER_HEARTBEATS.read().await;

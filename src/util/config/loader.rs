@@ -1,5 +1,3 @@
-//! 配置加载和管理模块
-//! 处理配置文件的读取、写入、验证和默认值生成
 
 use super::types::*;
 use anyhow::Result;
@@ -7,50 +5,42 @@ use std::fs;
 use std::path::Path;
 use url::Url;
 
-/// 配置加载器
 pub struct ConfigLoader;
 
 impl ConfigLoader {
-    /// 从YAML文件读取配置
     pub fn read_yaml(path: impl AsRef<Path>) -> Result<Config> {
         let config_str = fs::read_to_string(path)?;
         let config = serde_yaml::from_str(&config_str)?;
         Ok(config)
     }
 
-    /// 从环境变量读取配置覆盖 - 优化版本
     pub fn apply_env_overrides(mut config: Config) -> Config {
         tracing::info!("[tool] 应用环境变量配置覆盖...");
 
-        // 服务器配置覆盖
         if let Ok(host) = std::env::var("OCR_HOST") {
             config.server.host = host.clone();
-            config.host = format!("http://{}", host); // 兼容旧字段
+            config.host = format!("http://{}", host);
             tracing::info!("[ok] 环境变量覆盖服务器地址: {}", host);
         }
 
         if let Ok(port_str) = std::env::var("OCR_PORT") {
             if let Ok(port_num) = port_str.parse::<u16>() {
                 config.server.port = port_num;
-                config.port = port_num; // 兼容旧字段
+                config.port = port_num;
                 tracing::info!("[ok] 环境变量覆盖服务器端口: {}", port_num);
             }
         }
 
-        // 数据库配置覆盖（安全优先）
         if let Ok(db_password) = std::env::var("DB_PASSWORD") {
-            // 新的统一数据库配置
             if let Some(ref mut database) = config.database {
                 if let Some(ref mut dm) = database.dm {
                     dm.password = db_password.clone();
                 }
             }
-            // 兼容旧配置
             config.dm_sql.database_password = db_password;
             tracing::info!("[ok] 环境变量覆盖数据库密码: [安全隐藏]");
         }
 
-        // 从环境变量读取其他数据库配置（可选）
         if let Ok(db_host) = std::env::var("DB_HOST") {
             if let Some(ref mut database) = config.database {
                 if let Some(ref mut dm) = database.dm {
@@ -61,7 +51,6 @@ impl ConfigLoader {
             tracing::info!("[ok] 环境变量覆盖数据库地址: {}", db_host);
         }
 
-        // 覆盖 Go 网关配置（URL / API Key）
         if let Some(ref mut database) = config.database {
             if let Some(ref mut dm) = database.dm {
                 if let Some(ref mut gw) = dm.go_gateway {
@@ -70,19 +59,16 @@ impl ConfigLoader {
                         tracing::info!("[ok] 环境变量覆盖DM网关URL: {}", gw_url);
                     }
                     if let Ok(gw_key) = std::env::var("DM_GATEWAY_API_KEY") {
-                        gw.api_key = gw_key; // 安全字段，不打印明文
+                        gw.api_key = gw_key;
                         tracing::info!("[ok] 环境变量覆盖DM网关API Key: [隐藏]");
                     }
 
-                    // 智能修正：避免使用 localhost，优先替换为本机IP
-                    // 优先级：HOST_IP > OCR_HOST > config.server.host
                     if gw.url.contains("localhost") {
                         let candidate_ip = std::env::var("HOST_IP")
                             .ok()
                             .or_else(|| std::env::var("OCR_HOST").ok())
                             .unwrap_or_else(|| config.server.host.clone());
 
-                        // 过滤无效/回环地址
                         let invalid = candidate_ip.is_empty()
                             || candidate_ip == "0.0.0.0"
                             || candidate_ip == "127.0.0.1"
@@ -103,13 +89,11 @@ impl ConfigLoader {
             }
         }
 
-        // OSS配置覆盖（安全优先）
         if let Ok(oss_key) = std::env::var("OSS_ACCESS_KEY") {
             config.oss.access_key = oss_key;
             tracing::info!("[ok] 环境变量覆盖OSS访问密钥: [安全隐藏]");
         }
 
-        // 下载/转换限制：仅使用配置文件，不使用环境变量覆盖（保持简单与可控）
         if let Ok(oss_secret) = std::env::var("OSS_ACCESS_SECRET") {
             config.oss.access_key_secret = oss_secret;
             tracing::info!("[ok] 环境变量覆盖OSS密钥: [安全隐藏]");
@@ -134,7 +118,6 @@ impl ConfigLoader {
             }
         }
 
-        // 部署角色及 Worker 覆盖
         if let Ok(role_str) = std::env::var("OCR_DEPLOYMENT_ROLE") {
             let role_clean = role_str.trim().to_ascii_lowercase();
             use crate::util::config::types::DeploymentRole;
@@ -196,7 +179,6 @@ impl ConfigLoader {
             }
         }
 
-        // NATS 配置覆盖
         if let Ok(nats_url) = std::env::var("OCR_NATS_URL") {
             let nats_config = config
                 .task_queue
@@ -283,7 +265,6 @@ impl ConfigLoader {
             }
         }
 
-        // 调试和运行时模式覆盖
         if let Ok(debug_str) = std::env::var("OCR_DEBUG_ENABLED") {
             let debug_enabled = debug_str.to_lowercase() == "true";
             config.debug.enabled = debug_enabled;
@@ -296,7 +277,6 @@ impl ConfigLoader {
             tracing::info!("[ok] 环境变量覆盖运行时模式: {}", runtime_mode);
         }
 
-        // 日志配置覆盖
         if let Ok(log_retention) = std::env::var("OCR_LOG_RETENTION") {
             if let Ok(retention_days) = log_retention.parse::<u32>() {
                 if let Some(file_config) = &mut config.logging.file.retention_days {
@@ -306,12 +286,10 @@ impl ConfigLoader {
             }
         }
 
-        // 自动更新依赖字段
         Self::update_dependent_fields(&mut config);
 
         tracing::info!("[tool] 环境变量覆盖配置应用完成");
 
-        // 🔍 诊断日志：打印关键配置值
         tracing::info!("=== 配置加载诊断信息 ===");
         tracing::info!("📋 服务器配置:");
         tracing::info!("  - server.host: {}", config.server.host);
@@ -332,7 +310,6 @@ impl ConfigLoader {
         config
     }
 
-    /// 解析布尔环境变量
     fn parse_bool(value: &str) -> Result<bool, ()> {
         match value.trim().to_ascii_lowercase().as_str() {
             "true" | "1" | "yes" | "y" => Ok(true),
@@ -341,19 +318,15 @@ impl ConfigLoader {
         }
     }
 
-    /// 更新依赖字段（自动计算的配置）
     fn update_dependent_fields(config: &mut Config) {
-        // 自动生成完整的服务器URL
         let base_url = format!(
             "{}://{}:{}",
             config.server.protocol, config.server.host, config.server.port
         );
 
-        // 更新兼容字段
         config.host = base_url.clone();
         config.port = config.server.port;
 
-        // 自动生成预览和回调URL
         if config.preview_url.is_empty() {
             config.preview_url = base_url.clone();
         }
@@ -362,41 +335,32 @@ impl ConfigLoader {
         }
     }
 
-    /// 智能配置加载（配置文件 + 环境变量）
     pub fn load_with_env_overrides(path: impl AsRef<Path>) -> Result<Config> {
-        // 1. 从配置文件读取基础配置
         let base_config = Self::read_yaml(path)?;
 
-        // 2. 应用环境变量覆盖
         let config = Self::apply_env_overrides(base_config);
 
-        // 3. 验证最终配置
         Self::validate_config(&config)?;
 
         tracing::info!("[ok] 智能配置加载完成");
         Ok(config)
     }
 
-    /// 验证配置的有效性
     pub fn validate_config(config: &Config) -> Result<()> {
         let is_worker = matches!(config.deployment.role, super::types::DeploymentRole::Worker);
 
-        // 验证端口范围
         if !is_worker && config.port == 0 {
             return Err(anyhow::anyhow!("无效的端口号: {}", config.port));
         }
 
-        // 验证URL格式
         if !config.host.starts_with("http://") && !config.host.starts_with("https://") {
             return Err(anyhow::anyhow!("无效的主机URL格式: {}", config.host));
         }
 
-        // 验证会话超时
         if config.session_timeout <= 0 {
             return Err(anyhow::anyhow!("会话超时必须大于0"));
         }
 
-        // 验证日志级别
         let valid_levels = ["trace", "debug", "info", "warn", "error"];
         if !valid_levels.contains(&config.logging.level.as_str()) {
             return Err(anyhow::anyhow!("无效的日志级别: {}", config.logging.level));
@@ -454,26 +418,21 @@ impl ConfigLoader {
             .unwrap_or(true)
     }
 
-    /// 生成配置模板
     pub fn generate_template() -> Config {
         Config::default()
     }
 }
 
-/// 配置写入器
 pub struct ConfigWriter;
 
 impl ConfigWriter {
-    /// 将配置写入YAML文件
     pub fn write_yaml(config: &Config, path: impl AsRef<Path>) -> Result<()> {
         let yaml_content = serde_yaml::to_string(config)?;
         fs::write(path, yaml_content)?;
         Ok(())
     }
 
-    /// 写入配置到指定路径，确保目录存在
     pub fn write_yaml_with_dir(config: &Config, path: &Path) -> Result<()> {
-        // 确保目录存在
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -483,22 +442,18 @@ impl ConfigWriter {
         Ok(())
     }
 
-    /// 生成配置示例文件
     pub fn generate_example_config(path: &Path) -> Result<()> {
         let example_config = Self::create_example_config();
         Self::write_yaml_with_dir(&example_config, path)?;
         Ok(())
     }
 
-    /// 生成配置模板
     pub fn generate_template() -> Config {
         Self::create_example_config()
     }
 
-    /// 创建示例配置
     fn create_example_config() -> Config {
         Config {
-            // 兼容旧配置
             host: "".to_string(),
             port: 0,
             preview_url: "".to_string(),
@@ -508,15 +463,13 @@ impl ConfigWriter {
             ),
             public_base_url: Some("https://ocr.example.com".to_string()),
 
-            // 新的服务器配置
             server: crate::util::config::types::ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 8964,
                 protocol: "http".to_string(),
             },
 
-            // [brain] 新增：智能数据库配置 (v2024.12)
-            database: None, // 默认为None，使用兼容的DMSql配置
+            database: None,
 
             app_id: "your_app_id".to_string(),
             session_timeout: 86400,
@@ -532,13 +485,13 @@ impl ConfigWriter {
                 root: "ocr-files".to_string(),
                 bucket: "your-bucket".to_string(),
                 server_url: "https://your-oss-endpoint.com".to_string(),
-                access_key: "".to_string(), // 空值使用本地存储
+                access_key: "".to_string(),
                 access_key_secret: "".to_string(),
             },
             dm_sql: DmSql {
-                enabled: false, // 默认关闭达梦数据库
+                enabled: false,
                 strict_mode: false,
-                database_host: "".to_string(), // 空值使用SQLite
+                database_host: "".to_string(),
                 database_port: "5236".to_string(),
                 database_user: "SYSDBA".to_string(),
                 database_password: "SYSDBA".to_string(),
@@ -582,10 +535,8 @@ impl ConfigWriter {
             },
             debug: Debug {
                 enabled: true,
-                // 移除mock相关配置，使用debug ticket代替
                 tools_enabled: DebugToolsConfig {
                     api_test: true,
-                    // 移除mock_login配置
                     preview_demo: true,
                     flow_test: true,
                     system_monitor: true,
@@ -634,7 +585,7 @@ impl ConfigWriter {
                 }],
                 signature: SignatureConfig {
                     required: true,
-                    timestamp_tolerance: 300, // 5分钟
+                    timestamp_tolerance: 300,
                 },
                 rate_limiting: RateLimitingConfig {
                     enabled: true,
@@ -697,7 +648,6 @@ impl ConfigWriter {
 }
 
 impl Config {
-    /// 从文件读取配置，支持环境变量覆盖
     pub fn load_from_file(path: impl AsRef<Path>) -> Result<Self> {
         let mut config = ConfigLoader::read_yaml(path)?;
         config = ConfigLoader::apply_env_overrides(config);
@@ -705,12 +655,10 @@ impl Config {
         Ok(config)
     }
 
-    /// 保存配置到文件
     pub fn save_to_file(&self, path: impl AsRef<Path>) -> Result<()> {
         ConfigWriter::write_yaml(self, path)
     }
 
-    /// 获取当前运行模式配置
     pub fn get_current_mode_config(&self) -> RuntimeModeInfo {
         match self.runtime_mode.mode.as_str() {
             "development" => RuntimeModeInfo {
@@ -740,18 +688,15 @@ impl Config {
         }
     }
 
-    /// 检查是否启用调试模式
     pub fn is_debug_enabled(&self) -> bool {
         self.debug.enabled || self.get_current_mode_config().debug_enabled
     }
 
-    /// 检查是否为开发模式 - 替代原来的mock登录检查
     pub fn is_development_mode(&self) -> bool {
         self.debug.enabled && self.runtime_mode.mode == "development"
     }
 }
 
-/// 运行时模式信息
 #[derive(Debug, Clone)]
 pub struct RuntimeModeInfo {
     pub name: String,

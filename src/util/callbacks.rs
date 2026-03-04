@@ -374,12 +374,10 @@ impl CallbackDispatcherHandle {
 
 static DISPATCHER: OnceCell<CallbackDispatcherHandle> = OnceCell::new();
 
-/// 初始化第三方回调调度器
 pub fn initialize(app_state: &AppState) {
     DISPATCHER.get_or_init(|| CallbackDispatcherHandle::new(app_state));
 }
 
-/// 记录并调度第三方回调任务
 pub async fn schedule_callback(
     preview_id: String,
     callback_url: String,

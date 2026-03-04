@@ -22,7 +22,6 @@ use ocr_conn::{ocr, pdf_page_count};
 #[cfg(feature = "reqwest")]
 use reqwest::{Client, StatusCode};
 
-/// Worker 端上下文（凭证 + HTTP 客户端）
 struct WorkerContext {
     client: Arc<WorkerProxyClient>,
     worker_id: String,
@@ -93,7 +92,6 @@ impl Drop for WorkerJobActivityGuard {
     }
 }
 
-/// 初始化 Worker 上下文
 pub fn init_worker_context(
     worker_id: impl Into<String>,
     worker_secret: impl Into<String>,
@@ -136,22 +134,18 @@ pub fn init_worker_context(
     Ok(client)
 }
 
-/// 当前是否处于 Worker 节点
 pub fn is_worker() -> bool {
     WORKER_CONTEXT.get().is_some()
 }
 
-/// 获取 Worker ID
 pub fn worker_id() -> Option<&'static str> {
     WORKER_CONTEXT.get().map(|ctx| ctx.worker_id.as_str())
 }
 
-/// 获取 Worker Proxy 客户端
 pub fn client() -> Option<Arc<WorkerProxyClient>> {
     WORKER_CONTEXT.get().map(|ctx| Arc::clone(&ctx.client))
 }
 
-/// 启动周期性心跳任务
 pub fn spawn_heartbeat_task(interval_seconds: u64) {
     let ctx = match WORKER_CONTEXT.get() {
         Some(ctx) => ctx,
@@ -248,7 +242,6 @@ pub fn spawn_heartbeat_task(interval_seconds: u64) {
     });
 }
 
-/// 通过主节点代理下载材料并返回本地路径（如果可用）
 pub async fn fetch_material_path(
     url: &str,
     preview_id: Option<&str>,
@@ -264,14 +257,12 @@ pub async fn fetch_material_path(
         return Some(Err(anyhow!("材料令牌不能为空")));
     }
 
-    // 1. 尝试直接从本地缓存获取路径
     if let Some(path) = material_cache::get_material_path(token).await {
         if path.exists() {
             return Some(Ok(path));
         }
     }
 
-    // 2. 如果本地没有，尝试通过代理下载并保存
     let preview_label = preview_id.unwrap_or("unknown");
     let material_label = material_code.unwrap_or("unknown");
     let token_prefix = &token[..token.len().min(8)];
@@ -295,7 +286,6 @@ pub async fn fetch_material_path(
         match result {
             Ok(bytes) => {
                 log_material_fetch(preview_id, material_code, filename, &bytes);
-                // 保存到本地缓存
                 let filename_str = filename.unwrap_or("downloaded_file");
                 match material_cache::store_material(
                     preview_label,
@@ -307,7 +297,6 @@ pub async fn fetch_material_path(
                 .await
                 {
                     Ok(stored_token) => {
-                        // 修正：使用 store_material_with_token 直接保存并注册 token
                         match material_cache::store_material_with_token(
                             token,
                             preview_id.unwrap_or("unknown"),
@@ -339,12 +328,10 @@ pub async fn fetch_material_path(
             }
         }
     } else {
-        // 本地模式但文件不存在？可能是被清理了
         Some(Err(anyhow!("本地缓存文件不存在且无主节点代理")))
     }
 }
 
-/// 通过主节点代理下载材料（如果可用）
 pub async fn fetch_material_via_proxy(
     url: &str,
     preview_id: Option<&str>,
@@ -429,7 +416,6 @@ pub async fn fetch_material_via_proxy(
     }
 }
 
-/// Worker Proxy HTTP 客户端
 #[derive(Clone)]
 pub struct WorkerProxyClient {
     base_url: String,
@@ -533,7 +519,6 @@ impl WorkerProxyClient {
                             return Ok(());
                         } else {
                             let status = response.status();
-                            // 如果是 5xx 错误，或者是 429 Too Many Requests，则重试
                             if status.is_server_error()
                                 || status == reqwest::StatusCode::TOO_MANY_REQUESTS
                             {
@@ -549,7 +534,6 @@ impl WorkerProxyClient {
                                     "上报结果遇到服务端错误，准备重试"
                                 );
                             } else {
-                                // 其他 4xx 错误（如 400 Bad Request, 401 Unauthorized）通常不重试
                                 let body = response
                                     .text()
                                     .await
@@ -747,7 +731,6 @@ pub struct WorkerHeartbeatMetrics {
     pub ocr_pool_total_failures: Option<u64>,
 }
 
-/// 上报 worker 结果的便捷构造器
 pub fn build_result_payload(
     status: WorkerJobStatus,
     failure_reason: Option<String>,
@@ -796,7 +779,6 @@ fn collect_worker_metrics() -> WorkerHeartbeatMetrics {
     }
 }
 
-/// 记录 Worker 启动日志
 pub fn log_worker_startup(role: &str) {
     if let Some(id) = worker_id() {
         info!(worker_id = %id, role = %role, "Worker 节点初始化完成");

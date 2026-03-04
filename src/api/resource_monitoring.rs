@@ -1,5 +1,3 @@
-//! 资源监控API
-//! 提供系统资源监控、多阶段处理状态和链路追踪数据的API接口
 
 use crate::api::worker_proxy;
 use crate::util::processing::multi_stage_controller::MULTI_STAGE_CONTROLLER;
@@ -19,161 +17,98 @@ use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::info;
 
-/// 资源监控状态响应
 #[derive(Debug, Serialize)]
 pub struct ResourceMonitoringResponse {
-    /// 多阶段处理器状态
     pub multi_stage_status: MultiStageStatus,
-    /// 系统资源状态
     pub system_resources: SystemResourceStatus,
-    /// 链路追踪状态
     pub tracing_status: TracingStatus,
-    /// 性能指标摘要
     pub performance_metrics: PerformanceMetricsSummary,
-    /// 健康状态评分 (0-100)
     pub health_score: u8,
-    /// 生成时间戳
     pub timestamp: u64,
-    /// OCR引擎池状态
     pub ocr_pool: Option<OcrPoolStats>,
-    /// Worker 节点状态
     pub worker_heartbeats: Vec<WorkerStatusSummary>,
-    /// Worker 概要统计
     pub worker_summary: WorkerClusterSummary,
 }
 
-/// 多阶段处理器状态
 #[derive(Debug, Serialize)]
 pub struct MultiStageStatus {
-    /// 各阶段当前并发数
     pub stage_concurrency: HashMap<String, StageConcurrencyInfo>,
-    /// 各阶段队列长度
     pub stage_queues: HashMap<String, u32>,
-    /// 各阶段处理统计
     pub stage_statistics: HashMap<String, StageStatistics>,
-    /// 资源预测器状态
     pub resource_predictor_status: ResourcePredictorStatus,
 }
 
-/// 阶段并发信息
 #[derive(Debug, Serialize)]
 pub struct StageConcurrencyInfo {
-    /// 当前活跃任务数
     pub active_tasks: u32,
-    /// 最大并发数
     pub max_concurrency: u32,
-    /// 使用率百分比
     pub utilization_percent: f64,
-    /// 是否过载
     pub is_overloaded: bool,
 }
 
-/// 阶段统计信息
 #[derive(Debug, Serialize)]
 pub struct StageStatistics {
-    /// 总处理任务数
     pub total_processed: u64,
-    /// 成功任务数
     pub successful_tasks: u64,
-    /// 失败任务数
     pub failed_tasks: u64,
-    /// 平均处理时间（毫秒）
     pub avg_processing_time_ms: f64,
-    /// 最大处理时间（毫秒）
     pub max_processing_time_ms: u64,
-    /// 最小处理时间（毫秒）
     pub min_processing_time_ms: u64,
-    /// 成功率
     pub success_rate: f64,
 }
 
-/// 资源预测器状态
 #[derive(Debug, Serialize)]
 pub struct ResourcePredictorStatus {
-    /// 预测器是否启用
     pub enabled: bool,
-    /// 总预测次数
     pub total_predictions: u64,
-    /// 高风险预测次数
     pub high_risk_predictions: u64,
-    /// 临界风险预测次数
     pub critical_risk_predictions: u64,
-    /// 预测准确度评估
     pub prediction_accuracy: Option<f64>,
 }
 
-/// 系统资源状态
 #[derive(Debug, Serialize)]
 pub struct SystemResourceStatus {
-    /// CPU使用率（百分比）
     pub cpu_usage_percent: f64,
-    /// 内存使用率（百分比）
     pub memory_usage_percent: f64,
-    /// 磁盘使用率（百分比）
     pub disk_usage_percent: f64,
-    /// 可用内存（MB）
     pub available_memory_mb: u64,
-    /// 系统负载
     pub system_load: SystemLoad,
-    /// 网络状态
     pub network_status: NetworkStatus,
-    /// 看门狗快照
     pub watchdog_states: Vec<WatchdogStateSnapshot>,
 }
 
-/// 系统负载信息
 #[derive(Debug, Serialize)]
 pub struct SystemLoad {
-    /// 1分钟平均负载
     pub load_1min: f64,
-    /// 5分钟平均负载
     pub load_5min: f64,
-    /// 15分钟平均负载
     pub load_15min: f64,
 }
 
-/// 网络状态
 #[derive(Debug, Serialize)]
 pub struct NetworkStatus {
-    /// 网络流入流量（字节/秒）
     pub bytes_in_per_sec: u64,
-    /// 网络流出流量（字节/秒）
     pub bytes_out_per_sec: u64,
-    /// 活跃连接数
     pub active_connections: u32,
 }
 
-/// 链路追踪状态
 #[derive(Debug, Serialize)]
 pub struct TracingStatus {
-    /// 是否启用追踪
     pub enabled: bool,
-    /// 当前活跃追踪数量
     pub active_traces: u32,
-    /// 已完成追踪数量
     pub completed_traces: u32,
-    /// 总span数量
     pub total_spans: u64,
-    /// 平均追踪持续时间（毫秒）
     pub avg_trace_duration_ms: f64,
-    /// 采样率
     pub sampling_rate: f64,
-    /// 追踪数据大小（字节）
     pub trace_data_size_bytes: u64,
 }
 
-/// 性能指标摘要
 #[derive(Debug, Serialize)]
 pub struct PerformanceMetricsSummary {
-    /// 请求指标
     pub request_metrics: RequestMetricsSummary,
-    /// OCR处理指标
     pub ocr_metrics: OcrMetricsSummary,
-    /// 业务指标
     pub business_metrics: BusinessMetricsSummary,
 }
 
-/// OCR引擎池状态
 #[derive(Debug, Serialize)]
 pub struct OcrPoolStats {
     pub capacity: usize,
@@ -187,71 +122,47 @@ pub struct OcrPoolStats {
     pub circuit_open_until_epoch: Option<u64>,
 }
 
-/// 请求指标摘要
 #[derive(Debug, Serialize)]
 pub struct RequestMetricsSummary {
-    /// 总请求数
     pub total_requests: u64,
-    /// 成功率
     pub success_rate: f64,
-    /// 平均响应时间（毫秒）
     pub avg_response_time_ms: f64,
-    /// P95响应时间（毫秒）
     pub p95_response_time_ms: f64,
-    /// P99响应时间（毫秒）
     pub p99_response_time_ms: f64,
-    /// 吞吐量（请求/秒）
     pub throughput_per_sec: f64,
 }
 
-/// OCR处理指标摘要
 #[derive(Debug, Serialize)]
 pub struct OcrMetricsSummary {
-    /// OCR任务总数
     pub total_tasks: u64,
-    /// OCR成功率
     pub success_rate: f64,
-    /// 平均处理时间（毫秒）
     pub avg_processing_time_ms: f64,
-    /// 处理的总页数
     pub total_pages_processed: u64,
-    /// 识别的总字符数
     pub total_characters_recognized: u64,
-    /// 平均识别置信度
     pub avg_confidence_score: f64,
 }
 
-/// 业务指标摘要
 #[derive(Debug, Serialize)]
 pub struct BusinessMetricsSummary {
-    /// 预审请求总数
     pub total_preview_requests: u64,
-    /// 预审成功数
     pub preview_successes: u64,
-    /// 预审失败数
     pub preview_failures: u64,
-    /// 规则执行总数
     pub total_rule_executions: u64,
-    /// 规则匹配数
     pub rule_matches: u64,
 }
 
-/// 查询参数
 #[derive(Debug, Deserialize)]
 pub struct MonitoringQuery {
-    /// 是否包含详细信息
     #[serde(default)]
     pub detailed: bool,
-    /// 时间范围（秒）
     #[serde(default = "default_time_range")]
     pub time_range: u64,
 }
 
 fn default_time_range() -> u64 {
-    3600 // 1小时
+    3600
 }
 
-/// 创建资源监控路由
 pub fn create_resource_monitoring_routes() -> Router<AppState> {
     Router::new()
         .route("/api/resources/status", get(get_monitoring_status))
@@ -261,7 +172,6 @@ pub fn create_resource_monitoring_routes() -> Router<AppState> {
         .route("/api/resources/health", get(get_health_check))
 }
 
-/// 获取监控状态总览
 pub async fn get_monitoring_status(
     State(app_state): State<AppState>,
     Query(params): Query<MonitoringQuery>,
@@ -273,14 +183,12 @@ pub async fn get_monitoring_status(
         .unwrap()
         .as_secs();
 
-    // 收集各模块状态
     let multi_stage_status = collect_multi_stage_status().await;
     let system_resources = collect_system_resource_status();
     let tracing_status = collect_tracing_status().await;
     let performance_metrics = collect_performance_metrics();
     let ocr_pool = collect_ocr_pool_stats();
 
-    // 计算健康评分
     let health_score = calculate_health_score(
         &multi_stage_status,
         &system_resources,
@@ -305,7 +213,6 @@ pub async fn get_monitoring_status(
     WebResult::ok(response).into_json()
 }
 
-/// 获取多阶段处理器状态
 pub async fn get_multi_stage_status() -> Json<WebResult> {
     info!("获取多阶段处理器状态");
 
@@ -313,7 +220,6 @@ pub async fn get_multi_stage_status() -> Json<WebResult> {
     WebResult::ok(status).into_json()
 }
 
-/// 获取链路追踪状态
 pub async fn get_tracing_status() -> Json<WebResult> {
     info!("获取链路追踪状态");
 
@@ -321,7 +227,6 @@ pub async fn get_tracing_status() -> Json<WebResult> {
     WebResult::ok(status).into_json()
 }
 
-/// 获取性能指标
 pub async fn get_performance_metrics() -> Json<WebResult> {
     info!("获取性能指标");
 
@@ -329,7 +234,6 @@ pub async fn get_performance_metrics() -> Json<WebResult> {
     WebResult::ok(metrics).into_json()
 }
 
-/// 健康检查
 pub async fn get_health_check() -> Json<WebResult> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -342,7 +246,6 @@ pub async fn get_health_check() -> Json<WebResult> {
     WebResult::ok(health_data).into_json()
 }
 
-/// 收集多阶段处理器状态
 async fn collect_multi_stage_status() -> MultiStageStatus {
     let status = MULTI_STAGE_CONTROLLER.get_stage_status();
 
@@ -350,7 +253,6 @@ async fn collect_multi_stage_status() -> MultiStageStatus {
     let mut stage_queues = HashMap::new();
     let mut stage_statistics = HashMap::new();
 
-    // 收集各阶段信息
     stage_concurrency.insert(
         "download".to_string(),
         StageConcurrencyInfo {
@@ -399,17 +301,15 @@ async fn collect_multi_stage_status() -> MultiStageStatus {
         },
     );
 
-    // 队列信息（暂时设为0，因为当前实现没有队列）
     stage_queues.insert("download".to_string(), 0);
     stage_queues.insert("pdf_convert".to_string(), 0);
     stage_queues.insert("ocr_process".to_string(), 0);
     stage_queues.insert("storage".to_string(), 0);
 
-    // 统计数据（模拟）
     stage_statistics.insert(
         "download".to_string(),
         StageStatistics {
-            total_processed: 100, // 示例数据
+            total_processed: 100,
             successful_tasks: 95,
             failed_tasks: 5,
             avg_processing_time_ms: 1500.0,
@@ -499,7 +399,6 @@ fn collect_system_resource_status() -> SystemResourceStatus {
     }
 }
 
-/// 收集链路追踪状态
 async fn collect_tracing_status() -> TracingStatus {
     let active_traces = DISTRIBUTED_TRACER.get_active_traces();
     let performance_stats = DISTRIBUTED_TRACER.get_performance_stats();
@@ -508,14 +407,13 @@ async fn collect_tracing_status() -> TracingStatus {
         enabled: true,
         active_traces: active_traces.len() as u32,
         completed_traces: performance_stats.total_requests as u32,
-        total_spans: (active_traces.len() * 5) as u64, // 估计每个trace平均5个span
+        total_spans: (active_traces.len() * 5) as u64,
         avg_trace_duration_ms: performance_stats.avg_response_time,
         sampling_rate: 1.0,
-        trace_data_size_bytes: (active_traces.len() * 1024) as u64, // 估计每个trace 1KB
+        trace_data_size_bytes: (active_traces.len() * 1024) as u64,
     }
 }
 
-/// 收集性能指标
 fn collect_performance_metrics() -> PerformanceMetricsSummary {
     let request_metrics = METRICS_COLLECTOR.get_request_metrics();
     let ocr_metrics = METRICS_COLLECTOR.get_ocr_metrics();
@@ -571,7 +469,6 @@ fn collect_ocr_pool_stats() -> Option<OcrPoolStats> {
     })
 }
 
-/// 计算系统健康评分
 fn calculate_health_score(
     multi_stage: &MultiStageStatus,
     system_resources: &SystemResourceStatus,
@@ -580,7 +477,6 @@ fn calculate_health_score(
 ) -> u8 {
     let mut score = 100u8;
 
-    // 系统资源评分（40%权重）
     if system_resources.cpu_usage_percent > 90.0 {
         score = score.saturating_sub(20);
     } else if system_resources.cpu_usage_percent > 80.0 {
@@ -597,7 +493,6 @@ fn calculate_health_score(
         score = score.saturating_sub(8);
     }
 
-    // 多阶段处理器健康度（30%权重）
     let overloaded_stages = multi_stage
         .stage_concurrency
         .values()
@@ -612,7 +507,6 @@ fn calculate_health_score(
         score = score.saturating_sub(5);
     }
 
-    // 请求成功率评分（20%权重）
     let success_rate = performance.request_metrics.success_rate;
     if success_rate < 0.9 {
         score = score.saturating_sub(15);
@@ -622,7 +516,6 @@ fn calculate_health_score(
         score = score.saturating_sub(3);
     }
 
-    // 响应时间评分（10%权重）
     if performance.request_metrics.avg_response_time_ms > 10000.0 {
         score = score.saturating_sub(10);
     } else if performance.request_metrics.avg_response_time_ms > 5000.0 {
@@ -799,7 +692,7 @@ mod tests {
         };
 
         let score = calculate_health_score(&multi_stage, &system_resources, &tracing, &performance);
-        assert!(score > 90); // 健康系统应该有高分
+        assert!(score > 90);
     }
 
     #[tokio::test]

@@ -4,7 +4,6 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 use tracing::{debug, error, warn};
 
-/// OCR服务健康检查器
 #[derive(Clone)]
 pub struct HealthChecker {
     ocr_port: u16,
@@ -19,16 +18,13 @@ impl HealthChecker {
         }
     }
 
-    /// 检查OCR服务整体健康状态
     pub async fn check_ocr_service(&self) -> anyhow::Result<bool> {
-        // 1. 检查端口是否监听
         let port_ok = self.check_port_listening().await?;
         if !port_ok {
             debug!("OCR服务端口 {} 未监听", self.ocr_port);
             return Ok(false);
         }
 
-        // 2. 检查API健康状态
         let api_ok = self.check_api_health().await.unwrap_or(false);
         if !api_ok {
             debug!("OCR服务API健康检查失败");
@@ -38,7 +34,6 @@ impl HealthChecker {
         Ok(true)
     }
 
-    /// 检查端口是否监听
     pub async fn check_port_listening(&self) -> anyhow::Result<bool> {
         let address = format!("127.0.0.1:{}", self.ocr_port);
 
@@ -58,7 +53,6 @@ impl HealthChecker {
         }
     }
 
-    /// 检查API健康状态
     pub async fn check_api_health(&self) -> anyhow::Result<bool> {
         #[cfg(feature = "reqwest")]
         {
@@ -87,13 +81,11 @@ impl HealthChecker {
 
         #[cfg(not(feature = "reqwest"))]
         {
-            // MUSL环境下不支持HTTP客户端，假设API健康
             debug!("MUSL环境下跳过API健康检查");
             Ok(true)
         }
     }
 
-    /// 检查详细健康信息
     pub async fn check_detailed_health(&self) -> anyhow::Result<serde_json::Value> {
         #[cfg(feature = "reqwest")]
         {
@@ -121,7 +113,6 @@ impl HealthChecker {
 
         #[cfg(not(feature = "reqwest"))]
         {
-            // MUSL环境下返回模拟健康数据
             Ok(serde_json::json!({
                 "status": "healthy",
                 "mode": "musl_simplified",
@@ -130,7 +121,6 @@ impl HealthChecker {
         }
     }
 
-    /// 检查组件健康状态
     pub async fn check_components_health(&self) -> anyhow::Result<serde_json::Value> {
         #[cfg(feature = "reqwest")]
         {
@@ -159,7 +149,6 @@ impl HealthChecker {
 
         #[cfg(not(feature = "reqwest"))]
         {
-            // MUSL环境下返回模拟组件状态
             Ok(serde_json::json!({
                 "database": "healthy",
                 "storage": "healthy",
@@ -168,7 +157,6 @@ impl HealthChecker {
         }
     }
 
-    /// 测量API响应时间
     pub async fn measure_api_response_time(&self) -> anyhow::Result<u64> {
         #[cfg(feature = "reqwest")]
         {
@@ -195,19 +183,16 @@ impl HealthChecker {
 
         #[cfg(not(feature = "reqwest"))]
         {
-            // MUSL环境下返回模拟响应时间
-            Ok(1) // 1ms模拟响应时间
+            Ok(1)
         }
     }
 
-    /// 检查OCR服务进程状态
     pub async fn check_process_status(&self) -> anyhow::Result<bool> {
         use sysinfo::System;
 
         let mut system = System::new_all();
         system.refresh_all();
 
-        // 查找OCR服务进程
         for (_, process) in system.processes() {
             if process.name().contains("ocr-server") {
                 debug!(
@@ -223,7 +208,6 @@ impl HealthChecker {
         Ok(false)
     }
 
-    /// 获取OCR服务进程信息
     pub async fn get_process_info(&self) -> anyhow::Result<Option<ProcessInfo>> {
         use sysinfo::System;
 
@@ -246,7 +230,6 @@ impl HealthChecker {
     }
 }
 
-/// 进程信息
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ProcessInfo {
     pub pid: u32,
@@ -256,7 +239,6 @@ pub struct ProcessInfo {
     pub start_time: u64,
 }
 
-/// 健康检查结果
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HealthCheckResult {
     #[serde(with = "chrono::serde::ts_seconds")]

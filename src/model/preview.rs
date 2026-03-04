@@ -57,7 +57,6 @@ pub struct GeneratedReport {
     pub pdf_size: Option<u64>,
 }
 
-// 生产环境数据格式（直接格式，无包装层）
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProductionPreviewRequest {
     #[serde(rename = "agentInfo")]
@@ -86,13 +85,11 @@ pub struct ProductionPreviewRequest {
     pub third_party_request_id: Option<String>,
     #[serde(rename = "sequenceNo")]
     pub sequence_no: String,
-    // 预留sceneData字段支持，等待第三方实际数据确认
     #[serde(rename = "sceneData", default)]
     pub scene_data: Option<Vec<SceneValue>>,
 }
 
 impl ProductionPreviewRequest {
-    /// 转换为标准的PreviewBody格式
     pub fn to_preview_body(self) -> PreviewBody {
         let third_party_request_id = self
             .request_id
@@ -114,8 +111,8 @@ impl ProductionPreviewRequest {
                 material_data: self.material_data,
                 agent_info: self.agent_info,
                 subject_info: self.subject_info,
-                theme_id: None,              // 将在后续处理中设置
-                scene_data: self.scene_data, // 传递sceneData数据
+                theme_id: None,
+                scene_data: self.scene_data,
             },
             rule_definition: None,
             parsed_rule_definition: None,
@@ -145,16 +142,13 @@ pub struct Preview {
     pub agent_info: UserInfo,
     #[serde(rename = "subjectInfo")]
     pub subject_info: UserInfo,
-    // 新增主题ID字段，用于选择对应的规则文件
     #[serde(rename = "themeId", default)]
     pub theme_id: Option<String>,
-    // 预留sceneData字段支持，等待第三方实际数据确认
     #[serde(rename = "sceneData", default)]
     pub scene_data: Option<Vec<SceneValue>>,
 }
 
 impl Preview {
-    /// 执行预审评估
     pub async fn evaluate(
         self,
     ) -> anyhow::Result<crate::model::evaluation::PreviewEvaluationResult> {
@@ -164,7 +158,6 @@ impl Preview {
         evaluator.evaluate_complete().await
     }
 
-    /// 执行预审评估（带存储支持）
     pub async fn evaluate_with_storage(
         self,
         storage: Arc<dyn crate::storage::Storage>,
@@ -177,8 +170,6 @@ impl Preview {
     }
 
     pub async fn generate_html(&self) -> anyhow::Result<String> {
-        // 这是一个简单的HTML生成示例
-        // 实际实现应该根据业务需求生成相应的HTML内容
         let html = format!(
             r#"<!DOCTYPE html>
 <html>
@@ -394,7 +385,6 @@ impl PreviewBody {
             }
         };
 
-        // 使用新的数据与展示分离架构
         let mut evaluator = PreviewEvaluator::new_with_resources(
             self.preview.clone(),
             storage.clone(),
@@ -424,12 +414,10 @@ impl PreviewBody {
             let generated = Self::persist_report_files(&request_id, &html, storage.clone()).await?;
             preview_url = generated.preview_url.clone();
             if crate::CONFIG.report_export.enable_approve_pdf {
-                // 只暴露PDF URL，不再回退到HTML；若上传失败则用本地下载接口
                 let mut preferred_pdf = generated
                     .remote_pdf_url
                     .clone()
                     .or_else(|| crate::util::callbacks::build_default_download_url(&request_id));
-                // 如果仍没有PDF直链，则不返回字段
                 if preferred_pdf.is_some() {
                     approve_pdf_file = preferred_pdf.take();
                 }
@@ -655,7 +643,6 @@ impl PreviewBody {
 
         let command_result = PdfGenerator::html_to_pdf(&html_for_pdf, &file_path_pdf).await;
 
-        // 安全加固：预览地址始终指向受保护的预审查看页，不暴露本地路径或存储公网URL
         let mut preview_url = format!("/api/preview/view/{}", request_id);
         let mut pdf_path = None;
         let mut pdf_size = None;
@@ -785,7 +772,6 @@ impl PreviewBody {
     }
 
     pub async fn download(goto: Goto) -> anyhow::Result<Response> {
-        // 统一下载API，直接调用download_local
         Self::download_local(goto).await
     }
 
@@ -899,7 +885,6 @@ pub struct UserInfo {
     pub user_id: String,
     #[serde(rename = "certificateType")]
     pub certificate_type: String,
-    // 扩展用户信息字段
     #[serde(rename = "userName", alias = "name", default)]
     pub user_name: Option<String>,
     #[serde(rename = "nickName", default)]

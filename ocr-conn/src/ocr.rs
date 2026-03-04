@@ -27,51 +27,41 @@ const CIRCUIT_COOLDOWN_SECS: u64 = 30;
 const SLOW_CALL_WARN_THRESHOLD_MS: u128 = 8_000;
 const DEFAULT_MAX_INPUT_BYTES: usize = 10 * 1024 * 1024; // 10MB
 const DEFAULT_MAX_PIXELS: u64 = 25_000_000; // ~25MP, 5000x5000
-const DEFAULT_MIN_DIMENSION: u32 = 16; // 过小图片直接判为无效
+const DEFAULT_MIN_DIMENSION: u32 = 16;
 
-/// PaddleOCR-json 官方错误码
 pub mod error_code {
-    // 成功类 (正常返回)
-    pub const OK_WITH_TEXT: u32 = 100; // 识别到文字
-    pub const OK_NO_TEXT: u32 = 101; // 未识别到文字（正常）
+    pub const OK_WITH_TEXT: u32 = 100;
+    pub const OK_NO_TEXT: u32 = 101;
 
-    // 路径/文件类错误 (2xx) - 数据问题，不需重启
     pub const ERR_PATH_NOT_EXIST: u32 = 200;
     pub const ERR_PATH_ENCODE: u32 = 201;
     pub const ERR_FILE_OPEN: u32 = 202;
     pub const ERR_IMAGE_DECODE: u32 = 203;
 
-    // 剪贴板类错误 (210-217) - 不适用于服务端
 
-    // Base64类错误 (3xx) - 数据问题，不需重启
     pub const ERR_BASE64_DECODE: u32 = 300;
     pub const ERR_BASE64_IMDECODE: u32 = 301;
 
-    // JSON/引擎类错误 (4xx) - 可能需要重启
     pub const ERR_JSON_DUMP: u32 = 400;
     pub const ERR_JSON_PARSE: u32 = 401;
     pub const ERR_JSON_KEY: u32 = 402;
     pub const ERR_NO_TASK: u32 = 403;
 
-    /// 判断是否为"成功"结果（包括空文本）
     #[inline]
     pub fn is_success(code: u32) -> bool {
         matches!(code, OK_WITH_TEXT | OK_NO_TEXT)
     }
 
-    /// 判断是否为数据问题（不需要重启引擎）
     #[inline]
     pub fn is_data_error(code: u32) -> bool {
         matches!(code, 200..=217 | 300..=301)
     }
 
-    /// 判断是否可能需要重启引擎（引擎内部问题）
     #[inline]
     pub fn should_restart(code: u32) -> bool {
         matches!(code, 400..=403)
     }
 
-    /// 获取错误码的人类可读描述
     pub fn description(code: u32) -> &'static str {
         match code {
             100 => "识别成功",
@@ -104,7 +94,7 @@ pub mod error_code {
 pub struct Content {
     code: u32,
     #[serde(default)]
-    data: serde_json::Value, // 可以是数组或字符串
+    data: serde_json::Value,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -195,7 +185,6 @@ pub struct Extractor {
     last_failure_at: Option<SystemTime>,
 }
 
-/// 引擎启动选项（由上层传入）
 #[derive(Debug, Clone, Default)]
 pub struct OcrEngineOptions {
     pub work_dir: Option<std::path::PathBuf>,
@@ -209,7 +198,6 @@ impl Extractor {
         Self::new_with_options(OcrEngineOptions::default())
     }
 
-    /// 使用启动选项创建实例
     pub fn new_with_options(opts: OcrEngineOptions) -> io::Result<Self> {
         let (process, receiver, stderr_recent) = Self::spawn_process(&opts)?;
         Ok(Self {
@@ -401,12 +389,10 @@ impl Extractor {
                     use error_code::*;
 
                     if is_success(content.code) {
-                        // code=100 或 code=101 都是成功
                         if content.code == OK_NO_TEXT {
                             tracing::debug!("ℹ️ OCR未识别到文字 (尝试 #{})，空白图片", attempt_num);
                             return Ok(Vec::new());
                         }
-                        // code=100: 解析data数组
                         if let Ok(data_vec) =
                             serde_json::from_value::<Vec<ContentData>>(content.data)
                         {
@@ -422,7 +408,6 @@ impl Extractor {
                             Ok(Vec::new())
                         }
                     } else if is_data_error(content.code) {
-                        // 数据问题 (2xx/3xx): 直接返回错误，不触发重启
                         let desc = description(content.code);
                         let detail = content.data.as_str().unwrap_or("Unknown");
                         tracing::warn!(
@@ -431,10 +416,8 @@ impl Extractor {
                             desc,
                             detail
                         );
-                        // 使用特殊前缀标记数据错误，避免重试
                         Err(format!("[DATA_ERR:{}] {} - {}", content.code, desc, detail))
                     } else {
-                        // 引擎问题 (4xx): 允许重启
                         let desc = description(content.code);
                         let detail = content.data.as_str().unwrap_or("Unknown");
                         tracing::warn!(
@@ -468,7 +451,6 @@ impl Extractor {
                 return Ok(ok);
             }
             Err(first_err) => {
-                // 数据问题（2xx/3xx）不触发重启，直接返回错误
                 if is_data_error_message(&first_err) {
                     let total_elapsed = call_start.elapsed();
                     tracing::info!(
@@ -491,7 +473,6 @@ impl Extractor {
                         stderr_snapshot.len()
                     );
                     for line in stderr_snapshot.iter().rev().take(20).rev() {
-                        // 打印最后20行
                         tracing::warn!("stderr> {}", line);
                     }
                 }
@@ -592,13 +573,10 @@ impl Extractor {
     }
 }
 
-/// 判断错误消息是否为"数据问题"（不需要重启引擎）
-/// 数据错误使用 [DATA_ERR:xxx] 前缀标记
 fn is_data_error_message(err: &str) -> bool {
     err.starts_with("[DATA_ERR:")
 }
 
-/// 输入校验：限制大小、像素、格式，提前将数据问题拦截为 DATA_ERR
 fn validate_image_data(image: &ImageData) -> Result<(), String> {
     match image {
         ImageData::ImagePathDict { image_path } => {
@@ -713,7 +691,6 @@ impl Drop for Extractor {
 }
 
 // =====================
-// 简单双进程池（可复用OCR引擎）
 // =====================
 
 #[derive(Debug)]
@@ -846,7 +823,6 @@ impl ExtractorHandle {
                     Ok(contents)
                 }
                 Err(err) => {
-                    // 数据类错误不算引擎故障，避免触发熔断/重启
                     if is_data_error_message(&err) {
                         info!(
                             "收到数据错误，不计入引擎失败计数: {}",
@@ -872,17 +848,14 @@ impl ExtractorHandle {
 
 impl Drop for ExtractorHandle {
     fn drop(&mut self) {
-        // 归还引擎（若存在）
         if let Some(engine) = self.engine.take() {
             let mut engines = self.pool.engines.lock();
-            // 放回第一个空位或追加
             if let Some(slot) = engines.iter_mut().find(|e| e.is_none()) {
                 *slot = Some(engine);
             } else {
                 engines.push(Some(engine));
             }
         }
-        // _permit drop 将自动释放并发许可
     }
 }
 
@@ -900,9 +873,6 @@ impl ExtractorPool {
     }
 
     fn auto_size() -> usize {
-        // 针对32核(16物理核心)服务器优化
-        // OCR进程是CPU密集型，建议使用物理核心数的1/3到1/2
-        // 16物理核心 / 3 ≈ 6个引擎（预留资源给系统和其他服务）
         6
     }
 
@@ -910,7 +880,6 @@ impl ExtractorPool {
         Self::with_capacity(Self::auto_size())
     }
 
-    /// 仅在未设置时设置引擎启动参数
     pub fn set_options_if_empty(&self, opts: OcrEngineOptions) {
         let mut guard = self.inner.opts.lock();
         if guard.is_none() {
@@ -918,7 +887,6 @@ impl ExtractorPool {
         }
     }
 
-    /// 获取一个可用的引擎句柄（异步等待并发许可）
     pub async fn acquire(&self) -> Result<ExtractorHandle, String> {
         let permit = self
             .semaphore
@@ -932,7 +900,6 @@ impl ExtractorPool {
             return Err(err);
         }
 
-        // 取一个空闲引擎或在未满时创建新引擎
         let mut engines = self.inner.engines.lock();
         if let Some(pos) = engines.iter().position(|e| e.is_some()) {
             let mut eng = engines[pos].take();
@@ -947,11 +914,9 @@ impl ExtractorPool {
             });
         }
 
-        // 没有空闲的，如果未达到上限则创建一个
         let active = engines.iter().filter(|e| e.is_some()).count();
         let max = self.inner.max;
         if active < max {
-            // 获取启动参数
             let opts = self.inner.opts.lock().clone().unwrap_or_default();
             drop(engines);
             let mut eng = Extractor::new_with_options(opts)
@@ -964,14 +929,12 @@ impl ExtractorPool {
             });
         }
 
-        // 不应发生（许可数量与max一致），但为了安全放回许可并报错
         drop(engines);
         drop(permit);
         Err("no engine available".to_string())
     }
 }
 
-/// 全局引擎池（自动容量、延迟创建引擎）
 static POOL_CAPACITY_OVERRIDE: OnceLock<usize> = OnceLock::new();
 
 pub static GLOBAL_POOL: LazyLock<ExtractorPool> = LazyLock::new(|| {
@@ -1027,7 +990,6 @@ pub fn ocr_pool_stats() -> PoolStats {
     GLOBAL_POOL.stats()
 }
 
-/// 配置全局OCR引擎池容量（需在首次使用前调用）
 pub fn configure_pool_capacity(capacity: usize) {
     let normalized = capacity.clamp(1, 128);
     let _ = POOL_CAPACITY_OVERRIDE.set(normalized);

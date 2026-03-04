@@ -1,97 +1,73 @@
-# OCR Server
+# OCR Server (Archive)
 
-High-performance document OCR pre-review system built with Rust.
+Rust-based OCR pre-review service. This repository is now archived and is no longer actively maintained.
 
-## Features
+## 1. Architecture Overview
 
-- Multi-format OCR (PDF, JPG, PNG) powered by PaddleOCR
-- Configurable business rule engine
-- Smart failover (Database: DM → SQLite, Storage: OSS → Local)
-- Distributed mode with NATS JetStream
-- Real-time monitoring dashboard
+Core flow: receive preview request -> download source files -> OCR processing -> rule evaluation -> persist/return result.
 
-## Tech Stack
+- API layer: `src/api/` for routing, auth, and request orchestration.
+- Processing layer: `src/util/` for OCR, rule engine, and shared processing utilities.
+- Data layer: `src/db/` with SQLite (default) and DM support through Go Gateway.
+- Storage layer: `src/storage/` with OSS and local fallback.
+- Bootstrap layer: `src/server/` and `src/main.rs` for startup and runtime mode control.
 
-- **Backend**: Rust 1.70+, Axum 0.7, Tokio
-- **OCR**: PaddleOCR
-- **Database**: SQLite (default) / DM (via Go gateway)
-- **Storage**: Alibaba Cloud OSS / Local filesystem
-- **Queue**: NATS JetStream (distributed mode)
+Runtime modes:
+- `standalone`: single-node mode (default).
+- `master/worker`: distributed mode with NATS JetStream task distribution.
 
-## Quick Start
+## 2. Build and Packaging
+
+Only one build script is retained:
+- `scripts/build.sh`
+
+Common build commands:
 
 ```bash
-# Build
+# Local release build
 cargo build --release
 
-# Configure
-cp config/config.template.yaml config/config.yaml
-# Edit config/config.yaml with your settings
+# Unified script (native build)
+./scripts/build.sh --prod-native
 
-# Run
-./scripts/ocr-server.sh start
-
-# Health check
-curl http://localhost:8964/api/health
-```
-
-## Project Structure
-
-```
-src/
-├── api/          # HTTP routes
-├── db/           # Database layer (SQLite + DM failover)
-├── storage/      # Storage layer (OSS + local failover)
-├── model/        # Data models
-├── server/       # Server bootstrap
-└── util/         # Utilities (OCR, rules, auth, etc.)
-
-config/           # Configuration templates
-scripts/          # Management scripts
-static/           # Web frontend
-```
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/preview` | POST | Submit preview request |
-| `/api/preview/data/{id}` | GET | Get preview result |
-| `/api/queue/status` | GET | Queue status |
-| `/api/failover/status` | GET | Failover status |
-
-## Configuration
-
-Copy `config/config.template.yaml` to `config/config.yaml` and configure:
-
-- Database connection (SQLite or DM gateway)
-- OSS storage credentials
-- Authentication settings
-- Concurrency limits
-
-Use environment variables for sensitive data:
-```bash
-export DB_PASSWORD="xxx"
-export OSS_ACCESS_KEY="xxx"
-export OSS_ACCESS_SECRET="xxx"
-```
-
-## Build for Production
-
-```bash
-# Static build (MUSL, portable)
+# Unified script (musl static build)
 ./scripts/build.sh --prod
 
-# Native build (glibc, better performance)
-./scripts/build.sh --prod-native
+# Build and package release output
+./scripts/build.sh -m release -t native -p
+
+# Container-based build (run build.sh inside image)
+docker run --rm -it -v "$(pwd)":/workspace -w /workspace rust:1.82 \
+  bash -lc "./scripts/build.sh --prod-native"
 ```
 
-## Documentation
+Main output locations:
+- `target/` (compiler output)
+- `build/` (script-generated package output)
 
-- [Build Guide](docs/BUILD.md)
-- [Operations](docs/OPERATIONS.md)
+## 3. Deployment
 
-## License
+### Single-node Deployment (recommended minimal setup)
 
-MIT
+1. Copy template config: `cp config/config.template.yaml config/config.yaml`
+2. Update settings for your environment (database, OSS, concurrency, auth).
+3. Override sensitive values with environment variables (for example `DB_PASSWORD`, `OSS_ACCESS_SECRET`, `DM_GATEWAY_API_KEY`).
+4. Start the binary:
+
+```bash
+./target/release/ocr-server
+```
+
+Default port: `8964`  
+Health endpoint: `GET /api/health`
+
+### Distributed Deployment (optional)
+
+- Enable `distributed.enabled=true` in config.
+- Set role to `master` or `worker`.
+- Configure NATS server address (for example `nats://host:4222`).
+
+## 4. Retained Repository Scope
+
+- Retained: core source code, config templates, OCR assets, build script.
+- Removed: test pages/scripts, non-essential operation/helper scripts, and split documentation files.

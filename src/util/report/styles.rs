@@ -1,11 +1,7 @@
-//! CSS样式管理模块
-//! 集中管理报告生成的所有CSS样式
 
-/// CSS样式管理器
 pub struct CssStyleManager;
 
 impl CssStyleManager {
-    /// 获取完整报告CSS样式
     pub fn get_report_css() -> &'static str {
         r#"
         body { 
@@ -204,7 +200,6 @@ impl CssStyleManager {
         "#
     }
 
-    /// 获取简化版CSS样式
     pub fn get_simple_css() -> &'static str {
         r#"
         body { 
@@ -243,7 +238,6 @@ impl CssStyleManager {
         "#
     }
 
-    /// 获取对比报告CSS样式
     pub fn get_comparison_css() -> &'static str {
         r#"
         body { 
@@ -303,7 +297,6 @@ impl CssStyleManager {
         "#
     }
 
-    /// 获取移动端友好的CSS样式
     pub fn get_mobile_css() -> &'static str {
         r#"
         body { 
@@ -369,7 +362,6 @@ impl CssStyleManager {
         "#
     }
 
-    /// 获取深色主题CSS样式
     pub fn get_dark_theme_css() -> &'static str {
         r#"
         body { 
@@ -456,7 +448,6 @@ impl CssStyleManager {
     }
 }
 
-/// 公共样式访问函数（保持向后兼容）
 pub fn get_report_css() -> &'static str {
     CssStyleManager::get_report_css()
 }

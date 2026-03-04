@@ -1,22 +1,18 @@
-// 组件管理模块
 (() => {
 class ComponentManager {
     constructor() {
         this.components = {};
     }
 
-    // 注册组件
     register(name, component) {
         this.components[name] = component;
     }
 
-    // 获取组件
     get(name) {
         return this.components[name];
     }
 }
 
-// 基本信息组件
 class BasicInfoComponent {
     constructor(container) {
         this.container = container;
@@ -41,7 +37,6 @@ class BasicInfoComponent {
     }
 }
 
-// 材料列表组件
 class MaterialsListComponent {
     constructor(container) {
         this.container = container;
@@ -77,7 +72,6 @@ class MaterialsListComponent {
                     '/static/images/智能预审_审核依据材料1.3.png'
             );
 
-        // 材料图标与预览标记
         const hasPreview = Array.isArray(material.items)
             ? material.items.some(item => item.hasDocument)
             : false;
@@ -169,7 +163,6 @@ class MaterialsListComponent {
         }
         this.eventsBound = true;
 
-        // 材料展开/收起
         this.container.addEventListener('click', (e) => {
             const header = e.target.closest('.material-header');
             if (header) {
@@ -191,7 +184,6 @@ class MaterialsListComponent {
             }
         });
 
-        // 文档点击
         this.container.addEventListener('click', (e) => {
             const subItem = e.target.closest('.material-sub-item');
             if (subItem && subItem.dataset.hasDocument === 'true') {
@@ -209,14 +201,12 @@ class MaterialsListComponent {
         });
     }
 
-    // 设置事件回调
     setEventHandlers(onItemClick, onDocumentClick) {
         this.onItemClick = onItemClick;
         this.onDocumentClick = onDocumentClick;
     }
 }
 
-// 状态显示组件
 class StatusDisplayComponent {
     constructor(container) {
         this.container = container;
@@ -254,18 +244,13 @@ class StatusDisplayComponent {
                 <div class="status-icon">
                     <div class="success-icon">
                         <svg width="120" height="120" viewBox="0 0 120 120">
-                            <!-- 文档背景 -->
                             <rect x="25" y="15" width="70" height="90" fill="#E8F4FD" stroke="#4A90E2" stroke-width="2" rx="4"/>
-                            <!-- 文档线条 -->
                             <line x1="35" y1="30" x2="75" y2="30" stroke="#4A90E2" stroke-width="2" opacity="0.6"/>
                             <line x1="35" y1="40" x2="85" y2="40" stroke="#4A90E2" stroke-width="2" opacity="0.6"/>
                             <line x1="35" y1="50" x2="80" y2="50" stroke="#4A90E2" stroke-width="2" opacity="0.6"/>
                             <line x1="35" y1="60" x2="75" y2="60" stroke="#4A90E2" stroke-width="2" opacity="0.6"/>
-                            <!-- 勾号圆圈背景 -->
                             <circle cx="75" cy="75" r="20" fill="#52C41A" stroke="white" stroke-width="3"/>
-                            <!-- 勾号 -->
                             <path d="M67 75l5 5 10-10" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                            <!-- 装饰元素 -->
                             <circle cx="35" cy="25" r="2" fill="#4A90E2" opacity="0.3"/>
                             <circle cx="45" cy="20" r="1.5" fill="#4A90E2" opacity="0.4"/>
                             <circle cx="90" cy="30" r="1" fill="#4A90E2" opacity="0.3"/>
@@ -307,18 +292,13 @@ class StatusDisplayComponent {
                 <div class="status-icon">
                     <div class="error-icon">
                         <svg width="120" height="120" viewBox="0 0 120 120">
-                            <!-- 文档背景 -->
                             <rect x="25" y="15" width="70" height="90" fill="#FFF2F0" stroke="#F5222D" stroke-width="2" rx="4"/>
-                            <!-- 文档线条 -->
                             <line x1="35" y1="30" x2="75" y2="30" stroke="#F5222D" stroke-width="2" opacity="0.6"/>
                             <line x1="35" y1="40" x2="85" y2="40" stroke="#F5222D" stroke-width="2" opacity="0.6"/>
                             <line x1="35" y1="50" x2="80" y2="50" stroke="#F5222D" stroke-width="2" opacity="0.6"/>
                             <line x1="35" y1="60" x2="75" y2="60" stroke="#F5222D" stroke-width="2" opacity="0.6"/>
-                            <!-- 问号圆圈背景 -->
                             <circle cx="75" cy="75" r="20" fill="#1890FF" stroke="white" stroke-width="3"/>
-                            <!-- 问号 -->
                             <text x="75" y="85" text-anchor="middle" fill="white" font-size="24" font-weight="bold" font-family="Arial, sans-serif">?</text>
-                            <!-- 装饰元素 -->
                             <circle cx="35" cy="25" r="2" fill="#F5222D" opacity="0.3"/>
                             <circle cx="45" cy="20" r="1.5" fill="#F5222D" opacity="0.4"/>
                             <circle cx="90" cy="30" r="1" fill="#F5222D" opacity="0.3"/>
@@ -471,7 +451,6 @@ class StatusDisplayComponent {
     }
 }
 
-// 文档预览组件
 class DocumentPreviewComponent {
     constructor(container) {
         this.container = container;
@@ -923,7 +902,6 @@ class DocumentPreviewComponent {
     }
 }
 
-// 已通过材料组件
 class PassedMaterialsComponent {
     constructor(container) {
         this.container = container;
@@ -942,7 +920,6 @@ class PassedMaterialsComponent {
     }
 }
 
-// 导出组件管理器和组件类
 window.ComponentManager = ComponentManager;
 window.BasicInfoComponent = BasicInfoComponent;
 window.MaterialsListComponent = MaterialsListComponent;

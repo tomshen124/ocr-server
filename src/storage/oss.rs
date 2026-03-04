@@ -6,7 +6,6 @@ use tracing::{debug, error, info, warn};
 
 use super::traits::{FileMetadata, Storage};
 
-/// 阿里云OSS存储实现
 pub struct OssStorage {
     operator: Operator,
     bucket: String,
@@ -16,13 +15,11 @@ pub struct OssStorage {
 
 impl OssStorage {
     pub fn new(config: OssConfig) -> Result<Self> {
-        // 构建OSS服务 - 专有云OSS配置优化
         info!(
             "[tool] 配置OSS服务: endpoint={}, bucket={}",
             config.endpoint, config.bucket
         );
 
-        // 检测是否为专有云环境
         let is_private_cloud = config.endpoint.contains("hzggcloud.xc.com");
         if is_private_cloud {
             info!("[building] 检测到专有云OSS，使用HTTP协议");
@@ -35,10 +32,7 @@ impl OssStorage {
             .access_key_id(&config.access_key_id)
             .access_key_secret(&config.access_key_secret);
 
-        // 专有云OSS需要禁用HTTPS，强制使用HTTP
         if is_private_cloud {
-            // 注意：OpenDAL 0.50 可能需要通过不同的方式配置HTTP
-            // 这里我们依靠endpoint不带协议前缀，OpenDAL应该会根据端点判断
             info!("[tool] 专有云OSS配置：强制使用HTTP协议");
         }
 
@@ -52,24 +46,19 @@ impl OssStorage {
         })
     }
 
-    /// 测试网络连通性
     pub async fn test_network_connectivity(&self) -> Result<bool> {
-        // 简单的网络连通性测试
         let endpoint = if let Some(ref public_endpoint) = self.public_endpoint {
-            // 使用配置的公开端点，自动检测协议
             if public_endpoint.starts_with("http://") || public_endpoint.starts_with("https://") {
                 public_endpoint.clone()
             } else {
-                // 专有云通常使用HTTP，公网使用HTTPS
                 let protocol = if public_endpoint.contains("aliyuncs.com") {
                     "https"
                 } else {
-                    "http" // 专有云默认HTTP
+                    "http"
                 };
                 format!("{}://{}", protocol, public_endpoint)
             }
         } else {
-            // 默认公网阿里云使用HTTPS
             format!("https://{}.oss.aliyuncs.com", self.bucket)
         };
 
@@ -77,8 +66,6 @@ impl OssStorage {
         {
             match reqwest::get(&endpoint).await {
                 Ok(response) => {
-                    // HTTP状态码在200-499之间都表示网络连通
-                    // 4xx错误通常是权限问题，不是网络问题
                     Ok(response.status().as_u16() < 500)
                 }
                 Err(_) => Ok(false),
@@ -87,7 +74,6 @@ impl OssStorage {
 
         #[cfg(not(feature = "reqwest"))]
         {
-            // MUSL环境下不支持HTTP客户端，假设网络连通
             tracing::debug!("MUSL环境下跳过OSS网络检查");
             Ok(true)
         }
@@ -106,7 +92,6 @@ impl Storage for OssStorage {
             self.endpoint
         );
 
-        // 将数据转换为Vec<u8>以满足所有权要求
         let data_vec = data.to_vec();
 
         match self.operator.write(key, data_vec).await {
@@ -230,7 +215,6 @@ impl Storage for OssStorage {
                 key.trim_start_matches('/')
             ))
         } else {
-            // 如果没有配置公开端点，返回内部端点URL
             Ok(format!(
                 "https://{}.oss.aliyuncs.com/{}",
                 self.bucket,
@@ -240,8 +224,6 @@ impl Storage for OssStorage {
     }
 
     async fn get_presigned_url(&self, key: &str, _expires: Duration) -> Result<String> {
-        // 简化实现，返回公开URL
-        // 实际实现应该生成带签名的临时URL
         self.get_public_url(key).await
     }
 
@@ -268,18 +250,15 @@ impl Storage for OssStorage {
     }
 
     async fn health_check(&self) -> Result<bool> {
-        // [tool] 增强的OSS健康检查机制
         info!(
             "[search] 开始OSS健康检查... bucket={}, endpoint={}",
             self.bucket, self.endpoint
         );
 
-        // 第一步：尝试轻量级检查 - 检查bucket是否可访问
         match self.operator.stat("").await {
             Ok(_) => {
                 info!("[ok] OSS基础连接正常");
 
-                // 第二步：尝试读取一个健康检查文件
                 match self.operator.stat(".health_check").await {
                     Ok(_) => {
                         info!("[ok] OSS健康检查文件存在");
@@ -288,7 +267,6 @@ impl Storage for OssStorage {
                     Err(e) if e.kind() == opendal::ErrorKind::NotFound => {
                         info!("[warn] 健康检查文件不存在，尝试创建");
 
-                        // 第三步：尝试创建健康检查文件来测试写入权限
                         let health_data = format!(
                             "{{\"timestamp\":\"{}\",\"status\":\"healthy\"}}",
                             chrono::Utc::now().to_rfc3339()
@@ -322,7 +300,6 @@ impl Storage for OssStorage {
             Err(e) => {
                 error!("[fail] OSS基础连接失败: kind={:?}, error={}", e.kind(), e);
 
-                // 最后尝试：检查网络连接
                 match tokio::time::timeout(
                     Duration::from_secs(10),
                     self.test_network_connectivity(),
@@ -347,7 +324,6 @@ impl Storage for OssStorage {
     }
 }
 
-/// OSS配置
 #[derive(Debug, Clone)]
 pub struct OssConfig {
     pub bucket: String,

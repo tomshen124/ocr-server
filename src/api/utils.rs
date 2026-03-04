@@ -1,5 +1,3 @@
-//! API工具函数模块
-//! 包含API处理中使用的共享工具函数
 
 use chrono::Utc;
 use nanoid::nanoid;
@@ -14,21 +12,16 @@ const PREVIEW_ID_RANDOM_ALPHABET: &[char] = &[
 ];
 const PREVIEW_ID_RANDOM_LEN: usize = 8;
 
-/// 生成安全的预审ID
 ///
-/// 格式：{13位毫秒时间戳}{8位大写随机码}
-/// 总长度：21 字符，首位必为数字
 pub fn generate_secure_preview_id() -> String {
     let timestamp = format!("{:013}", Utc::now().timestamp_millis().abs());
     let random = nanoid!(PREVIEW_ID_RANDOM_LEN, PREVIEW_ID_RANDOM_ALPHABET);
     format!("{}{}", timestamp, random)
 }
 
-/// 根据材料名称和状态获取对应的图片路径
 pub fn get_material_image_path(material_name: &str, status: &str) -> String {
     let base_path = "/static/images/";
 
-    // 根据状态优先选择
     match status {
         "approved" | "passed" => {
             if material_name.contains("章程") {
@@ -58,9 +51,7 @@ pub fn get_material_image_path(material_name: &str, status: &str) -> String {
     }
 }
 
-/// 清洗评估结果中的系统内部信息（路径/调试字段），用于 API/页面展示
 pub fn sanitize_evaluation_result(result: &mut PreviewEvaluationResult) {
-    // 总体建议
     result.evaluation_summary.overall_suggestions = result
         .evaluation_summary
         .overall_suggestions

@@ -7,7 +7,6 @@ use std::path::Path;
 
 const CONTRAST_BOOST: f32 = 12.0;
 
-/// 对字节数据进行预处理（旋转、对比度增强等）
 pub fn preprocess_bytes(input: &[u8]) -> Option<Vec<u8>> {
     let format = image::guess_format(input).ok()?;
     let mut image = image::load_from_memory(input).ok()?;
@@ -16,12 +15,10 @@ pub fn preprocess_bytes(input: &[u8]) -> Option<Vec<u8>> {
         image.apply_orientation(orientation);
     }
 
-    // 直接转成 PNG，避免因原格式编码问题产生误报日志
     let enhanced = enhance_contrast(image);
     encode_image(&enhanced, ImageFormat::Png)
 }
 
-/// 直接修改文件（仅在生成的中间图片上使用）
 pub fn preprocess_file_in_place(path: &Path) -> std::io::Result<bool> {
     let bytes = fs::read(path)?;
     let Some(processed) = preprocess_bytes(&bytes) else {

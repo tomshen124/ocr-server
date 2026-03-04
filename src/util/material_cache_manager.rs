@@ -19,11 +19,9 @@ const CACHE_UPLOAD_INTERVAL_SECS: u64 = 30;
 const CACHE_UPLOAD_BATCH: u32 = 5;
 const CACHE_CLEANUP_INTERVAL_SECS: u64 = 600;
 const CACHE_CLEANUP_MIN_AGE_HOURS: i64 = 24;
-// 每天 0 点附近执行一次兜底清理（仅清理达到保留期的已上传/失败记录）
-const CACHE_CLEANUP_CRON_HOUR_UTC: u32 = 16; // 0 点北京时间 = 16 UTC
+const CACHE_CLEANUP_CRON_HOUR_UTC: u32 = 16;
 const CACHE_CLEANUP_CRON_MINUTE: u32 = 0;
 
-/// 启动材料缓存后台管理任务（仅 Master）
 pub fn spawn_material_cache_manager(app_state: &AppState) {
     if app_state.config.deployment.role != DeploymentRole::Master {
         return;
@@ -57,7 +55,6 @@ pub fn spawn_material_cache_manager(app_state: &AppState) {
                     warn!(error = %err, "材料缓存定时清理任务失败");
                 }
             } else {
-                // 非指定时间不清理，避免误删
                 debug!("跳过非清理时段的材料缓存清理任务");
             }
         }
@@ -105,7 +102,6 @@ async fn upload_single(
     let data = match tokio::fs::read(path).await {
         Ok(data) => data,
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            // 尝试利用已上传的 OSS 记录修复
             if let Some(key) = record.oss_key.as_deref() {
                 match storage.get(key).await {
                     Ok(Some(bytes)) => {

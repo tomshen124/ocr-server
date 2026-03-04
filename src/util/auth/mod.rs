@@ -1,16 +1,8 @@
-//! 第三方认证模块
 //!
-//! 这个模块提供了完整的第三方系统认证功能，包括：
-//! - 客户端身份验证 (client.rs)
-//! - HTTP中间件处理 (middleware.rs)  
-//! - 频率限制控制 (rate_limit.rs)
-//! - 访问日志和安全审计 (audit.rs)
 //!
-//! 使用示例：
 //! ```rust
 //! use crate::util::auth::third_party_auth_middleware;
 //!
-//! // 在路由中使用中间件
 //! let app = Router::new()
 //!     .route("/api/preview", post(preview_handler))
 //!     .layer(middleware::from_fn(third_party_auth_middleware));
@@ -21,9 +13,8 @@ pub mod client;
 pub mod global_throttle;
 pub mod middleware;
 pub mod rate_limit;
-pub mod simple_call_logging; // NEW 简单的API调用记录 (无认证限制)
+pub mod simple_call_logging;
 
-// 重新导出主要组件，保持向后兼容
 pub use audit::{
     AccessLogger, AccessRecord, SecurityEvent, SecurityEventType, SecuritySeverity, TimeRange,
 };
@@ -46,14 +37,12 @@ use axum::{
 use std::collections::HashMap;
 use tracing::{info, warn};
 
-/// 第三方认证管理器 - 统一入口
 pub struct ThirdPartyAuthManager {
     access_logger: AccessLogger,
     rate_limiter: RateLimiter,
 }
 
 impl ThirdPartyAuthManager {
-    /// 创建新的认证管理器
     pub fn new() -> Self {
         Self {
             access_logger: AccessLogger::new(),
@@ -61,24 +50,20 @@ impl ThirdPartyAuthManager {
         }
     }
 
-    /// 获取全局实例
     pub fn global() -> &'static Self {
         use std::sync::OnceLock;
         static INSTANCE: OnceLock<ThirdPartyAuthManager> = OnceLock::new();
         INSTANCE.get_or_init(|| ThirdPartyAuthManager::new())
     }
 
-    /// 获取访问日志记录器
     pub fn access_logger(&self) -> &AccessLogger {
         &self.access_logger
     }
 
-    /// 获取频率限制器
     pub fn rate_limiter(&self) -> &RateLimiter {
         &self.rate_limiter
     }
 
-    /// 处理认证请求（内部使用）
     pub async fn handle_auth_request(
         &self,
         headers: &HeaderMap,
@@ -86,7 +71,6 @@ impl ThirdPartyAuthManager {
         api_path: &str,
         remote_addr: &str,
     ) -> Result<AuthenticatedClient, StatusCode> {
-        // 检查是否启用第三方访问控制
         if !CONFIG.third_party_access.enabled {
             self.access_logger.log_successful_access(
                 "open_access".to_string(),
@@ -97,7 +81,6 @@ impl ThirdPartyAuthManager {
                 None,
             );
 
-            // 返回默认的开放访问客户端
             return Ok(AuthenticatedClient {
                 client_id: "open_access".to_string(),
                 client_name: "Open Access".to_string(),
@@ -106,7 +89,6 @@ impl ThirdPartyAuthManager {
             });
         }
 
-        // 提取认证信息
         let auth_info =
             ThirdPartyAuthService::extract_auth_info(headers, params).map_err(|error| {
                 self.access_logger.log_failed_access(
@@ -120,7 +102,6 @@ impl ThirdPartyAuthManager {
                 StatusCode::UNAUTHORIZED
             })?;
 
-        // 执行认证
         let auth_result =
             ThirdPartyAuthService::authenticate_client(&auth_info, api_path, remote_addr);
 
@@ -160,7 +141,6 @@ impl ThirdPartyAuthManager {
             }
         };
 
-        // 检查频率限制
         if CONFIG.third_party_access.rate_limiting.enabled {
             if let Err(error) = RateLimiter::check_rate_limit(
                 &authenticated_client.client_id,
@@ -180,7 +160,6 @@ impl ThirdPartyAuthManager {
             }
         }
 
-        // 记录成功访问
         self.access_logger.log_successful_access(
             authenticated_client.client_id.clone(),
             authenticated_client.client_name.clone(),
@@ -193,10 +172,8 @@ impl ThirdPartyAuthManager {
         Ok(authenticated_client)
     }
 
-    /// 生成认证配置示例
     pub fn generate_config_example() -> String {
         r#"
-# 第三方访问配置示例
 third_party_access:
   enabled: true  # 启用第三方访问控制
   
@@ -222,12 +199,11 @@ third_party_access:
         .to_string()
     }
 
-    /// 验证系统配置
     pub fn validate_system_config() -> Result<(), String> {
         let config = &CONFIG.third_party_access;
 
         if !config.enabled {
-            return Ok(()); // 未启用时不需要验证
+            return Ok(());
         }
 
         if config.clients.is_empty() {
@@ -262,9 +238,7 @@ impl Default for ThirdPartyAuthManager {
     }
 }
 
-/// 辅助函数：检查请求是否需要第三方认证
 pub fn requires_third_party_auth(path: &str) -> bool {
-    // 定义需要第三方认证的API路径模式
     let protected_patterns = ["/api/preview", "/api/monitoring", "/api/health"];
 
     protected_patterns
@@ -272,7 +246,6 @@ pub fn requires_third_party_auth(path: &str) -> bool {
         .any(|pattern| path.starts_with(pattern))
 }
 
-/// 辅助函数：从认证客户端获取权限
 pub fn get_client_permissions(request: &Request) -> Vec<String> {
     if let Some(client) = request.extensions().get::<AuthenticatedClient>() {
         client.permissions.clone()
@@ -281,7 +254,6 @@ pub fn get_client_permissions(request: &Request) -> Vec<String> {
     }
 }
 
-/// 辅助函数：检查客户端是否有特定权限
 pub fn has_permission(request: &Request, permission: &str) -> bool {
     if let Some(client) = request.extensions().get::<AuthenticatedClient>() {
         client.permissions.contains(&permission.to_string())
@@ -298,9 +270,7 @@ mod tests {
 
     #[test]
     fn test_config_validation() {
-        // 这里应该用测试配置，但为了简化，我们测试基本逻辑
         let result = ThirdPartyAuthManager::validate_system_config();
-        // 由于依赖全局CONFIG，实际测试可能需要mock
         println!("Config validation result: {:?}", result);
     }
 
@@ -325,7 +295,6 @@ mod tests {
     async fn test_auth_manager_creation() {
         let manager = ThirdPartyAuthManager::new();
 
-        // 验证组件已正确初始化
         let stats = manager
             .access_logger()
             .get_access_statistics(TimeRange::LastHour);

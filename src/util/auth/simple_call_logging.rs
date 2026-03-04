@@ -1,5 +1,3 @@
-//! 简单的API调用记录中间件
-//! 记录所有API调用情况，支持配置化管理
 
 use crate::util::logging::standards::events;
 use crate::CONFIG;
@@ -13,7 +11,6 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex};
 
-/// 简单的调用记录
 #[derive(Debug, Clone, Serialize)]
 pub struct SimpleCallLog {
     pub timestamp: DateTime<Utc>,
@@ -22,10 +19,10 @@ pub struct SimpleCallLog {
     pub endpoint: String,
     pub user_agent: Option<String>,
     pub client_ip: Option<String>,
-    pub access_key: Option<String>,              // 如果有AK标识
-    pub request_id: Option<String>,              // 如果有请求ID
-    pub authorization: Option<String>,           // 如果有Authorization头
-    pub custom_headers: HashMap<String, String>, // 其他自定义头部
+    pub access_key: Option<String>,
+    pub request_id: Option<String>,
+    pub authorization: Option<String>,
+    pub custom_headers: HashMap<String, String>,
     pub response_status: u16,
     pub response_time_ms: u64,
     pub request_size: usize,
@@ -33,7 +30,6 @@ pub struct SimpleCallLog {
     pub success: bool,
 }
 
-/// 每日统计数据
 #[derive(Debug, Serialize)]
 pub struct DailyStats {
     pub date: NaiveDate,
@@ -43,17 +39,13 @@ pub struct DailyStats {
     pub success_rate: f64,
     pub avg_response_time_ms: f64,
     pub unique_clients: u32,
-    pub endpoints: HashMap<String, u32>, // 各个接口的调用次数
+    pub endpoints: HashMap<String, u32>,
 }
 
-/// 调用记录管理器
 #[derive(Debug)]
 pub struct CallLogManager {
-    /// 调用历史记录 (内存中保留最近1000条)
     call_history: Vec<SimpleCallLog>,
-    /// 每日统计: date -> stats
     daily_stats: HashMap<NaiveDate, DailyStats>,
-    /// 当前日期
     current_date: NaiveDate,
 }
 
@@ -69,11 +61,9 @@ impl CallLogManager {
         }
     }
 
-    /// 记录API调用
     pub fn log_call(&mut self, call_log: SimpleCallLog) {
         let date = call_log.date;
 
-        // 检查是否需要新建日统计
         if date != self.current_date || !self.daily_stats.contains_key(&date) {
             if date != self.current_date {
                 self.current_date = date;
@@ -94,7 +84,6 @@ impl CallLogManager {
             );
         }
 
-        // 更新日统计
         if let Some(stats) = self.daily_stats.get_mut(&date) {
             stats.total_calls += 1;
 
@@ -104,30 +93,25 @@ impl CallLogManager {
                 stats.error_calls += 1;
             }
 
-            // 更新成功率
             stats.success_rate = if stats.total_calls > 0 {
                 (stats.success_calls as f64 / stats.total_calls as f64) * 100.0
             } else {
                 0.0
             };
 
-            // 更新平均响应时间
             stats.avg_response_time_ms = (stats.avg_response_time_ms
                 * (stats.total_calls - 1) as f64
                 + call_log.response_time_ms as f64)
                 / stats.total_calls as f64;
 
-            // 更新接口调用统计
             *stats
                 .endpoints
                 .entry(call_log.endpoint.clone())
                 .or_insert(0) += 1;
         }
 
-        // 添加到历史记录
         self.call_history.push(call_log.clone());
 
-        // 保持历史记录在配置的范围内
         let max_retention = CONFIG
             .api_call_tracking
             .as_ref()
@@ -149,17 +133,14 @@ impl CallLogManager {
         );
     }
 
-    /// 获取今日统计
     pub fn get_today_stats(&self) -> Option<&DailyStats> {
         self.daily_stats.get(&self.current_date)
     }
 
-    /// 获取所有统计
     pub fn get_all_stats(&self) -> serde_json::Value {
         let total_calls: u32 = self.daily_stats.values().map(|s| s.total_calls).sum();
         let recent_calls = self.call_history.len();
 
-        // 分析最近调用的特征
         let mut access_keys = HashMap::new();
         let mut user_agents = HashMap::new();
         let mut client_ips = HashMap::new();
@@ -193,7 +174,6 @@ impl CallLogManager {
         })
     }
 
-    /// 获取最近调用记录
     pub fn get_recent_calls(&self, limit: usize) -> &[SimpleCallLog] {
         let start = if self.call_history.len() > limit {
             self.call_history.len() - limit
@@ -204,11 +184,9 @@ impl CallLogManager {
     }
 }
 
-/// 全局调用记录管理器
 static CALL_LOG_MANAGER: LazyLock<Arc<Mutex<CallLogManager>>> =
     LazyLock::new(|| Arc::new(Mutex::new(CallLogManager::new())));
 
-/// 从请求头提取所有可能的标识信息
 fn extract_all_identifiers(
     headers: &HeaderMap,
 ) -> (
@@ -219,7 +197,6 @@ fn extract_all_identifiers(
 ) {
     let mut custom_headers = HashMap::new();
 
-    // 提取常见的标识头部
     let access_key = headers
         .get("x-api-access-key")
         .or_else(|| headers.get("x-api-key"))
@@ -239,7 +216,6 @@ fn extract_all_identifiers(
         .and_then(|h| h.to_str().ok())
         .map(String::from);
 
-    // 收集所有自定义头部 (X- 开头的)
     for (name, value) in headers.iter() {
         let name_str = name.as_str();
         if name_str.starts_with("x-") && name_str != "x-forwarded-for" {
@@ -252,7 +228,6 @@ fn extract_all_identifiers(
     (access_key, request_id, authorization, custom_headers)
 }
 
-/// 根据配置记录一次 API 调用
 pub fn record_api_call(
     method: &str,
     path: &str,
@@ -262,7 +237,6 @@ pub fn record_api_call(
     request_size: usize,
     response_size: usize,
 ) {
-    // 检查是否启用调用记录
     let tracking_enabled = CONFIG
         .api_call_tracking
         .as_ref()
@@ -273,7 +247,6 @@ pub fn record_api_call(
         return;
     }
 
-    // 检查是否需要记录此路径
     let should_track = CONFIG
         .api_call_tracking
         .as_ref()
@@ -288,10 +261,8 @@ pub fn record_api_call(
         return;
     }
 
-    // 提取所有可能的标识信息
     let (access_key, request_id, authorization, custom_headers) = extract_all_identifiers(&headers);
 
-    // 获取用户代理和IP
     let user_agent = headers
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
@@ -304,7 +275,6 @@ pub fn record_api_call(
         .and_then(|s| s.split(',').next())
         .map(|s| s.trim().to_string());
 
-    // 创建调用记录
     let call_log = SimpleCallLog {
         timestamp: Utc::now(),
         date: Utc::now().date_naive(),
@@ -323,12 +293,10 @@ pub fn record_api_call(
         success: response_status < 400,
     };
 
-    // 记录调用
     let mut manager = CALL_LOG_MANAGER.lock().unwrap();
     manager.log_call(call_log);
 }
 
-/// 简单的API调用记录中间件 - 根据配置决定是否记录
 pub async fn simple_call_logging_middleware(request: Request, next: Next) -> Response {
     let method = request.method().to_string();
     let path = request.uri().path().to_string();
@@ -363,13 +331,11 @@ pub async fn simple_call_logging_middleware(request: Request, next: Next) -> Res
     response
 }
 
-/// 获取调用统计API
 pub async fn get_api_call_stats() -> axum::Json<serde_json::Value> {
     let manager = CALL_LOG_MANAGER.lock().unwrap();
     axum::Json(manager.get_all_stats())
 }
 
-/// 获取最近调用记录API
 pub async fn get_recent_api_calls(
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
 ) -> axum::Json<serde_json::Value> {

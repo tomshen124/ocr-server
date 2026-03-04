@@ -1,4 +1,3 @@
-// 数据库抽象层模块
 
 #[cfg(feature = "dm_go")]
 pub mod dm;

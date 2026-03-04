@@ -1,6 +1,5 @@
 use regex::Regex;
 
-/// 结构化抽取结果
 #[derive(Debug, Clone, Default)]
 pub struct ExtractedData {
     pub id_card: Option<IdCardFields>,
@@ -40,7 +39,6 @@ pub struct ContractFields {
     pub sign_date: Option<String>,
 }
 
-/// 入口：对 OCR 文本做轻量抽取
 pub fn extract_all(text: &str) -> ExtractedData {
     ExtractedData {
         id_card: extract_id_card(text),
@@ -129,7 +127,6 @@ fn extract_biz_license(text: &str) -> Option<BizLicenseFields> {
 }
 
 fn extract_contract(text: &str) -> Option<ContractFields> {
-    // 甲乙方/出租承租
     let party_re =
         Regex::new(r"(甲方|出租人|委托人)[:：]?\s*([\p{Han}A-Za-z·]+)").expect("party regex");
     let party_b_re =
@@ -154,7 +151,6 @@ fn extract_contract(text: &str) -> Option<ContractFields> {
     fields.party_b = party_b_re
         .captures(text)
         .and_then(|c| c.get(2).map(|m| m.as_str().trim().to_string()));
-    // 尝试提取首个身份证号作为甲方，再提取第二个作为乙方（粗略）
     let mut ids = id_re
         .captures_iter(text)
         .filter_map(|c| c.get(2))

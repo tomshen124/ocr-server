@@ -1,5 +1,3 @@
-// OCR监控模块
-// 集成独立开发的OCR监控工具功能
 
 #[cfg(feature = "monitoring")]
 pub mod service;
@@ -28,7 +26,6 @@ pub use health::HealthChecker;
 #[cfg(feature = "monitoring")]
 pub use api::monitoring_routes;
 
-// 当监控功能未启用时的空实现
 #[cfg(not(feature = "monitoring"))]
 pub struct MonitorService;
 

@@ -1,5 +1,3 @@
-//! Span上下文管理
-//! 提供分布式追踪的上下文传播和管理
 
 use crate::util::tracing::GlobalTraceId;
 use serde::{Deserialize, Serialize};
@@ -7,50 +5,35 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-/// 追踪ID类型别名
 pub type TraceId = String;
 
-/// Span ID类型别名  
 pub type SpanId = String;
 
-/// Span上下文
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SpanContext {
-    /// 追踪ID - 整个请求链路的唯一标识
     pub trace_id: TraceId,
 
-    /// Span ID - 当前操作的唯一标识
     pub span_id: SpanId,
 
-    /// 父Span ID - 上级操作的标识
     pub parent_span_id: Option<SpanId>,
 
-    /// 追踪标志
     pub trace_flags: TraceFlags,
 
-    /// 追踪状态
     pub trace_state: TraceState,
 
-    /// 采样决策
     pub sampled: bool,
 
-    /// 创建时间戳
     pub created_at: u64,
 
-    /// baggage - 跨服务传播的键值对
     pub baggage: HashMap<String, String>,
 }
 
-/// 追踪标志
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TraceFlags {
-    /// 是否被采样
     pub sampled: bool,
 
-    /// 是否为调试模式
     pub debug: bool,
 
-    /// 是否为远程调用
     pub remote: bool,
 }
 
@@ -64,10 +47,8 @@ impl Default for TraceFlags {
     }
 }
 
-/// 追踪状态 - 存储厂商特定的追踪信息
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TraceState {
-    /// 状态条目
     pub entries: HashMap<String, String>,
 }
 
@@ -80,22 +61,18 @@ impl Default for TraceState {
 }
 
 impl TraceState {
-    /// 添加状态条目
     pub fn add(&mut self, key: String, value: String) {
         self.entries.insert(key, value);
     }
 
-    /// 获取状态条目
     pub fn get(&self, key: &str) -> Option<&String> {
         self.entries.get(key)
     }
 
-    /// 移除状态条目
     pub fn remove(&mut self, key: &str) -> Option<String> {
         self.entries.remove(key)
     }
 
-    /// 转换为W3C TraceState头格式
     pub fn to_w3c_header(&self) -> String {
         self.entries
             .iter()
@@ -104,7 +81,6 @@ impl TraceState {
             .join(",")
     }
 
-    /// 从W3C TraceState头格式解析
     pub fn from_w3c_header(header: &str) -> Self {
         let mut entries = HashMap::new();
 
@@ -119,7 +95,6 @@ impl TraceState {
 }
 
 impl SpanContext {
-    /// 创建新的根Span上下文
     pub fn new_root() -> Self {
         let trace_id = generate_trace_id();
         let span_id = generate_span_id();
@@ -136,7 +111,6 @@ impl SpanContext {
         }
     }
 
-    /// 创建子Span上下文
     pub fn create_child(&self) -> Self {
         Self {
             trace_id: self.trace_id.clone(),
@@ -150,7 +124,6 @@ impl SpanContext {
         }
     }
 
-    /// 从追踪ID创建上下文
     pub fn from_trace_id(trace_id: TraceId, parent_span_id: Option<SpanId>) -> Self {
         Self {
             trace_id,
@@ -164,49 +137,39 @@ impl SpanContext {
         }
     }
 
-    /// 是否为根Span
     pub fn is_root(&self) -> bool {
         self.parent_span_id.is_none()
     }
 
-    /// 是否有效
     pub fn is_valid(&self) -> bool {
         !self.trace_id.is_empty() && !self.span_id.is_empty()
     }
 
-    /// 是否被采样
     pub fn is_sampled(&self) -> bool {
         self.sampled && self.trace_flags.sampled
     }
 
-    /// 是否为远程上下文
     pub fn is_remote(&self) -> bool {
         self.trace_flags.remote
     }
 
-    /// 设置baggage
     pub fn set_baggage(&mut self, key: String, value: String) {
         self.baggage.insert(key, value);
     }
 
-    /// 获取baggage
     pub fn get_baggage(&self, key: &str) -> Option<&String> {
         self.baggage.get(key)
     }
 
-    /// 移除baggage
     pub fn remove_baggage(&mut self, key: &str) -> Option<String> {
         self.baggage.remove(key)
     }
 
-    /// 转换为W3C Traceparent头格式
-    /// 格式: version-trace_id-span_id-flags
     pub fn to_w3c_traceparent(&self) -> String {
         let flags = if self.is_sampled() { "01" } else { "00" };
         format!("00-{}-{}-{}", self.trace_id, self.span_id, flags)
     }
 
-    /// 从W3C Traceparent头格式解析
     pub fn from_w3c_traceparent(traceparent: &str) -> Option<Self> {
         let parts: Vec<&str> = traceparent.trim().split('-').collect();
         if parts.len() != 4 {
@@ -218,19 +181,17 @@ impl SpanContext {
         let span_id = parts[2];
         let flags = parts[3];
 
-        // 目前只支持版本00
         if version != "00" {
             return None;
         }
 
-        // 解析标志
         let flags_int = u8::from_str_radix(flags, 16).ok()?;
         let sampled = (flags_int & 0x01) != 0;
 
         Some(Self {
             trace_id: trace_id.to_string(),
-            span_id: generate_span_id(),               // 生成新的span ID
-            parent_span_id: Some(span_id.to_string()), // 原来的span ID成为父ID
+            span_id: generate_span_id(),
+            parent_span_id: Some(span_id.to_string()),
             trace_flags: TraceFlags {
                 sampled,
                 debug: (flags_int & 0x02) != 0,
@@ -243,7 +204,6 @@ impl SpanContext {
         })
     }
 
-    /// 创建用于传播的头部映射
     pub fn to_headers(&self) -> HashMap<String, String> {
         let mut headers = HashMap::new();
 
@@ -253,7 +213,6 @@ impl SpanContext {
             headers.insert("tracestate".to_string(), self.trace_state.to_w3c_header());
         }
 
-        // 添加自定义头部
         headers.insert("x-trace-id".to_string(), self.trace_id.clone());
         headers.insert("x-span-id".to_string(), self.span_id.clone());
 
@@ -261,7 +220,6 @@ impl SpanContext {
             headers.insert("x-parent-span-id".to_string(), parent_id.clone());
         }
 
-        // 添加baggage
         if !self.baggage.is_empty() {
             let baggage_str = self
                 .baggage
@@ -275,18 +233,14 @@ impl SpanContext {
         headers
     }
 
-    /// 从头部映射创建上下文
     pub fn from_headers(headers: &HashMap<String, String>) -> Option<Self> {
-        // 尝试从W3C traceparent头解析
         if let Some(traceparent) = headers.get("traceparent") {
             let mut context = Self::from_w3c_traceparent(traceparent)?;
 
-            // 解析tracestate
             if let Some(tracestate) = headers.get("tracestate") {
                 context.trace_state = TraceState::from_w3c_header(tracestate);
             }
 
-            // 解析baggage
             if let Some(baggage) = headers.get("baggage") {
                 for entry in baggage.split(',') {
                     if let Some((key, value)) = entry.trim().split_once('=') {
@@ -298,17 +252,13 @@ impl SpanContext {
             return Some(context);
         }
 
-        // 尝试从自定义头部解析
         let trace_id = headers.get("x-trace-id")?.clone();
         let parent_span_id = headers.get("x-parent-span-id").cloned();
 
         Some(Self::from_trace_id(trace_id, parent_span_id))
     }
 
-    /// 获取追踪的层级深度
     pub fn depth(&self) -> usize {
-        // 这里可以根据实际需求实现深度计算
-        // 比如从trace_id或baggage中获取深度信息
         if self.is_root() {
             0
         } else {
@@ -316,7 +266,6 @@ impl SpanContext {
         }
     }
 
-    /// 克隆用于传播
     pub fn clone_for_propagation(&self) -> Self {
         let mut cloned = self.clone();
         cloned.trace_flags.remote = true;
@@ -324,22 +273,17 @@ impl SpanContext {
     }
 }
 
-/// 生成追踪ID
 fn generate_trace_id() -> String {
-    // W3C trace ID是32个十六进制字符（16字节）
     let uuid1 = Uuid::new_v4();
     let uuid2 = Uuid::new_v4();
     format!("{:x}{:x}", uuid1.as_u128(), uuid2.as_u128())[0..32].to_string()
 }
 
-/// 生成Span ID
 fn generate_span_id() -> String {
-    // W3C span ID是16个十六进制字符（8字节）
     let uuid = Uuid::new_v4();
     format!("{:x}", uuid.as_u128())[0..16].to_string()
 }
 
-/// 获取当前时间戳（毫秒）
 fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -347,46 +291,37 @@ fn current_timestamp() -> u64 {
         .as_millis() as u64
 }
 
-/// 全局上下文管理器
 pub struct SpanContextManager {
-    /// 当前活跃的上下文栈
     context_stack: Vec<SpanContext>,
 }
 
 impl SpanContextManager {
-    /// 创建新的上下文管理器
     pub fn new() -> Self {
         Self {
             context_stack: Vec::new(),
         }
     }
 
-    /// 推入新的上下文
     pub fn push(&mut self, context: SpanContext) {
         self.context_stack.push(context);
     }
 
-    /// 弹出当前上下文
     pub fn pop(&mut self) -> Option<SpanContext> {
         self.context_stack.pop()
     }
 
-    /// 获取当前上下文
     pub fn current(&self) -> Option<&SpanContext> {
         self.context_stack.last()
     }
 
-    /// 获取当前上下文的可变引用
     pub fn current_mut(&mut self) -> Option<&mut SpanContext> {
         self.context_stack.last_mut()
     }
 
-    /// 获取上下文栈深度
     pub fn depth(&self) -> usize {
         self.context_stack.len()
     }
 
-    /// 清空上下文栈
     pub fn clear(&mut self) {
         self.context_stack.clear();
     }

@@ -1,49 +1,36 @@
-//! 频率限制模块
-//! 实现API调用频率限制和配额管理
 
 use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use tracing::{debug, info, warn};
 
-/// 安全地获取Mutex锁，处理poison错误
-/// 如果Mutex被污染（因为panic），会恢复并继续使用
 fn lock_mutex_safe<T>(mutex: &Mutex<T>) -> Result<MutexGuard<T>, String> {
     match mutex.lock() {
         Ok(guard) => Ok(guard),
         Err(poison_error) => {
-            // Mutex被污染，但我们可以恢复数据继续使用
             warn!("[warn] Mutex被污染，正在恢复...");
             Ok(poison_error.into_inner())
         }
     }
 }
 
-/// 频率限制器
 pub struct RateLimiter {
-    /// 客户端访问记录
     client_records: Arc<Mutex<HashMap<String, ClientAccessRecord>>>,
 }
 
-/// 客户端访问记录
 #[derive(Debug, Clone)]
 struct ClientAccessRecord {
-    /// 每分钟请求计数
     minute_requests: Vec<RequestRecord>,
-    /// 每小时请求计数
     hour_requests: Vec<RequestRecord>,
-    /// 最后清理时间
     last_cleanup: DateTime<Utc>,
 }
 
-/// 请求记录
 #[derive(Debug, Clone)]
 struct RequestRecord {
     timestamp: DateTime<Utc>,
     api_path: String,
 }
 
-/// 限流结果
 #[derive(Debug)]
 pub enum RateLimitResult {
     Allowed,
@@ -56,23 +43,19 @@ pub enum RateLimitResult {
 }
 
 impl RateLimiter {
-    /// 创建新的频率限制器
     pub fn new() -> Self {
         Self {
             client_records: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// 检查客户端频率限制
     pub async fn check_rate_limit(client_id: &str, hourly_limit: u32) -> Result<(), String> {
-        // 这里使用简化的实现，实际项目中应该使用Redis或更高级的限流算法
         let instance = Self::get_global_instance();
         instance
             .check_client_rate_limit(client_id, hourly_limit)
             .await
     }
 
-    /// 检查具体客户端的频率限制
     async fn check_client_rate_limit(
         &self,
         client_id: &str,
@@ -81,7 +64,6 @@ impl RateLimiter {
         let mut records = self.client_records.lock().unwrap();
         let now = Utc::now();
 
-        // 获取或创建客户端记录
         let client_record =
             records
                 .entry(client_id.to_string())
@@ -91,10 +73,8 @@ impl RateLimiter {
                     last_cleanup: now,
                 });
 
-        // 清理过期记录
         self.cleanup_expired_records(client_record, now);
 
-        // 检查小时限制
         if client_record.hour_requests.len() >= hourly_limit as usize {
             return Err(format!(
                 "超出小时限制: {}/{} 请求",
@@ -103,10 +83,9 @@ impl RateLimiter {
             ));
         }
 
-        // 添加当前请求记录
         let request_record = RequestRecord {
             timestamp: now,
-            api_path: "api_request".to_string(), // 可以从上下文获取具体API路径
+            api_path: "api_request".to_string(),
         };
 
         client_record.hour_requests.push(request_record.clone());
@@ -122,17 +101,14 @@ impl RateLimiter {
         Ok(())
     }
 
-    /// 清理过期的请求记录
     fn cleanup_expired_records(&self, record: &mut ClientAccessRecord, now: DateTime<Utc>) {
         let one_hour_ago = now - Duration::hours(1);
         let one_minute_ago = now - Duration::minutes(1);
 
-        // 清理超过1小时的记录
         record
             .hour_requests
             .retain(|req| req.timestamp > one_hour_ago);
 
-        // 清理超过1分钟的记录
         record
             .minute_requests
             .retain(|req| req.timestamp > one_minute_ago);
@@ -140,14 +116,12 @@ impl RateLimiter {
         record.last_cleanup = now;
     }
 
-    /// 获取全局实例（简化实现）
     fn get_global_instance() -> &'static Self {
         use std::sync::OnceLock;
         static INSTANCE: OnceLock<RateLimiter> = OnceLock::new();
         INSTANCE.get_or_init(|| RateLimiter::new())
     }
 
-    /// 获取客户端当前使用统计
     pub async fn get_client_stats(&self, client_id: &str) -> ClientUsageStats {
         let records = self.client_records.lock().unwrap();
         let now = Utc::now();
@@ -165,7 +139,6 @@ impl RateLimiter {
         }
     }
 
-    /// 统计今天的请求数量
     fn count_requests_today(&self, record: &ClientAccessRecord, now: DateTime<Utc>) -> u32 {
         let today_start = now
             .date_naive()
@@ -180,7 +153,6 @@ impl RateLimiter {
             .count() as u32
     }
 
-    /// 重置客户端限制
     pub async fn reset_client_limit(&self, client_id: &str) {
         let mut records = self.client_records.lock().unwrap();
         if let Some(record) = records.get_mut(client_id) {
@@ -192,7 +164,6 @@ impl RateLimiter {
         }
     }
 
-    /// 获取所有客户端统计
     pub async fn get_all_client_stats(&self) -> Vec<ClientUsageStats> {
         let records = self.client_records.lock().unwrap();
         let mut stats = Vec::new();
@@ -205,7 +176,6 @@ impl RateLimiter {
     }
 }
 
-/// 客户端使用统计
 #[derive(Debug, Clone)]
 pub struct ClientUsageStats {
     pub client_id: String,
@@ -227,14 +197,12 @@ impl ClientUsageStats {
     }
 }
 
-/// 高级频率限制器（基于滑动窗口）
 pub struct SlidingWindowRateLimiter {
     window_size: Duration,
     max_requests: u32,
     client_windows: Arc<Mutex<HashMap<String, SlidingWindow>>>,
 }
 
-/// 滑动窗口
 #[derive(Debug)]
 struct SlidingWindow {
     requests: Vec<DateTime<Utc>>,
@@ -242,7 +210,6 @@ struct SlidingWindow {
 }
 
 impl SlidingWindowRateLimiter {
-    /// 创建滑动窗口限流器
     pub fn new(window_size: Duration, max_requests: u32) -> Self {
         Self {
             window_size,
@@ -251,7 +218,6 @@ impl SlidingWindowRateLimiter {
         }
     }
 
-    /// 检查滑动窗口限制
     pub fn check_limit(&self, client_id: &str) -> RateLimitResult {
         let mut windows = self.client_windows.lock().unwrap();
         let now = Utc::now();
@@ -264,13 +230,11 @@ impl SlidingWindowRateLimiter {
                 last_cleanup: now,
             });
 
-        // 清理窗口外的请求
         window
             .requests
             .retain(|&timestamp| timestamp > window_start);
         window.last_cleanup = now;
 
-        // 检查是否超过限制
         if window.requests.len() >= self.max_requests as usize {
             let oldest_request = window.requests.first().cloned().unwrap_or(now);
             let reset_time = oldest_request + self.window_size;
@@ -283,21 +247,18 @@ impl SlidingWindowRateLimiter {
             };
         }
 
-        // 添加当前请求
         window.requests.push(now);
 
         RateLimitResult::Allowed
     }
 }
 
-/// 令牌桶限流器
 pub struct TokenBucketRateLimiter {
     capacity: u32,
     refill_rate: u32, // tokens per second
     client_buckets: Arc<Mutex<HashMap<String, TokenBucket>>>,
 }
 
-/// 令牌桶
 #[derive(Debug)]
 struct TokenBucket {
     tokens: f64,
@@ -305,7 +266,6 @@ struct TokenBucket {
 }
 
 impl TokenBucketRateLimiter {
-    /// 创建令牌桶限流器
     pub fn new(capacity: u32, refill_rate: u32) -> Self {
         Self {
             capacity,
@@ -314,7 +274,6 @@ impl TokenBucketRateLimiter {
         }
     }
 
-    /// 尝试消费令牌
     pub fn try_consume(&self, client_id: &str, tokens: u32) -> RateLimitResult {
         let mut buckets = self.client_buckets.lock().unwrap();
         let now = Utc::now();
@@ -326,13 +285,11 @@ impl TokenBucketRateLimiter {
                 last_refill: now,
             });
 
-        // 补充令牌
         let time_passed = now.signed_duration_since(bucket.last_refill).num_seconds() as f64;
         let tokens_to_add = time_passed * self.refill_rate as f64;
         bucket.tokens = (bucket.tokens + tokens_to_add).min(self.capacity as f64);
         bucket.last_refill = now;
 
-        // 检查是否有足够令牌
         if bucket.tokens >= tokens as f64 {
             bucket.tokens -= tokens as f64;
             RateLimitResult::Allowed
@@ -367,7 +324,6 @@ mod tests {
         let client_id = "test_client";
         let hourly_limit = 10;
 
-        // 应该允许前10个请求
         for i in 0..hourly_limit {
             let result = limiter
                 .check_client_rate_limit(client_id, hourly_limit)
@@ -375,7 +331,6 @@ mod tests {
             assert!(result.is_ok(), "请求 {} 应该被允许", i + 1);
         }
 
-        // 第11个请求应该被拒绝
         let result = limiter
             .check_client_rate_limit(client_id, hourly_limit)
             .await;
@@ -387,7 +342,6 @@ mod tests {
         let limiter = RateLimiter::new();
         let client_id = "stats_test_client";
 
-        // 发送几个请求
         for _ in 0..5 {
             let _ = limiter.check_client_rate_limit(client_id, 100).await;
         }
@@ -403,7 +357,6 @@ mod tests {
 
         let client_id = "sliding_test_client";
 
-        // 应该允许前5个请求
         for i in 0..5 {
             match limiter.check_limit(client_id) {
                 RateLimitResult::Allowed => {}
@@ -411,7 +364,6 @@ mod tests {
             }
         }
 
-        // 第6个请求应该被拒绝
         match limiter.check_limit(client_id) {
             RateLimitResult::Exceeded { .. } => {}
             _ => panic!("第6个请求应该被拒绝"),
@@ -420,16 +372,14 @@ mod tests {
 
     #[test]
     fn test_token_bucket_limiter() {
-        let limiter = TokenBucketRateLimiter::new(10, 1); // 10个令牌容量，每秒补充1个
+        let limiter = TokenBucketRateLimiter::new(10, 1);
         let client_id = "token_test_client";
 
-        // 应该允许消费10个令牌
         match limiter.try_consume(client_id, 10) {
             RateLimitResult::Allowed => {}
             _ => panic!("应该允许消费10个令牌"),
         }
 
-        // 桶已空，应该拒绝额外请求
         match limiter.try_consume(client_id, 1) {
             RateLimitResult::Exceeded { .. } => {}
             _ => panic!("桶已空，应该拒绝额外请求"),

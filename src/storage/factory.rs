@@ -6,7 +6,6 @@ use super::oss::OssConfig as InternalOssConfig;
 use super::oss::OssStorage;
 use super::traits::Storage;
 
-/// 存储类型
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum StorageType {
@@ -14,27 +13,22 @@ pub enum StorageType {
     Oss,
 }
 
-/// 存储配置
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct StorageConfig {
     #[serde(rename = "type")]
     pub storage_type: StorageType,
 
-    /// 本地存储配置
     pub local: Option<LocalConfig>,
 
-    /// OSS存储配置
     pub oss: Option<OssConfig>,
 }
 
-/// 本地存储配置
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LocalConfig {
     pub base_path: String,
     pub base_url: String,
 }
 
-/// OSS存储配置
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OssConfig {
     pub bucket: String,
@@ -45,7 +39,6 @@ pub struct OssConfig {
     pub public_endpoint: Option<String>,
 }
 
-/// 创建存储实例
 pub async fn create_storage(config: &StorageConfig) -> Result<Box<dyn Storage>> {
     match config.storage_type {
         StorageType::Local => {

@@ -10,18 +10,15 @@ use std::sync::LazyLock;
 
 pub static CURRENT_DIR: LazyLock<PathBuf> = LazyLock::new(|| current_dir().unwrap());
 
-// PDF处理安全限制（默认值；推荐由上层配置约束下载与页数）
-const DEFAULT_MAX_PDF_PAGES: u32 = 100;        // 默认最大页数
-const DEFAULT_MAX_PDF_SIZE_MB: usize = 40;     // 默认最大文件大小(MB)
+const DEFAULT_MAX_PDF_PAGES: u32 = 100;
+const DEFAULT_MAX_PDF_SIZE_MB: usize = 40;
 
-/// 带上层限制的PDF渲染
 pub fn pdf_render_jpg_with_limits(
     pdf_name: &str,
     bytes: Vec<u8>,
     max_pages: u32,
     max_size_mb: usize,
 ) -> Result<Vec<PathBuf>, Box<dyn Error>> {
-    // 🚨 文件大小检查
     let file_size_mb = bytes.len() / 1024 / 1024;
     if file_size_mb > max_size_mb {
         return Err(format!(
@@ -33,7 +30,6 @@ pub fn pdf_render_jpg_with_limits(
 
     let pdf = pdf2image::PDF::from_bytes(bytes)?;
 
-    // 🚨 页数检查与限制（大于限制则仅渲染前 max_pages 页）
     let page_count = pdf.page_count();
     let render_pages = if page_count > max_pages {
         eprintln!(
@@ -85,7 +81,6 @@ pub fn pdf_render_jpg_with_limits(
         .collect())
 }
 
-/// 兼容旧接口（使用默认限制）
 pub fn pdf_render_jpg(pdf_name: &str, bytes: Vec<u8>) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     pdf_render_jpg_with_limits(
         pdf_name,
@@ -95,13 +90,11 @@ pub fn pdf_render_jpg(pdf_name: &str, bytes: Vec<u8>) -> Result<Vec<PathBuf>, Bo
     )
 }
 
-/// 获取PDF页数
 pub fn pdf_page_count(bytes: &[u8]) -> Result<u32, Box<dyn Error>> {
     let pdf = pdf2image::PDF::from_bytes(bytes.to_vec())?;
     Ok(pdf.page_count())
 }
 
-/// 按页范围渲染JPG（包含大小限制检查）
 pub fn pdf_render_jpg_range(
     pdf_name: &str,
     bytes: &[u8],
@@ -141,7 +134,6 @@ pub fn pdf_render_jpg_range(
         create_dir_all(&image_dir)?;
     }
 
-    // 安全文件名前缀
     let safe_stem = {
         use std::ffi::OsStr;
         let p = PathBuf::from(pdf_name);

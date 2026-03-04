@@ -25,7 +25,6 @@ fn main() -> io::Result<()> {
 
     set_build_metadata();
 
-    // 监听文件变化
     println!("cargo:rerun-if-changed=static");
     println!("cargo:rerun-if-changed=root");
     println!("cargo:rerun-if-changed=ocr");
@@ -38,7 +37,6 @@ fn main() -> io::Result<()> {
 
     println!("cargo:info=开始构建OCR服务...");
 
-    // 复制OCR引擎文件
     if Path::new("ocr").exists() {
         copy_dir_all("ocr", OUT_DIR.join("ocr"))?;
         println!("cargo:info=已复制OCR引擎文件");
@@ -46,7 +44,6 @@ fn main() -> io::Result<()> {
         println!("cargo:warning=OCR引擎目录不存在，跳过复制");
     }
 
-    // 复制前端静态文件（包含新的监控页面）
     if Path::new("static").exists() {
         copy_dir_all("static", OUT_DIR.join("static"))?;
         println!("cargo:info=已复制前端静态文件（包含监控页面）");
@@ -54,22 +51,17 @@ fn main() -> io::Result<()> {
         println!("cargo:warning=静态文件目录不存在");
     }
 
-    // 复制根目录文件
     if Path::new("root").exists() {
         copy_dir_all("root", OUT_DIR.join("root"))?;
         println!("cargo:info=已复制根目录文件");
     }
 
-    // 复制配置文件
     copy_config_files()?;
 
-    // 复制服务管理脚本
     copy_service_scripts()?;
 
-    // 复制文档文件
     copy_documentation()?;
 
-    // 创建必要的运行时目录
     create_runtime_directories()?;
 
     println!(
@@ -103,15 +95,12 @@ fn set_build_metadata() {
     println!("cargo:rustc-env=APP_BUILD_TIMESTAMP={}", build_timestamp);
 }
 
-// 复制配置文件
 fn copy_config_files() -> io::Result<()> {
-    // 复制主配置文件
     if Path::new("config.yaml").exists() {
         fs::copy("config.yaml", OUT_DIR.join("config.yaml"))?;
         println!("cargo:info=已复制主配置文件");
     }
 
-    // 复制示例配置文件
     if Path::new("config.example.yaml").exists() {
         fs::copy("config.example.yaml", OUT_DIR.join("config.example.yaml"))?;
         println!("cargo:info=已复制示例配置文件");
@@ -120,7 +109,6 @@ fn copy_config_files() -> io::Result<()> {
     Ok(())
 }
 
-// 复制服务管理脚本
 fn copy_service_scripts() -> io::Result<()> {
     let scripts = ["ocr-server.sh", "ocr-monitor.sh", "service-manager.sh"];
 
@@ -134,7 +122,6 @@ fn copy_service_scripts() -> io::Result<()> {
     Ok(())
 }
 
-// 复制文档文件
 fn copy_documentation() -> io::Result<()> {
     let docs = [
         "README.md",
@@ -154,7 +141,6 @@ fn copy_documentation() -> io::Result<()> {
     Ok(())
 }
 
-// 创建运行时目录
 fn create_runtime_directories() -> io::Result<()> {
     let dirs = ["logs", "images", "preview", "cache", "temp"];
 
@@ -183,7 +169,6 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> 
             copy_dir_all(entry.path(), dst.join(entry.file_name()))?;
         } else {
             let to = dst.join(entry.file_name());
-            // 总是复制文件，覆盖已存在的文件
             fs::copy(entry.path(), to)?;
         }
     }

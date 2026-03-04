@@ -1,6 +1,5 @@
 /**
  * CYBERPUNK MONITOR V2 - JavaScript
- * OCR智能预审系统监控中心
  */
 
 (() => {

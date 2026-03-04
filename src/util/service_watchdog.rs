@@ -14,12 +14,10 @@ use tokio::time::interval;
 
 use crate::AppState;
 
-/// 启动 Master 节点服务看门狗
 pub fn spawn_master_watchdog(app_state: &AppState) {
     spawn_watchdog_task("master", app_state.config.service_watchdog.clone());
 }
 
-/// 启动 Worker 节点服务看门狗
 pub fn spawn_worker_watchdog(config: &crate::util::config::Config) {
     spawn_watchdog_task("worker", config.service_watchdog.clone());
 }
@@ -106,7 +104,6 @@ fn spawn_watchdog_task(role: &'static str, cfg: ServiceWatchdogConfig) {
             );
 
             if cfg.auto_restart_on_violation {
-                // 严重突刺：超过阈值 20% 直接触发退出
                 let severe_spike = cpu > cfg.cpu_threshold_percent * 1.2
                     || memory > cfg.memory_threshold_percent * 1.2
                     || disk > cfg.disk_threshold_percent * 1.2;

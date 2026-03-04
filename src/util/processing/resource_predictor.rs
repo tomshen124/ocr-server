@@ -1,5 +1,3 @@
-//! 智能资源预测模块
-//! 根据文件特征预测资源需求，实现精准的资源分配
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -10,10 +8,8 @@ use tracing::{debug, warn};
 use crate::util::logging::standards::events;
 use crate::util::tracing::metrics_collector::METRICS_COLLECTOR;
 
-/// 任务资源预测器
 pub struct TaskResourcePredictor;
 
-/// 任务资源需求档案
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskResourceProfile {
     pub file_size_mb: f64,
@@ -26,7 +22,6 @@ pub struct TaskResourceProfile {
     pub execution_recommendation: ExecutionRecommendation,
 }
 
-/// 单个阶段资源需求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StageResourceNeed {
     pub stage: ProcessingStage,
@@ -34,10 +29,9 @@ pub struct StageResourceNeed {
     pub duration_seconds: u32,
     pub cpu_intensive: bool,
     pub io_intensive: bool,
-    pub concurrency_recommendation: u32, // 建议并发数
+    pub concurrency_recommendation: u32,
 }
 
-/// 处理阶段枚举
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ProcessingStage {
     Download,
@@ -46,26 +40,23 @@ pub enum ProcessingStage {
     Storage,
 }
 
-/// 风险级别
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RiskLevel {
-    Low,      // < 2GB 峰值内存
-    Medium,   // 2-4GB 峰值内存
-    High,     // 4-6GB 峰值内存
-    Critical, // > 6GB 峰值内存
+    Low,
+    Medium,
+    High,
+    Critical,
 }
 
-/// 执行建议
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExecutionRecommendation {
-    Execute,            // 安全执行
-    ExecuteWithCaution, // 谨慎执行，需要监控
-    Defer,              // 延迟执行，等待资源释放
-    Split,              // 建议分割处理
-    Reject,             // 拒绝执行，文件过大
+    Execute,
+    ExecuteWithCaution,
+    Defer,
+    Split,
+    Reject,
 }
 
-/// 系统执行能力评估
 #[derive(Debug, Serialize)]
 pub struct TaskExecutability {
     pub can_execute: bool,
@@ -79,7 +70,6 @@ pub struct TaskExecutability {
 }
 
 impl TaskResourcePredictor {
-    /// 预测任务资源需求
     pub fn predict_task_resources(file_size_bytes: usize, file_type: &str) -> TaskResourceProfile {
         let file_size_mb = file_size_bytes as f64 / (1024.0 * 1024.0);
 
@@ -137,14 +127,10 @@ impl TaskResourcePredictor {
         }
     }
 
-    /// 估算文件页数
     fn estimate_pages(file_size_mb: f64, file_type: &str) -> u32 {
         match file_type.to_uppercase().as_str() {
             "PDF" => {
-                // PDF页数估算模型：基于文件大小和内容复杂度
-                // 简单PDF: ~50KB/页, 复杂PDF: ~200KB/页, 平均100KB/页
                 let estimated_pages = (file_size_mb * 1024.0 / 100.0).ceil() as u32;
-                // 限制在合理范围内
                 estimated_pages.max(1).min(1000)
             }
             "JPG" | "JPEG" | "PNG" | "BMP" | "TIFF" => 1,
@@ -152,7 +138,6 @@ impl TaskResourcePredictor {
         }
     }
 
-    /// 预测各处理阶段资源需求
     fn predict_processing_stages(
         file_size_mb: f64,
         file_type: &str,
@@ -167,16 +152,14 @@ impl TaskResourcePredictor {
 
     fn predict_pdf_stages(file_size_mb: f64, pages: u32) -> Vec<StageResourceNeed> {
         vec![
-            // 下载阶段
             StageResourceNeed {
                 stage: ProcessingStage::Download,
-                memory_mb: (file_size_mb * 1.5) as u32, // 下载缓存
+                memory_mb: (file_size_mb * 1.5) as u32,
                 duration_seconds: Self::estimate_download_time(file_size_mb),
                 cpu_intensive: false,
                 io_intensive: true,
                 concurrency_recommendation: 20,
             },
-            // PDF转换阶段 - 最关键的瓶颈
             StageResourceNeed {
                 stage: ProcessingStage::PdfConvert,
                 memory_mb: Self::estimate_pdf_convert_memory(pages),
@@ -185,7 +168,6 @@ impl TaskResourcePredictor {
                 io_intensive: false,
                 concurrency_recommendation: Self::recommend_pdf_convert_concurrency(pages),
             },
-            // OCR处理阶段
             StageResourceNeed {
                 stage: ProcessingStage::OcrProcess,
                 memory_mb: Self::estimate_ocr_memory(pages),
@@ -194,7 +176,6 @@ impl TaskResourcePredictor {
                 io_intensive: false,
                 concurrency_recommendation: 8,
             },
-            // 存储阶段
             StageResourceNeed {
                 stage: ProcessingStage::Storage,
                 memory_mb: 100,
@@ -218,7 +199,7 @@ impl TaskResourcePredictor {
             },
             StageResourceNeed {
                 stage: ProcessingStage::OcrProcess,
-                memory_mb: 600, // 图片OCR相对固定
+                memory_mb: 600,
                 duration_seconds: 20,
                 cpu_intensive: true,
                 io_intensive: false,
@@ -236,11 +217,10 @@ impl TaskResourcePredictor {
     }
 
     fn predict_unknown_file_stages(file_size_mb: f64) -> Vec<StageResourceNeed> {
-        // 保守估算
         vec![
             StageResourceNeed {
                 stage: ProcessingStage::Download,
-                memory_mb: (file_size_mb * 2.0) as u32, // 保守的内存估算
+                memory_mb: (file_size_mb * 2.0) as u32,
                 duration_seconds: Self::estimate_download_time(file_size_mb) * 2,
                 cpu_intensive: false,
                 io_intensive: true,
@@ -248,7 +228,7 @@ impl TaskResourcePredictor {
             },
             StageResourceNeed {
                 stage: ProcessingStage::OcrProcess,
-                memory_mb: 1000, // 保守估算
+                memory_mb: 1000,
                 duration_seconds: 60,
                 cpu_intensive: true,
                 io_intensive: false,
@@ -257,51 +237,42 @@ impl TaskResourcePredictor {
         ]
     }
 
-    /// PDF转换内存需求估算
     fn estimate_pdf_convert_memory(pages: u32) -> u32 {
-        // 内存需求模型：基础内存 + 每页动态内存
-        let base_memory = 1536; // 1.5GB基础内存
+        let base_memory = 1536;
         let per_page_memory = match pages {
-            0..=10 => 150,  // 小文档：每页150MB
-            11..=50 => 100, // 中等文档：每页100MB
-            51..=100 => 80, // 大文档：每页80MB
-            _ => 60,        // 超大文档：每页60MB
+            0..=10 => 150,
+            11..=50 => 100,
+            51..=100 => 80,
+            _ => 60,
         };
 
         let calculated = base_memory + (pages * per_page_memory);
-        // 限制在8GB以内
         calculated.min(8192)
     }
 
-    /// PDF转换时间估算
     fn estimate_pdf_convert_time(pages: u32) -> u32 {
-        // 时间模型：基础时间 + 每页处理时间
-        let base_time = 10; // 10秒基础时间
+        let base_time = 10;
         let per_page_time = match pages {
-            0..=20 => 5,   // 小文档：每页5秒
-            21..=50 => 4,  // 中等文档：每页4秒
-            51..=100 => 3, // 大文档：每页3秒
-            _ => 2,        // 超大文档：每页2秒（批处理优化）
+            0..=20 => 5,
+            21..=50 => 4,
+            51..=100 => 3,
+            _ => 2,
         };
 
         base_time + (pages * per_page_time)
     }
 
-    /// OCR内存需求估算
     fn estimate_ocr_memory(pages: u32) -> u32 {
-        // OCR内存相对固定，主要取决于并行处理的页数
-        let base_memory = 400; // 400MB基础内存
-        let batch_memory = 200; // 每批额外200MB
-        let batch_size = 3; // 每批处理3页
+        let base_memory = 400;
+        let batch_memory = 200;
+        let batch_size = 3;
         let batches = (pages + batch_size - 1) / batch_size;
 
-        base_memory + (batches.min(8) * batch_memory) // 最多8个批次并行
+        base_memory + (batches.min(8) * batch_memory)
     }
 
-    /// OCR时间估算
     fn estimate_ocr_time(pages: u32) -> u32 {
-        // OCR时间主要取决于页数和并发度
-        let per_page_time = 2; // 每页2秒（并发处理）
+        let per_page_time = 2;
         let batch_size = 3;
         let concurrent_batches = 8;
 
@@ -311,25 +282,21 @@ impl TaskResourcePredictor {
         parallel_time * per_page_time * batch_size
     }
 
-    /// PDF转换并发度推荐
     fn recommend_pdf_convert_concurrency(pages: u32) -> u32 {
         match pages {
-            0..=10 => 3,   // 小文档：3并发
-            11..=30 => 2,  // 中等文档：2并发
-            31..=100 => 1, // 大文档：1并发
-            _ => 1,        // 超大文档：1并发
+            0..=10 => 3,
+            11..=30 => 2,
+            31..=100 => 1,
+            _ => 1,
         }
     }
 
-    /// 下载时间估算
     fn estimate_download_time(file_size_mb: f64) -> u32 {
-        // 假设平均下载速度2MB/s，加上网络延迟
-        let base_time = 5; // 5秒基础时间
+        let base_time = 5;
         let download_time = (file_size_mb / 2.0).ceil() as u32;
         base_time + download_time
     }
 
-    /// 风险级别评估
     fn assess_risk_level(peak_memory_mb: u32, pages: u32, file_type: &str) -> RiskLevel {
         match (peak_memory_mb, pages, file_type) {
             (0..=2047, _, _) => RiskLevel::Low,
@@ -340,7 +307,6 @@ impl TaskResourcePredictor {
         }
     }
 
-    /// 生成执行建议
     fn generate_execution_recommendation(
         peak_memory_mb: u32,
         risk_level: &RiskLevel,
@@ -351,24 +317,23 @@ impl TaskResourcePredictor {
             RiskLevel::Medium => ExecutionRecommendation::Execute,
             RiskLevel::High => {
                 if pages > 200 {
-                    ExecutionRecommendation::Split // 建议分割处理
+                    ExecutionRecommendation::Split
                 } else {
                     ExecutionRecommendation::ExecuteWithCaution
                 }
             }
             RiskLevel::Critical => {
                 if pages > 500 {
-                    ExecutionRecommendation::Reject // 拒绝执行
+                    ExecutionRecommendation::Reject
                 } else if pages > 200 {
-                    ExecutionRecommendation::Split // 强烈建议分割
+                    ExecutionRecommendation::Split
                 } else {
-                    ExecutionRecommendation::Defer // 延迟执行
+                    ExecutionRecommendation::Defer
                 }
             }
         }
     }
 
-    /// 检查系统是否能安全处理该任务
     pub fn can_system_handle_task(profile: &TaskResourceProfile) -> TaskExecutability {
         let mut system = sysinfo::System::new_all();
         system.refresh_memory();
@@ -376,7 +341,6 @@ impl TaskResourcePredictor {
         let available_memory_gb = (system.available_memory() / 1024 / 1024 / 1024) as u32;
         let required_memory_gb = (profile.peak_memory_mb as f64 / 1024.0).ceil() as u32;
 
-        // 预留4GB安全缓冲
         let safety_buffer_gb = 4;
         let can_execute = available_memory_gb > required_memory_gb + safety_buffer_gb;
 
@@ -400,11 +364,10 @@ impl TaskResourcePredictor {
         let estimated_wait_time = if can_execute {
             0
         } else {
-            // 根据当前系统负载估算等待时间
             match available_memory_gb.saturating_sub(required_memory_gb + safety_buffer_gb) {
-                0..=2 => 600, // 10分钟
-                3..=4 => 300, // 5分钟
-                _ => 120,     // 2分钟
+                0..=2 => 600,
+                3..=4 => 300,
+                _ => 120,
             }
         };
 
@@ -424,7 +387,6 @@ impl TaskResourcePredictor {
         }
     }
 
-    /// 识别瓶颈阶段
     fn identify_bottleneck_stage(profile: &TaskResourceProfile) -> Option<ProcessingStage> {
         profile
             .predicted_stages
@@ -433,7 +395,6 @@ impl TaskResourcePredictor {
             .map(|stage| stage.stage.clone())
     }
 
-    /// 生成优化建议
     fn generate_optimization_suggestions(
         profile: &TaskResourceProfile,
         available_memory_gb: u32,
@@ -455,7 +416,6 @@ impl TaskResourcePredictor {
             suggestions.push("建议等待其他任务完成后再处理此文件".to_string());
         }
 
-        // 根据风险级别给出具体建议
         match profile.risk_level {
             RiskLevel::Critical => {
                 suggestions.push("高风险任务：建议启用实时内存监控".to_string());
@@ -470,7 +430,6 @@ impl TaskResourcePredictor {
         suggestions
     }
 
-    /// 获取处理建议摘要
     pub fn get_processing_recommendation(
         profile: &TaskResourceProfile,
     ) -> ProcessingRecommendation {
@@ -489,7 +448,7 @@ impl TaskResourcePredictor {
                     .map(|s| s.memory_mb)
                     .max()
                     .unwrap_or(500),
-                safety_buffer_mb: 2048, // 2GB安全缓冲
+                safety_buffer_mb: 2048,
             },
             time_estimates: TimeEstimates {
                 total_seconds: profile.total_estimated_duration_seconds,
@@ -525,7 +484,6 @@ impl TaskResourcePredictor {
     }
 }
 
-/// 处理建议汇总
 #[derive(Debug, Serialize)]
 pub struct ProcessingRecommendation {
     pub should_process: bool,
@@ -581,14 +539,12 @@ mod tests {
 
     #[test]
     fn test_risk_assessment() {
-        // 测试低风险文档
         let small_pdf = TaskResourcePredictor::predict_task_resources(1024 * 1024, "PDF");
         assert!(matches!(
             small_pdf.risk_level,
             RiskLevel::Low | RiskLevel::Medium
         ));
 
-        // 测试高风险文档
         let large_pdf = TaskResourcePredictor::predict_task_resources(100 * 1024 * 1024, "PDF");
         assert!(matches!(
             large_pdf.risk_level,

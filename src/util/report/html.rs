@@ -1,5 +1,3 @@
-//! HTML报告生成模块
-//! 专门负责将评估数据转换为HTML格式的报告
 
 use crate::model::evaluation::*;
 use build_html::{Html, HtmlContainer, HtmlPage, Table};
@@ -7,37 +5,31 @@ use chrono::{FixedOffset, Utc};
 use regex::Regex;
 use std::sync::OnceLock;
 
-/// HTML报告生成器
 pub struct HtmlReportGenerator;
 
 impl HtmlReportGenerator {
-    /// 生成标准预审报告HTML
     pub fn generate_standard_report(result: &PreviewEvaluationResult) -> String {
         let mut html = HtmlPage::new()
             .with_title("预审报告")
             .with_meta(vec![("charset", "utf-8")])
             .with_style(super::styles::get_report_css());
 
-        // 1. 报告标题 + 基础信息放入同一版块，避免空白封面页
         html.add_raw("<div class=\"section report-header\">");
         html.add_raw("<h1 class=\"report-title\">预审结果报告</h1>");
         html.add_raw("<h2>基础信息</h2>");
         html.add_table(Self::build_basic_info_table(&result.basic_info));
         html.add_raw("</div>");
 
-        // 3. 评估摘要
         html.add_raw("<div class=\"section\">");
         html.add_raw("<h2>评估摘要</h2>");
         html.add_raw(&Self::build_summary_html(&result.evaluation_summary));
         html.add_raw("</div>");
 
-        // 4. 材料详细评估结果
         html.add_raw("<div class=\"section\">");
         html.add_raw("<h2>材料评估详情</h2>");
         html.add_raw(&Self::build_materials_html(&result.material_results));
         html.add_raw("</div>");
 
-        // 5. 报告尾部
         html.add_raw("<div class=\"footer\">");
         let offset = FixedOffset::east_opt(8 * 3600).expect("valid east offset");
         let beijing_time = result.evaluation_time.with_timezone(&offset);
@@ -51,7 +43,6 @@ impl HtmlReportGenerator {
         html.to_html_string()
     }
 
-    /// 生成简化版HTML（用于快速预览）
     pub fn generate_simple_preview(
         matter_name: &str,
         request_id: &str,
@@ -79,7 +70,6 @@ impl HtmlReportGenerator {
         html.to_html_string()
     }
 
-    /// 生成错误报告HTML
     pub fn generate_error_report(request_id: &str, message: &str) -> String {
         let mut html = HtmlPage::new()
             .with_title("预审报告 - 异常")
@@ -123,7 +113,6 @@ impl HtmlReportGenerator {
         html.to_html_string()
     }
 
-    /// 生成材料对比HTML（用于材料差异分析）
     pub fn generate_material_comparison(
         original_materials: &[MaterialEvaluationResult],
         updated_materials: &[MaterialEvaluationResult],
@@ -150,7 +139,6 @@ impl HtmlReportGenerator {
         html.to_html_string()
     }
 
-    /// 构建基础信息表格
     fn build_basic_info_table(basic_info: &BasicInfo) -> Table {
         let display = |value: &Option<String>| {
             value
@@ -207,7 +195,6 @@ impl HtmlReportGenerator {
         ])
     }
 
-    /// 构建评估摘要HTML
     fn build_summary_html(summary: &EvaluationSummary) -> String {
         let result_class = match summary.overall_result {
             OverallResult::Passed => "result-success",
@@ -259,7 +246,6 @@ impl HtmlReportGenerator {
         )
     }
 
-    /// 构建材料评估结果HTML
     fn build_materials_html(materials: &[MaterialEvaluationResult]) -> String {
         let mut html = String::new();
 

@@ -113,10 +113,8 @@ fn run_libreoffice_convert(temp_dir: &TempDir, input_path: &Path) -> Result<()> 
 }
 
 fn read_converted_pdf(temp_dir: &TempDir) -> Result<Vec<u8>> {
-    // LibreOffice 会在输出目录放置与输入同名的 PDF
     let mut pdf_path = temp_dir.path().join("input.pdf");
     if !pdf_path.exists() {
-        // 兼容不同版本可能输出大写或其它命名
         let mut candidate: Option<PathBuf> = None;
         for entry in fs::read_dir(temp_dir.path())? {
             let path = entry?.path();

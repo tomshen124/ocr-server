@@ -6,7 +6,6 @@ use crate::db::traits::{Database, MatterRuleConfigRecord};
 
 use super::model::{MatterRuleConfig, MatterRuleDefinition};
 
-/// 事项规则仓储 - 负责从数据库加载配置
 pub struct RuleRepository {
     db: Arc<dyn Database>,
 }

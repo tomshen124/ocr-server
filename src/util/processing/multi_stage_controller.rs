@@ -1,5 +1,3 @@
-//! 多阶段并发控制器
-//! 替代原有单一信号量机制，实现精细化资源管理
 
 use once_cell::sync::Lazy;
 use parking_lot::Mutex as ParkingMutex;
@@ -15,18 +13,14 @@ use tracing::{debug, error, info, warn};
 use crate::util::logging::standards::events;
 use crate::util::tracing::metrics_collector::METRICS_COLLECTOR;
 
-/// 多阶段并发控制器
 #[derive(Debug, Clone)]
 pub struct MultiStageController {
-    // 各阶段信号量
     pub download_semaphore: Arc<Semaphore>,
     pub pdf_convert_semaphore: Arc<Semaphore>,
     pub ocr_process_semaphore: Arc<Semaphore>,
     pub storage_semaphore: Arc<Semaphore>,
 
-    // 配置参数
     config: MultiStageConfig,
-    // 自适应节流（通过持有OwnedSemaphorePermit减少可用并发）
     pdf_throttle: Arc<ParkingMutex<Vec<OwnedSemaphorePermit>>>,
     ocr_throttle: Arc<ParkingMutex<Vec<OwnedSemaphorePermit>>>,
 }
@@ -46,13 +40,13 @@ pub struct MultiStageConfig {
 impl Default for MultiStageConfig {
     fn default() -> Self {
         Self {
-            download_max_concurrent: 12,   // 减少到12，避免网络IO过多
-            pdf_convert_max_concurrent: 4, // PDF转换适度提升并发，保持内存安全
-            pdf_convert_min_concurrent: 1, // 资源紧张时最少保留1
-            pdf_min_free_mem_mb: 2048,     // 至少2GB空闲时才升档
-            pdf_max_load_one: 1.5,         // load >1.5 时降档
-            ocr_process_max_concurrent: 6, // 与全局OCR信号量保持一致
-            storage_max_concurrent: 10,    // 减少存储并发
+            download_max_concurrent: 12,
+            pdf_convert_max_concurrent: 4,
+            pdf_convert_min_concurrent: 1,
+            pdf_min_free_mem_mb: 2048,
+            pdf_max_load_one: 1.5,
+            ocr_process_max_concurrent: 6,
+            storage_max_concurrent: 10,
             resource_monitoring_enabled: true,
         }
     }
@@ -103,7 +97,6 @@ impl MultiStageController {
         }
     }
 
-    /// 获取下载阶段许可
     pub async fn acquire_download_permit(
         &self,
     ) -> Result<tokio::sync::SemaphorePermit, tokio::sync::AcquireError> {
@@ -117,7 +110,6 @@ impl MultiStageController {
         Ok(permit)
     }
 
-    /// 尝试获取下载阶段许可 (非阻塞)
     pub fn try_acquire_download_permit(
         &self,
     ) -> Result<tokio::sync::SemaphorePermit, tokio::sync::TryAcquireError> {
@@ -131,7 +123,6 @@ impl MultiStageController {
         Ok(permit)
     }
 
-    /// 获取PDF转换阶段许可
     pub async fn acquire_pdf_convert_permit(
         &self,
     ) -> Result<tokio::sync::SemaphorePermit, tokio::sync::AcquireError> {
@@ -140,7 +131,6 @@ impl MultiStageController {
             event = events::PIPELINE_STAGE,
             stage = "pdf_permit_wait"
         );
-        // 动态调整PDF并发，基于当前系统负载/内存
         self.adjust_pdf_concurrency().await;
         let permit = self.pdf_convert_semaphore.acquire().await?;
         debug!(
@@ -152,7 +142,6 @@ impl MultiStageController {
         Ok(permit)
     }
 
-    /// 获取OCR处理阶段许可
     pub async fn acquire_ocr_process_permit(
         &self,
     ) -> Result<tokio::sync::SemaphorePermit, tokio::sync::AcquireError> {
@@ -166,7 +155,6 @@ impl MultiStageController {
         Ok(permit)
     }
 
-    /// 加权获取OCR许可（占用多个并发槽位）
     pub async fn acquire_ocr_process_weighted(
         &self,
         units: usize,
@@ -179,7 +167,6 @@ impl MultiStageController {
         Ok(WeightedOwnedPermit { permits })
     }
 
-    /// 获取存储阶段许可
     pub async fn acquire_storage_permit(
         &self,
     ) -> Result<tokio::sync::SemaphorePermit, tokio::sync::AcquireError> {
@@ -193,7 +180,6 @@ impl MultiStageController {
         Ok(permit)
     }
 
-    /// 获取当前各阶段状态
     pub fn get_stage_status(&self) -> StageStatus {
         StageStatus {
             download_available: self.download_semaphore.available_permits(),
@@ -207,7 +193,6 @@ impl MultiStageController {
         }
     }
 
-    /// 获取系统总体负载情况
     pub fn get_system_load_info(&self) -> SystemLoadInfo {
         let stage_status = self.get_stage_status();
 
@@ -221,7 +206,6 @@ impl MultiStageController {
             + stage_status.ocr_process_total
             + stage_status.storage_total;
 
-        // 找出瓶颈阶段
         let bottleneck_stage = self.identify_bottleneck_stage(&stage_status);
 
         SystemLoadInfo {
@@ -258,7 +242,6 @@ impl MultiStageController {
     }
 
     fn estimate_current_memory_usage(&self, status: &StageStatus) -> u32 {
-        // 估算当前内存使用量 (MB)
         let download_usage = (status.download_total - status.download_available) as u32 * 100; // 100MB per download
         let pdf_usage = (status.pdf_convert_total - status.pdf_convert_available) as u32 * 4096; // 4GB per PDF convert
         let ocr_usage = (status.ocr_process_total - status.ocr_process_available) as u32 * 800; // 800MB per OCR
@@ -268,24 +251,19 @@ impl MultiStageController {
     }
 }
 
-/// 多个Owned许可的聚合，Drop时自动释放
 pub struct WeightedOwnedPermit {
     permits: Vec<OwnedSemaphorePermit>,
 }
 
 impl Drop for WeightedOwnedPermit {
     fn drop(&mut self) {
-        // OwnedSemaphorePermit 在drop时自动归还
         self.permits.clear();
     }
 }
 
 impl MultiStageController {
-    /// 简易自适应：根据内存使用率调整OCR/PDF转换并发（通过节流持有Owned许可实现）
     pub async fn adaptive_tune_once(&self, memory_usage_percent: f64) {
-        // 目标：>90% 内存时各减少1个并发；<60% 时各释放1个节流许可
         if memory_usage_percent > 90.0 {
-            // OCR节流
             if self.ocr_process_semaphore.available_permits() > 0 {
                 if let Ok(p) = self.ocr_process_semaphore.clone().acquire_owned().await {
                     self.ocr_throttle.lock().push(p);
@@ -299,7 +277,6 @@ impl MultiStageController {
                     Self::record_adaptive_event("adaptive_downscale_ocr", memory_usage_percent);
                 }
             }
-            // PDF节流
             if self.pdf_convert_semaphore.available_permits() > 0 {
                 if let Ok(p) = self.pdf_convert_semaphore.clone().acquire_owned().await {
                     self.pdf_throttle.lock().push(p);
@@ -314,7 +291,6 @@ impl MultiStageController {
                 }
             }
         } else if memory_usage_percent < 60.0 {
-            // 释放一个OCR节流
             if let Some(_p) = self.ocr_throttle.lock().pop() {
                 debug!(
                     target: "processing.pipeline",
@@ -323,10 +299,8 @@ impl MultiStageController {
                     memory_usage_pct = memory_usage_percent,
                     remaining_permits = self.ocr_process_semaphore.available_permits()
                 );
-                // drop(_p) 自动释放
                 Self::record_adaptive_event("adaptive_release_ocr", memory_usage_percent);
             }
-            // 释放一个PDF节流
             if let Some(_p) = self.pdf_throttle.lock().pop() {
                 debug!(
                     target: "processing.pipeline",
@@ -340,7 +314,6 @@ impl MultiStageController {
         }
     }
 
-    /// 基于实时资源的PDF并发调整：可用内存不足或load过高时降档，资源充足时升档
     pub async fn adjust_pdf_concurrency(&self) {
         if !self.config.resource_monitoring_enabled {
             return;
@@ -349,11 +322,9 @@ impl MultiStageController {
         let mut sys = System::new_all();
         sys.refresh_memory();
 
-        // sysinfo 0.30 返回字节，这里转换为 MB
         let free_mb = sys.available_memory() / 1024 / 1024;
         let LoadAvg { one, .. } = System::load_average();
 
-        // 决定目标有效并发
         let target = if free_mb >= self.config.pdf_min_free_mem_mb as u64
             && one <= self.config.pdf_max_load_one
         {
@@ -372,7 +343,6 @@ impl MultiStageController {
 
         if target < current_effective {
             let need_throttle = current_effective - target;
-            // 逐个占用许可以降低有效并发
             for _ in 0..need_throttle {
                 match self.pdf_convert_semaphore.clone().acquire_owned().await {
                     Ok(p) => {
@@ -395,7 +365,7 @@ impl MultiStageController {
             let release = (target - current_effective).min(self.pdf_throttle.lock().len());
             let mut guard = self.pdf_throttle.lock();
             for _ in 0..release {
-                guard.pop(); // drop释放许可
+                guard.pop();
             }
             current_effective = current_effective + release;
             debug!(
@@ -408,7 +378,6 @@ impl MultiStageController {
                 effective = current_effective
             );
         } else {
-            // 保持现状
             debug!(
                 target: "processing.adaptive",
                 event = events::PIPELINE_STAGE,
@@ -444,9 +413,7 @@ pub struct SystemLoadInfo {
     pub can_accept_new_tasks: bool,
 }
 
-// 全局多阶段控制器实例
 pub static MULTI_STAGE_CONTROLLER: Lazy<MultiStageController> = Lazy::new(|| {
-    // 从配置文件加载配置，如果失败则使用默认值
     let config = crate::CONFIG
         .concurrency
         .as_ref()
@@ -489,7 +456,6 @@ mod tests {
 
         let controller = MultiStageController::new(config);
 
-        // 测试许可获取
         let _download_permit = controller.acquire_download_permit().await.unwrap();
         let _pdf_permit = controller.acquire_pdf_convert_permit().await.unwrap();
         let _ocr_permit = controller.acquire_ocr_process_permit().await.unwrap();

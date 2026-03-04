@@ -12,18 +12,13 @@ use super::factory;
 use super::traits::{FileMetadata, Storage};
 use crate::util::config::StorageFailoverConfig;
 
-/// 存储故障转移状态
 #[derive(Debug, Clone, PartialEq)]
 enum FailoverState {
-    /// 使用主存储（OSS）
     Primary,
-    /// 使用本地降级存储
     Fallback,
-    /// 正在尝试恢复到主存储
     Recovering,
 }
 
-/// 待同步文件记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PendingSyncFile {
     key: String,
@@ -31,21 +26,13 @@ struct PendingSyncFile {
     created_at: DateTime<Utc>,
 }
 
-/// 带故障转移功能的存储包装器
 pub struct FailoverStorage {
-    /// 主存储（通常是OSS）
     primary: Arc<dyn Storage>,
-    /// 降级存储（本地文件系统）
     fallback: Arc<dyn Storage>,
-    /// 当前状态
     state: Arc<RwLock<FailoverState>>,
-    /// 配置
     config: StorageFailoverConfig,
-    /// 最后一次健康检查时间
     last_health_check: Arc<RwLock<DateTime<Utc>>>,
-    /// 待同步文件列表
     pending_sync: Arc<RwLock<Vec<PendingSyncFile>>>,
-    /// 待同步文件持久化路径
     pending_sync_path: PathBuf,
 }
 
@@ -55,7 +42,6 @@ impl FailoverStorage {
         config: StorageFailoverConfig,
         base_url: String,
     ) -> Result<Self> {
-        // 创建本地降级存储
         let fallback_config = factory::StorageConfig {
             storage_type: factory::StorageType::Local,
             local: Some(factory::LocalConfig {
@@ -90,7 +76,6 @@ impl FailoverStorage {
         })
     }
 
-    /// 获取当前活动的存储
     async fn get_active_storage(&self) -> Arc<dyn Storage> {
         let state = self.state.read().await;
         match *state {
@@ -99,14 +84,12 @@ impl FailoverStorage {
         }
     }
 
-    /// 执行带重试的存储操作
     async fn execute_with_failover<F, T>(&self, operation: F) -> Result<T>
     where
         F: Fn(
             Arc<dyn Storage>,
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T>> + Send>>,
     {
-        // 检查是否需要健康检查
         self.check_health_if_needed().await;
 
         let mut retries = 0;
@@ -118,12 +101,10 @@ impl FailoverStorage {
 
             match operation(storage.clone()).await {
                 Ok(result) => {
-                    // 如果当前在恢复状态且操作成功，切换回主存储
                     if state == FailoverState::Recovering {
                         info!("Primary storage recovered, switching back");
                         *self.state.write().await = FailoverState::Primary;
 
-                        // 触发待同步文件的上传
                         if self.config.sync_when_recovered {
                             self.sync_pending_files().await;
                         }
@@ -133,12 +114,10 @@ impl FailoverStorage {
                 Err(e) => {
                     retries += 1;
 
-                    // 如果是主存储失败，尝试切换到降级存储
                     if state == FailoverState::Primary && self.config.auto_switch_to_local {
                         warn!("Primary storage failed: {}, switching to fallback", e);
                         *self.state.write().await = FailoverState::Fallback;
 
-                        // 重试使用降级存储
                         if retries <= max_retries {
                             tokio::time::sleep(Duration::from_millis(self.config.retry_delay))
                                 .await;
@@ -146,7 +125,6 @@ impl FailoverStorage {
                         }
                     }
 
-                    // 如果已经在使用降级存储或重试次数超限，返回错误
                     error!("Storage operation failed after {} retries: {}", retries, e);
                     return Err(e);
                 }
@@ -154,7 +132,6 @@ impl FailoverStorage {
         }
     }
 
-    /// 检查是否需要进行健康检查
     async fn check_health_if_needed(&self) {
         if !self.config.enabled {
             return;
@@ -173,16 +150,13 @@ impl FailoverStorage {
             return;
         }
 
-        // 更新最后检查时间
         *self.last_health_check.write().await = now;
 
-        // 如果当前在降级状态，尝试恢复主存储
         let state = self.state.read().await.clone();
         if state == FailoverState::Fallback {
             info!("Attempting to recover primary storage connection");
             *self.state.write().await = FailoverState::Recovering;
 
-            // 在后台尝试健康检查
             let primary = self.primary.clone();
             let state_clone = self.state.clone();
             let config = self.config.clone();
@@ -210,7 +184,6 @@ impl FailoverStorage {
         }
     }
 
-    /// 同步待上传文件到主存储
     async fn sync_pending_files(&self) {
         let pending = {
             let mut guard = self.pending_sync.write().await;
@@ -245,14 +218,11 @@ impl FailoverStorage {
             let mut failed_files = Vec::new();
 
             for file in pending {
-                // 从本地读取文件
                 match fallback.get(&file.key).await {
                     Ok(Some(data)) => {
-                        // 上传到主存储
                         match primary.put(&file.key, &data).await {
                             Ok(_) => {
                                 success_count += 1;
-                                // 可选：删除本地文件
                                 let _ = fallback.delete(&file.key).await;
                             }
                             Err(e) => {
@@ -277,7 +247,6 @@ impl FailoverStorage {
                 failed_files.len()
             );
 
-            // 将失败的文件重新加入待同步列表
             if !failed_files.is_empty() {
                 let mut guard = pending_sync.write().await;
                 guard.extend(failed_files);
@@ -303,7 +272,6 @@ impl FailoverStorage {
         });
     }
 
-    /// 记录需要同步的文件
     async fn record_pending_sync(&self, key: &str) {
         if !self.config.sync_when_recovered {
             return;
@@ -352,7 +320,6 @@ impl Storage for FailoverStorage {
             })
             .await;
 
-        // 如果成功写入降级存储，记录待同步
         if result.is_ok() {
             self.record_pending_sync(key).await;
         }
@@ -393,13 +360,11 @@ impl Storage for FailoverStorage {
     }
 
     async fn get_public_url(&self, key: &str) -> Result<String> {
-        // 总是使用当前活动的存储的URL
         let storage = self.get_active_storage().await;
         storage.get_public_url(key).await
     }
 
     async fn get_presigned_url(&self, key: &str, expires: Duration) -> Result<String> {
-        // 总是使用当前活动的存储的URL
         let storage = self.get_active_storage().await;
         storage.get_presigned_url(key, expires).await
     }
@@ -413,7 +378,6 @@ impl Storage for FailoverStorage {
     }
 
     async fn health_check(&self) -> Result<bool> {
-        // 检查主存储的健康状态
         let storage = self.get_active_storage().await;
         storage.health_check().await
     }

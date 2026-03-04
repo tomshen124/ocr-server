@@ -1,5 +1,3 @@
-//! SQLite数据库查询操作
-//! 包含所有数据库查询和操作的实现
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
@@ -7,7 +5,6 @@ use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool};
 
 use crate::db::traits::*;
 
-/// 预审请求查询操作
 pub struct PreviewRequestQueries;
 
 impl PreviewRequestQueries {
@@ -258,7 +255,6 @@ impl PreviewRequestQueries {
     }
 }
 
-/// 材料缓存记录查询
 pub struct CachedMaterialQueries;
 
 impl CachedMaterialQueries {
@@ -398,7 +394,6 @@ impl CachedMaterialQueries {
     }
 }
 
-/// 材料评估结果查询
 pub struct MaterialResultQueries;
 
 impl MaterialResultQueries {
@@ -414,7 +409,6 @@ impl MaterialResultQueries {
     }
 }
 
-/// 规则评估结果查询
 pub struct RuleResultQueries;
 
 impl RuleResultQueries {
@@ -430,11 +424,9 @@ impl RuleResultQueries {
     }
 }
 
-/// 预审记录查询操作
 pub struct PreviewQueries;
 
 impl PreviewQueries {
-    /// 保存预审记录
     pub async fn save_record(pool: &SqlitePool, record: &PreviewRecord) -> Result<()> {
         let status_str = Self::status_to_string(&record.status);
 
@@ -505,7 +497,6 @@ impl PreviewQueries {
         Ok(())
     }
 
-    /// 根据ID获取预审记录
     pub async fn get_by_id(pool: &SqlitePool, id: &str) -> Result<Option<PreviewRecord>> {
         let row = sqlx::query(
             r#"
@@ -532,7 +523,6 @@ impl PreviewQueries {
         }
     }
 
-    /// 更新预审状态
     pub async fn update_status(pool: &SqlitePool, id: &str, status: PreviewStatus) -> Result<()> {
         let status_str = Self::status_to_string(&status);
         let now = Utc::now().to_rfc3339();
@@ -602,7 +592,6 @@ impl PreviewQueries {
         Ok(())
     }
 
-    /// 标记任务进入Processing状态并记录worker信息
     pub async fn mark_processing(
         pool: &SqlitePool,
         id: &str,
@@ -633,7 +622,6 @@ impl PreviewQueries {
         Ok(())
     }
 
-    /// 更新预审的evaluation_result字段
     pub async fn update_evaluation_result(
         pool: &SqlitePool,
         id: &str,
@@ -669,7 +657,6 @@ impl PreviewQueries {
         Ok(())
     }
 
-    /// 根据过滤条件列出预审记录
     pub async fn list_with_filter(
         pool: &SqlitePool,
         filter: &PreviewFilter,
@@ -715,7 +702,6 @@ impl PreviewQueries {
         Ok(records)
     }
 
-    /// 统计各状态数量
     pub async fn count_by_status(pool: &SqlitePool) -> Result<PreviewStatusCounts> {
         let rows = sqlx::query(
             r#"
@@ -746,7 +732,6 @@ impl PreviewQueries {
         Ok(counts)
     }
 
-    /// 根据第三方请求ID查找预审记录
     pub async fn find_by_third_party_id(
         pool: &SqlitePool,
         third_party_id: &str,
@@ -780,7 +765,6 @@ impl PreviewQueries {
         }
     }
 
-    /// 应用过滤条件到查询语句
     fn apply_filter_conditions(
         query: &mut String,
         bindings: &mut Vec<String>,
@@ -818,7 +802,6 @@ impl PreviewQueries {
         }
     }
 
-    /// 更新第三方回调状态
     pub async fn update_callback_state(
         pool: &SqlitePool,
         update: &PreviewCallbackUpdate,
@@ -1020,7 +1003,6 @@ impl PreviewQueries {
         Ok(())
     }
 
-    /// 列出需要执行第三方回调的预审记录
     pub async fn list_due_callbacks(pool: &SqlitePool, limit: u32) -> Result<Vec<PreviewRecord>> {
         let rows = sqlx::query(
             r#"
@@ -1052,7 +1034,6 @@ impl PreviewQueries {
         Ok(rows)
     }
 
-    /// 将数据库行转换为PreviewRecord
     fn row_to_record(row: sqlx::sqlite::SqliteRow) -> Result<PreviewRecord> {
         let status_str: String = row.get("status");
         let status = Self::string_to_status(&status_str);
@@ -1142,7 +1123,6 @@ impl PreviewQueries {
         })
     }
 
-    /// 状态枚举转字符串
     fn status_to_string(status: &PreviewStatus) -> &'static str {
         match status {
             PreviewStatus::Pending => "pending",
@@ -1153,7 +1133,6 @@ impl PreviewQueries {
         }
     }
 
-    /// 字符串转状态枚举
     fn string_to_status(status_str: &str) -> PreviewStatus {
         match status_str {
             "pending" => PreviewStatus::Pending,
@@ -1166,7 +1145,6 @@ impl PreviewQueries {
     }
 }
 
-/// 材料文件记录查询操作
 pub struct MaterialFileQueries;
 
 impl MaterialFileQueries {
@@ -1303,7 +1281,6 @@ impl MaterialFileQueries {
     }
 }
 
-/// 事项规则配置查询操作
 pub struct MatterRuleConfigQueries;
 
 impl MatterRuleConfigQueries {
@@ -1410,7 +1387,6 @@ impl MatterRuleConfigQueries {
     }
 }
 
-/// 任务payload查询操作
 pub struct TaskPayloadQueries;
 
 impl TaskPayloadQueries {
@@ -1458,11 +1434,9 @@ impl TaskPayloadQueries {
     }
 }
 
-/// API统计查询操作
 pub struct ApiStatsQueries;
 
 impl ApiStatsQueries {
-    /// 保存API统计
     pub async fn save_stats(pool: &SqlitePool, stats: &ApiStats) -> Result<()> {
         sqlx::query(
             r#"
@@ -1490,7 +1464,6 @@ impl ApiStatsQueries {
         Ok(())
     }
 
-    /// 根据过滤条件获取API统计
     pub async fn get_stats_with_filter(
         pool: &SqlitePool,
         filter: &StatsFilter,
@@ -1531,7 +1504,6 @@ impl ApiStatsQueries {
         Ok(stats_list)
     }
 
-    /// 获取API统计摘要
     pub async fn get_summary(pool: &SqlitePool, filter: &StatsFilter) -> Result<ApiSummary> {
         let mut query = String::from(
             r#"
@@ -1569,7 +1541,6 @@ impl ApiStatsQueries {
         })
     }
 
-    /// 应用统计过滤条件
     fn apply_stats_filter_conditions(
         query: &mut String,
         bindings: &mut Vec<String>,
@@ -1601,7 +1572,6 @@ impl ApiStatsQueries {
         }
     }
 
-    /// 将数据库行转换为ApiStats
     fn row_to_stats(row: sqlx::sqlite::SqliteRow) -> Result<ApiStats> {
         let created_at_str: String = row.get("created_at");
 
@@ -1621,7 +1591,6 @@ impl ApiStatsQueries {
     }
 }
 
-/// Outbox事件查询
 pub struct OutboxQueries;
 
 impl OutboxQueries {
@@ -1727,11 +1696,9 @@ impl OutboxQueries {
     }
 }
 
-/// 数据库健康检查查询
 pub struct HealthQueries;
 
 impl HealthQueries {
-    /// 执行健康检查
     pub async fn check_health(pool: &SqlitePool) -> Result<bool> {
         sqlx::query("SELECT 1")
             .fetch_one(pool)

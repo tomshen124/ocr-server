@@ -1,5 +1,3 @@
-//! 达梦数据库模块
-//! 通过Go网关连接达梦数据库（HTTP API，X-API-Key认证）
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -21,26 +19,21 @@ use crate::db::models::{MonitorSession, MonitorUser};
 #[cfg(feature = "dm_go")]
 use crate::util::config::types::GoGatewayConfig;
 
-/// 达梦数据库连接类型（Go网关）
 pub enum DmConnectionType {
-    /// Go网关连接（HTTP + X-API-Key）
     #[cfg(feature = "dm_go")]
     Go(DmGoConnection),
 }
 
-/// 达梦数据库实现
 pub struct DmDatabase {
     connection: DmConnectionType,
 }
 
 impl DmDatabase {
-    /// 创建新的达梦数据库实例 - 使用Go网关
     pub async fn new(config: &super::factory::DmConfig) -> Result<Self> {
         let connection = Self::create_connection(config).await?;
         Ok(Self { connection })
     }
 
-    /// 创建Go网关连接
     async fn create_connection(config: &super::factory::DmConfig) -> Result<DmConnectionType> {
         #[cfg(feature = "dm_go")]
         {
@@ -60,7 +53,6 @@ impl DmDatabase {
     }
 }
 
-// ================= Go网关连接实现 =================
 
 #[derive(Clone)]
 struct DmGoConnection {
@@ -90,8 +82,6 @@ impl DmGoConnection {
     }
 }
 
-// ===== 下载重试持久化（通过 Go 网关） =====
-/// 记录下载重试
 #[cfg(feature = "dm_go")]
 pub async fn record_download_retry(url: &str, reason: &str) -> Result<()> {
     let cfg = crate::CONFIG.database.as_ref().and_then(|db| {
@@ -126,7 +116,6 @@ pub async fn record_download_retry(url: &str, reason: &str) -> Result<()> {
     Ok(())
 }
 
-/// 标记下载重试完成
 #[cfg(feature = "dm_go")]
 pub async fn mark_download_retry_done(url: &str) -> Result<()> {
     let cfg = crate::CONFIG.database.as_ref().and_then(|db| {
@@ -431,7 +420,6 @@ impl DmGoConnection {
         Ok(resp.data.unwrap_or_default())
     }
 
-    // 新增：参数化查询方法
     async fn query_with_params(
         &self,
         sql: &str,
@@ -462,7 +450,6 @@ impl DmGoConnection {
         Ok(resp.affected.unwrap_or(0) as u64)
     }
 
-    // 新增：执行参数化查询（支持多种类型参数）
     async fn execute_with_params(&self, sql: &str, params: Vec<String>) -> Result<u64> {
         let json_params: Vec<Value> = params.into_iter().map(|s| Value::String(s)).collect();
         let resp = self.db_call(sql, Some(json_params), None).await?;
@@ -553,7 +540,6 @@ impl DmGoConnection {
     }
 
     async fn initialize_schema(&self) -> Result<()> {
-        // 预审请求表
         if !self.table_exists("PREVIEW_REQUESTS").await? {
             let create = r#"
                 CREATE TABLE PREVIEW_REQUESTS (
@@ -608,7 +594,6 @@ impl DmGoConnection {
                 .ok();
         }
 
-        // 尝试补充新增列
         self.ensure_column(
             "PREVIEW_REQUESTS",
             "THIRD_PARTY_REQUEST_ID",
@@ -656,7 +641,6 @@ impl DmGoConnection {
         self.ensure_column("PREVIEW_REQUESTS", "USER_INFO_JSON", "USER_INFO_JSON CLOB")
             .await?;
 
-        // 预审记录表
         if !self.table_exists("PREVIEW_RECORDS").await? {
             let create = r#"
                 CREATE TABLE PREVIEW_RECORDS (
@@ -799,7 +783,6 @@ impl DmGoConnection {
         )
         .await?;
 
-        // 下载重试表
         if !self.table_exists("DOWNLOAD_RETRY").await? {
             let create = r#"
                 CREATE TABLE DOWNLOAD_RETRY (
@@ -817,7 +800,6 @@ impl DmGoConnection {
             tracing::info!("[init] Created DOWNLOAD_RETRY table");
         }
 
-        // Worker结果异步处理队列表
         if !self.table_exists("WORKER_RESULTS_QUEUE").await? {
             let create = r#"
                 CREATE TABLE WORKER_RESULTS_QUEUE (
@@ -846,7 +828,6 @@ impl DmGoConnection {
                 )
                 .await
                 .ok();
-            // 保证 PREVIEW_ID 唯一，避免重复入队
             let _ = self
                 .execute_update(
                     "CREATE UNIQUE INDEX IDX_WRQ_PREVIEW_UNIQ ON WORKER_RESULTS_QUEUE(PREVIEW_ID)",
@@ -1162,7 +1143,6 @@ impl DmGoConnection {
                 .ok();
         }
 
-        // API统计表
         if !self.table_exists("API_STATS").await? {
             let create = r#"
                 CREATE TABLE API_STATS (
@@ -1203,7 +1183,6 @@ impl DmGoConnection {
                 .ok();
         }
 
-        // 监控用户表
         if !self.table_exists("MONITOR_USERS").await? {
             let create = r#"
                 CREATE TABLE MONITOR_USERS (
@@ -1244,7 +1223,6 @@ impl DmGoConnection {
 
         self.ensure_default_monitor_admin().await?;
 
-        // 监控会话表
         if !self.table_exists("MONITOR_SESSIONS").await? {
             let create = r#"
                 CREATE TABLE MONITOR_SESSIONS (
@@ -1275,7 +1253,6 @@ impl DmGoConnection {
                 .ok();
         }
 
-        // 用户登录记录表
         if !self.table_exists("USER_LOGIN_RECORDS").await? {
             let create = r#"
                 CREATE TABLE USER_LOGIN_RECORDS (
@@ -1335,7 +1312,6 @@ impl DmGoConnection {
                 .await;
         }
 
-        // 回灌Outbox事件表
         if !self.table_exists("DB_OUTBOX").await? {
             let create = r#"
                 CREATE TABLE DB_OUTBOX (
@@ -1381,7 +1357,6 @@ impl DmGoConnection {
             )
             .await;
 
-        // 材料文件记录表
         if !self.table_exists("PREVIEW_MATERIAL_FILES").await? {
             let create = r#"
                 CREATE TABLE PREVIEW_MATERIAL_FILES (
@@ -1477,7 +1452,6 @@ impl DmGoConnection {
                 .ok();
         }
 
-        // 材料下载队列表
         if !self.table_exists("MATERIAL_DOWNLOAD_QUEUE").await? {
             let create = r#"
                 CREATE TABLE MATERIAL_DOWNLOAD_QUEUE (
@@ -1501,7 +1475,6 @@ impl DmGoConnection {
                 .ok();
         }
 
-        // 跨请求下载去重缓存表：URL → TOKEN，带过期时间
         if !self.table_exists("MATERIAL_DOWNLOAD_CACHE").await? {
             let create = r#"
                 CREATE TABLE MATERIAL_DOWNLOAD_CACHE (
@@ -1521,7 +1494,6 @@ impl DmGoConnection {
                 .ok();
         }
 
-        // 外部分享一次性访问token表：TOKEN → PREVIEW_ID/FORMAT，带过期与使用标记
         if !self.table_exists("PREVIEW_SHARE_TOKENS").await? {
             let create = r#"
                 CREATE TABLE PREVIEW_SHARE_TOKENS (
@@ -1550,7 +1522,6 @@ impl DmGoConnection {
                 .ok();
         }
 
-        // 预审去重指纹表
         if !self.table_exists("PREVIEW_DEDUP").await? {
             let create = r#"
                 CREATE TABLE PREVIEW_DEDUP (
@@ -1775,7 +1746,6 @@ fn extract_string(value: &serde_json::Value) -> Option<String> {
             }
         }
         serde_json::Value::Object(map) => {
-            // 优先匹配常见字段名称
             let preferred_keys = [
                 "String",
                 "string",
@@ -1797,7 +1767,6 @@ fn extract_string(value: &serde_json::Value) -> Option<String> {
                 }
             }
 
-            // 回退：遍历第一个可转换的字段
             if let Some(found) = map.values().find_map(|inner| extract_string(inner)) {
                 Some(found)
             } else {
@@ -1942,7 +1911,6 @@ impl Database for DmDatabase {
         self
     }
 
-    // === 预审记录与统计 ===
     async fn save_preview_request(&self, request: &PreviewRequestRecord) -> Result<()> {
         #[cfg(feature = "dm_go")]
         if let DmConnectionType::Go(conn) = &self.connection {
@@ -3051,7 +3019,6 @@ impl Database for DmDatabase {
         ))
     }
 
-    /// 保存材料文件记录
     async fn save_material_file_record(&self, record: &MaterialFileRecord) -> Result<()> {
         #[cfg(feature = "dm_go")]
         if let DmConnectionType::Go(conn) = &self.connection {
@@ -3091,7 +3058,6 @@ impl Database for DmDatabase {
         Err(anyhow!("DM-Go save_material_file_record not implemented"))
     }
 
-    /// 更新材料文件状态
     async fn update_material_file_status(
         &self,
         id: &str,
@@ -3119,7 +3085,6 @@ impl Database for DmDatabase {
         Err(anyhow!("DM-Go update_material_file_status not implemented"))
     }
 
-    /// 更新材料文件处理信息
     async fn update_material_file_processing(
         &self,
         id: &str,
@@ -3129,7 +3094,6 @@ impl Database for DmDatabase {
     ) -> Result<()> {
         #[cfg(feature = "dm_go")]
         if let DmConnectionType::Go(conn) = &self.connection {
-            // 构建动态UPDATE语句
             let mut sql_parts = vec!["UPDATE PREVIEW_MATERIAL_FILES SET"];
             let mut params = Vec::new();
             let mut updates = Vec::new();
@@ -3150,7 +3114,7 @@ impl Database for DmDatabase {
             }
 
             if updates.is_empty() {
-                return Ok(()); // 没有需要更新的字段
+                return Ok(());
             }
 
             updates.push("UPDATED_AT = CURRENT_TIMESTAMP");
@@ -3169,7 +3133,6 @@ impl Database for DmDatabase {
         ))
     }
 
-    /// 查询材料文件列表
     async fn list_material_files(
         &self,
         filter: &MaterialFileFilter,
@@ -3564,9 +3527,7 @@ impl Database for DmDatabase {
 
         Ok(Vec::new())
     }
-    // Worker结果异步处理队列相关方法
 
-    /// 入队Worker结果
     async fn enqueue_worker_result(&self, preview_id: &str, payload: &str) -> Result<()> {
         let insert_sql = "INSERT INTO WORKER_RESULTS_QUEUE (ID, PREVIEW_ID, PAYLOAD, STATUS, ATTEMPTS, CREATED_AT, UPDATED_AT) \
                           VALUES (?, ?, ?, 'pending', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
@@ -3575,7 +3536,6 @@ impl Database for DmDatabase {
         match &self.connection {
             #[cfg(feature = "dm_go")]
             DmConnectionType::Go(conn) => {
-                // 优先尝试复用已有记录（按 PREVIEW_ID 覆盖），避免重复入队
                 let update_sql = "UPDATE WORKER_RESULTS_QUEUE \
                                   SET PAYLOAD = ?, STATUS = 'pending', ATTEMPTS = 0, LAST_ERROR = NULL, UPDATED_AT = CURRENT_TIMESTAMP \
                                   WHERE PREVIEW_ID = ?";
@@ -3599,7 +3559,6 @@ impl Database for DmDatabase {
         Ok(())
     }
 
-    /// 拉取待处理的Worker结果
     async fn fetch_pending_worker_results(
         &self,
         limit: u32,
@@ -3620,7 +3579,6 @@ impl Database for DmDatabase {
 
         let mut results = Vec::new();
         for row in rows {
-            // 简单的辅助函数，从 Value 中提取 String
             let get_str = |key: &str| -> String {
                 row.get(key)
                     .or_else(|| row.get(&key.to_lowercase()))
@@ -3643,11 +3601,8 @@ impl Database for DmDatabase {
                     .unwrap_or(0) as i32
             };
 
-            // 解析时间，这里简化处理，实际可能需要更严谨的解析
             let parse_time = |key: &str| -> DateTime<Utc> {
                 let s = get_str(key);
-                // 尝试解析常见格式，或者直接返回当前时间作为fallback
-                // 注意：DM返回的时间格式可能因配置而异
                 chrono::NaiveDateTime::parse_from_str(&s, "%Y-%m-%d %H:%M:%S")
                     .map(|dt| DateTime::from_utc(dt, Utc))
                     .unwrap_or_else(|_| Utc::now())
@@ -3725,7 +3680,6 @@ impl Database for DmDatabase {
         }))
     }
 
-    /// 更新Worker结果处理状态
     async fn update_worker_result_status(
         &self,
         id: &str,
@@ -3756,9 +3710,7 @@ impl Database for DmDatabase {
         Ok(())
     }
 
-    // 材料下载队列相关方法
 
-    /// 入队材料下载任务
     async fn enqueue_material_download(&self, preview_id: &str, payload: &str) -> Result<()> {
         let sql = "INSERT INTO MATERIAL_DOWNLOAD_QUEUE (ID, PREVIEW_ID, PAYLOAD, STATUS, ATTEMPTS, CREATED_AT, UPDATED_AT) \
                    VALUES (?, ?, ?, 'pending', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
@@ -3777,7 +3729,6 @@ impl Database for DmDatabase {
         Ok(())
     }
 
-    /// 拉取待处理的材料下载任务
     async fn fetch_pending_material_downloads(
         &self,
         limit: u32,
@@ -3841,7 +3792,6 @@ impl Database for DmDatabase {
         Ok(results)
     }
 
-    /// 更新材料下载任务状态
     async fn update_material_download_status(
         &self,
         id: &str,
@@ -4013,7 +3963,6 @@ impl Database for DmDatabase {
         Ok(None)
     }
 
-    // 监控系统相关方法
 
     async fn find_monitor_user_by_username(&self, username: &str) -> Result<Option<MonitorUser>> {
         #[cfg(feature = "dm_go")]
@@ -4405,7 +4354,6 @@ impl Database for DmDatabase {
     }
 }
 
-/// 映射材料文件行数据
 #[cfg(feature = "dm_go")]
 fn map_material_file_row(
     row: &std::collections::HashMap<String, serde_json::Value>,

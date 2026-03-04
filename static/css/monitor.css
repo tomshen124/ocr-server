@@ -1,5 +1,4 @@
 :root {
-    /* Colors - 优化配色 */
     --primary-color: #1677ff;
     --primary-hover: #4096ff;
     --primary-active: #0958d9;
@@ -24,7 +23,6 @@
     --spacing-lg: 24px;
     --spacing-xl: 32px;
 
-    /* Shadows - 增强阴影效果 */
     --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 16px 0 rgba(0, 0, 0, 0.08);
     --shadow-lg: 0 12px 32px 0 rgba(0, 0, 0, 0.12);
@@ -293,7 +291,6 @@ input:checked+.slider:before {
     }
 }
 
-/* Cards - 优化卡片设计 */
 .card {
     background: var(--surface-color);
     border-radius: var(--radius-lg);
@@ -1208,7 +1205,6 @@ input:checked+.slider:before {
     width: 100%;
 }
 
-/* 图表加载状态 */
 .chart-loading {
     position: absolute;
     top: 50%;
@@ -1230,7 +1226,6 @@ input:checked+.slider:before {
     animation: spin 1s linear infinite;
 }
 
-/* 响应式优化 */
 @media (max-width: 1200px) {
     .charts-grid {
         grid-template-columns: 1fr;
@@ -1243,7 +1238,6 @@ input:checked+.slider:before {
     }
 }
 
-/* 全局限流控制面板 */
 .throttle-control-panel {
     padding: var(--spacing-md);
     background: var(--bg-color);

@@ -291,7 +291,6 @@
             <button class="admin-tab" onclick="switchTab('configuration')">⚙️ 平台配置</button>
         </div>
 
-        <!-- 平台概览 -->
         <div id="overview" class="tab-content active">
             <div class="stats-cards">
                 <div class="stats-card">
@@ -320,7 +319,6 @@
             </div>
         </div>
 
-        <!-- 客户端管理 -->
         <div id="clients" class="tab-content">
             <div class="clients-table">
                 <div class="table-header">
@@ -350,7 +348,6 @@
             </div>
         </div>
 
-        <!-- 调用统计 -->
         <div id="statistics" class="tab-content">
             <div class="api-usage-chart">
                 <h3>📊 API调用详细统计</h3>
@@ -358,7 +355,6 @@
             </div>
         </div>
 
-        <!-- 平台配置 -->
         <div id="configuration" class="tab-content">
             <div class="clients-table">
                 <div class="table-header">
@@ -403,7 +399,6 @@
         </div>
     </div>
 
-    <!-- 添加客户端模态框 -->
     <div id="add-client-modal" class="modal">
         <div class="modal-content">
             <h3>➕ 添加新客户端</h3>
@@ -443,7 +438,6 @@
 
     <script src="/static/js/api.js"></script>
     <script>
-        // 全局状态管理
         const platformAdmin = {
             currentTab: 'overview',
             clients: [],
@@ -451,7 +445,6 @@
             config: null
         };
 
-        // 初始化页面
         document.addEventListener('DOMContentLoaded', function() {
             initializePlatformAdmin();
         });
@@ -462,9 +455,7 @@
             loadConfiguration();
         }
 
-        // 标签切换
         function switchTab(tabName) {
-            // 隐藏所有标签内容
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
             });
@@ -472,13 +463,11 @@
                 tab.classList.remove('active');
             });
 
-            // 显示选中的标签
             document.getElementById(tabName).classList.add('active');
             document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
             
             platformAdmin.currentTab = tabName;
 
-            // 根据标签加载不同数据
             switch(tabName) {
                 case 'overview':
                     loadPlatformStats();
@@ -495,7 +484,6 @@
             }
         }
 
-        // 加载平台统计
         async function loadPlatformStats() {
             try {
                 const response = await fetch('/api/admin/platform/stats/platform');
@@ -506,7 +494,7 @@
                     document.getElementById('total-clients').textContent = stats.total_clients;
                     document.getElementById('active-clients').textContent = stats.active_clients;
                     document.getElementById('today-calls').textContent = stats.total_api_calls_today;
-                    document.getElementById('success-rate').textContent = '98.5%'; // 示例数据
+                    document.getElementById('success-rate').textContent = '98.5%';
                     
                     platformAdmin.platformStats = stats;
                 } else {
@@ -517,7 +505,6 @@
             }
         }
 
-        // 加载客户端列表
         async function loadClients() {
             document.getElementById('clients-loading').style.display = 'block';
             document.getElementById('clients-table').style.display = 'none';
@@ -540,7 +527,6 @@
             }
         }
 
-        // 渲染客户端表格
         function renderClientsTable() {
             const tbody = document.getElementById('clients-tbody');
             tbody.innerHTML = '';
@@ -575,7 +561,6 @@
             });
         }
 
-        // 加载统计数据
         async function loadStatistics() {
             const content = document.getElementById('statistics-content');
             content.innerHTML = '加载统计数据...';
@@ -594,7 +579,6 @@ ${JSON.stringify(result, null, 2)}
             }
         }
 
-        // 加载配置
         async function loadConfiguration() {
             document.getElementById('config-loading').style.display = 'block';
             document.getElementById('config-form').style.display = 'none';
@@ -624,7 +608,6 @@ ${JSON.stringify(result, null, 2)}
             }
         }
 
-        // 客户端操作函数
         function showAddClientModal() {
             document.getElementById('add-client-modal').style.display = 'block';
         }
@@ -640,7 +623,6 @@ ${JSON.stringify(result, null, 2)}
 
         function viewClientDetails(clientId) {
             alert('查看客户端详情: ' + clientId);
-            // 这里可以打开详情模态框
         }
 
         async function enableClient(clientId) {
@@ -681,7 +663,6 @@ ${JSON.stringify(result, null, 2)}
             }
         }
 
-        // 添加客户端表单提交
         document.getElementById('add-client-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -713,7 +694,6 @@ ${JSON.stringify(result, null, 2)}
             }
         });
 
-        // 保存配置
         async function saveConfiguration() {
             const configData = {
                 enabled: document.getElementById('platform-enabled').checked,
@@ -746,18 +726,14 @@ ${JSON.stringify(result, null, 2)}
             }
         }
 
-        // 工具函数
         function showError(message) {
-            // 简单的错误提示，可以改用更好的通知组件
             alert('错误: ' + message);
         }
 
         function showSuccess(message) {
-            // 简单的成功提示
             alert('成功: ' + message);
         }
 
-        // 点击模态框外部关闭
         window.onclick = function(event) {
             const modal = document.getElementById('add-client-modal');
             if (event.target == modal) {

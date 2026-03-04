@@ -8,7 +8,6 @@ use tracing::warn;
 
 use crate::db::traits::MatterRuleConfigRecord;
 
-/// 完整的事项规则配置（数据库元信息 + JSON定义）
 #[derive(Debug, Clone)]
 pub struct MatterRuleConfig {
     pub record: MatterRuleConfigRecord,
@@ -58,7 +57,6 @@ impl MatterRuleConfig {
     }
 }
 
-/// JSON定义主体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MatterRuleDefinition {
@@ -78,7 +76,6 @@ pub struct MatterRuleDefinition {
     pub extra: HashMap<String, Value>,
 }
 
-/// 规则模式
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuleMode {
     PresentOnly,
@@ -139,7 +136,6 @@ impl Serialize for RuleMode {
     }
 }
 
-/// 材料规则
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialRule {
@@ -172,7 +168,6 @@ pub struct MaterialRule {
     pub extra: HashMap<String, Value>,
 }
 
-/// 材料作用域
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MaterialScope {
     Global,
@@ -213,7 +208,6 @@ impl Serialize for MaterialScope {
     }
 }
 
-/// 材料重复配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialRepeat {
@@ -222,7 +216,6 @@ pub struct MaterialRepeat {
     pub ocr_key_field: String,
 }
 
-/// 材料有效期配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum MaterialValidity {
@@ -231,7 +224,6 @@ pub enum MaterialValidity {
     IssuePlusDays { days: u32 },
 }
 
-/// 材料校验配置
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialChecks {
@@ -243,7 +235,6 @@ pub struct MaterialChecks {
     pub matches: Vec<FieldMatchRule>,
 }
 
-/// 字段比对规则
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldMatchRule {
@@ -253,7 +244,6 @@ pub struct FieldMatchRule {
     pub normalize: Vec<String>,
 }
 
-/// 材料配对要求（如45°照片）
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaterialPairing {
@@ -264,7 +254,6 @@ pub struct MaterialPairing {
     pub fallback_name_regex: Vec<PairingFallback>,
 }
 
-/// 配对名称回退
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PairingFallback {

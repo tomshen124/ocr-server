@@ -1,5 +1,3 @@
-//! 指标收集器
-//! 收集和聚合性能指标、业务指标和系统指标
 
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -8,22 +6,15 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
-/// 全局指标收集器实例
 pub static METRICS_COLLECTOR: Lazy<Arc<MetricsCollector>> =
     Lazy::new(|| Arc::new(MetricsCollector::new(MetricsConfig::default())));
 
-/// 指标收集配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsConfig {
-    /// 是否启用指标收集
     pub enabled: bool,
-    /// 指标聚合间隔（秒）
     pub aggregation_interval: u64,
-    /// 历史指标保留时间（秒）
     pub retention_period: u64,
-    /// 最大内存中保留的指标数量
     pub max_metrics_in_memory: usize,
-    /// 是否启用详细指标
     pub enable_detailed_metrics: bool,
 }
 
@@ -31,41 +22,31 @@ impl Default for MetricsConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            aggregation_interval: 60, // 1分钟
-            retention_period: 3600,   // 1小时
+            aggregation_interval: 60,
+            retention_period: 3600,
             max_metrics_in_memory: 10000,
             enable_detailed_metrics: true,
         }
     }
 }
 
-/// 指标类型
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MetricType {
-    /// 计数器 - 单调递增
     Counter,
-    /// 测量值 - 可增可减
     Gauge,
-    /// 直方图 - 记录数值分布
     Histogram,
-    /// 摘要 - 记录统计摘要
     Summary,
 }
 
-/// 指标值
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MetricValue {
-    /// 整数值
     Integer(i64),
-    /// 浮点数值
     Float(f64),
-    /// 直方图桶
     Histogram {
         buckets: Vec<HistogramBucket>,
         sum: f64,
         count: u64,
     },
-    /// 摘要统计
     Summary {
         sum: f64,
         count: u64,
@@ -73,153 +54,90 @@ pub enum MetricValue {
     },
 }
 
-/// 直方图桶
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistogramBucket {
-    /// 桶的上限值
     pub upper_bound: f64,
-    /// 累计计数
     pub cumulative_count: u64,
 }
 
-/// 分位数
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Quantile {
-    /// 分位数（0.0-1.0）
     pub quantile: f64,
-    /// 分位数值
     pub value: f64,
 }
 
-/// 指标标签
 pub type MetricLabels = HashMap<String, String>;
 
-/// 指标样本
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricSample {
-    /// 指标名称
     pub name: String,
-    /// 指标类型
     pub metric_type: MetricType,
-    /// 指标值
     pub value: MetricValue,
-    /// 标签
     pub labels: MetricLabels,
-    /// 时间戳
     pub timestamp: u64,
-    /// 帮助信息
     pub help: Option<String>,
 }
 
-/// 请求指标
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestMetrics {
-    /// 请求计数
     pub request_count: u64,
-    /// 成功请求计数
     pub success_count: u64,
-    /// 失败请求计数
     pub error_count: u64,
-    /// 总响应时间（毫秒）
     pub total_response_time: f64,
-    /// 平均响应时间（毫秒）
     pub avg_response_time: f64,
-    /// 最小响应时间（毫秒）
     pub min_response_time: f64,
-    /// 最大响应时间（毫秒）
     pub max_response_time: f64,
-    /// 95分位数响应时间（毫秒）
     pub p95_response_time: f64,
-    /// 99分位数响应时间（毫秒）
     pub p99_response_time: f64,
-    /// 吞吐量（请求/秒）
     pub throughput: f64,
-    /// 错误率
     pub error_rate: f64,
 }
 
-/// OCR指标
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OcrMetrics {
-    /// OCR处理次数
     pub ocr_count: u64,
-    /// OCR成功次数
     pub ocr_success_count: u64,
-    /// OCR失败次数
     pub ocr_error_count: u64,
-    /// 总处理时间（毫秒）
     pub total_processing_time: f64,
-    /// 平均处理时间（毫秒）
     pub avg_processing_time: f64,
-    /// 处理的页面数
     pub pages_processed: u64,
-    /// 识别的文字字符数
     pub characters_recognized: u64,
-    /// 平均置信度
     pub avg_confidence: f64,
-    /// 处理的文件大小（字节）
     pub total_file_size: u64,
 }
 
-/// 系统资源指标
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMetrics {
-    /// CPU使用率（百分比）
     pub cpu_usage: f64,
-    /// 内存使用率（百分比）
     pub memory_usage: f64,
-    /// 磁盘使用率（百分比）
     pub disk_usage: f64,
-    /// 网络流入流量（字节/秒）
     pub network_in: u64,
-    /// 网络流出流量（字节/秒）
     pub network_out: u64,
-    /// 活跃连接数
     pub active_connections: u64,
-    /// 线程数
     pub thread_count: u64,
-    /// 文件描述符使用数
     pub fd_usage: u64,
-    /// NATS连接失败次数
     pub nats_connection_failures: u64,
-    /// NATS连接超时次数
     pub nats_connection_timeouts: u64,
-    /// Worker 心跳失败次数
     pub worker_heartbeat_failures: u64,
-    /// Worker 心跳超时次数
     pub worker_heartbeat_timeouts: u64,
 }
 
-/// 业务指标
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BusinessMetrics {
-    /// 用户数
     pub user_count: u64,
-    /// 活跃用户数
     pub active_users: u64,
-    /// 预审请求数
     pub preview_requests: u64,
-    /// 预审成功数
     pub preview_success: u64,
-    /// 预审失败数
     pub preview_failures: u64,
-    /// 预审下载失败次数
     pub preview_download_failures: u64,
-    /// 预审OCR超时次数
     pub preview_ocr_timeouts: u64,
-    /// 预审持久化失败次数
     pub preview_persistence_failures: u64,
-    /// 文件上传数
     pub file_uploads: u64,
-    /// 存储使用量（字节）
     pub storage_usage: u64,
-    /// 规则执行次数
     pub rule_executions: u64,
-    /// 规则匹配次数
     pub rule_matches: u64,
 }
 
-/// OCR 流水线阶段指标
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipelineStageStats {
     pub success_count: u64,
@@ -245,30 +163,19 @@ impl Default for PipelineStageStats {
     }
 }
 
-/// 指标收集器
 pub struct MetricsCollector {
-    /// 配置
     config: Arc<MetricsConfig>,
-    /// 指标样本存储
     samples: Arc<RwLock<Vec<MetricSample>>>,
-    /// 聚合指标缓存
     aggregated_metrics: Arc<Mutex<HashMap<String, MetricSample>>>,
-    /// 请求指标
     request_metrics: Arc<RwLock<RequestMetrics>>,
-    /// OCR指标
     ocr_metrics: Arc<RwLock<OcrMetrics>>,
-    /// 系统指标
     system_metrics: Arc<RwLock<SystemMetrics>>,
-    /// 业务指标
     business_metrics: Arc<RwLock<BusinessMetrics>>,
-    /// OCR 流水线阶段指标
     pipeline_metrics: Arc<RwLock<HashMap<String, PipelineStageStats>>>,
-    /// 响应时间样本（用于百分位数计算）
     response_time_samples: Arc<RwLock<Vec<f64>>>,
 }
 
 impl MetricsCollector {
-    /// 创建新的指标收集器
     pub fn new(config: MetricsConfig) -> Self {
         Self {
             config: Arc::new(config),
@@ -283,7 +190,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录指标样本
     pub fn record(&self, sample: MetricSample) {
         if !self.config.enabled {
             return;
@@ -292,7 +198,6 @@ impl MetricsCollector {
         if let Ok(mut samples) = self.samples.write() {
             samples.push(sample);
 
-            // 限制内存中的样本数量
             if samples.len() > self.config.max_metrics_in_memory {
                 let excess = samples.len() - self.config.max_metrics_in_memory;
                 samples.drain(0..excess);
@@ -300,7 +205,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录计数器
     pub fn record_counter(&self, name: &str, value: i64, labels: MetricLabels) {
         let sample = MetricSample {
             name: name.to_string(),
@@ -313,7 +217,6 @@ impl MetricsCollector {
         self.record(sample);
     }
 
-    /// 记录测量值
     pub fn record_gauge(&self, name: &str, value: f64, labels: MetricLabels) {
         let sample = MetricSample {
             name: name.to_string(),
@@ -326,9 +229,7 @@ impl MetricsCollector {
         self.record(sample);
     }
 
-    /// 记录直方图
     pub fn record_histogram(&self, name: &str, value: f64, labels: MetricLabels) {
-        // 简化的直方图实现，使用预定义的桶
         let buckets = vec![
             10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0,
         ];
@@ -356,7 +257,6 @@ impl MetricsCollector {
         self.record(sample);
     }
 
-    /// 记录HTTP请求指标
     pub fn record_http_request(
         &self,
         method: &str,
@@ -366,7 +266,6 @@ impl MetricsCollector {
     ) {
         let duration_ms = duration.as_millis() as f64;
 
-        // 更新请求指标
         if let Ok(mut metrics) = self.request_metrics.write() {
             metrics.request_count += 1;
 
@@ -389,17 +288,14 @@ impl MetricsCollector {
             metrics.error_rate = metrics.error_count as f64 / metrics.request_count as f64;
         }
 
-        // 更新响应时间样本
         if let Ok(mut samples) = self.response_time_samples.write() {
             samples.push(duration_ms);
 
-            // 限制样本数量
             if samples.len() > 1000 {
                 samples.drain(0..500);
             }
         }
 
-        // 记录详细指标
         if self.config.enable_detailed_metrics {
             let mut labels = HashMap::new();
             labels.insert("method".to_string(), method.to_string());
@@ -411,7 +307,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录OCR处理指标
     pub fn record_ocr_processing(
         &self,
         success: bool,
@@ -436,7 +331,6 @@ impl MetricsCollector {
             metrics.pages_processed += pages as u64;
             metrics.characters_recognized += characters;
 
-            // 计算平均置信度
             if confidence > 0.0 {
                 let total_confidence =
                     metrics.avg_confidence * (metrics.ocr_count - 1) as f64 + confidence;
@@ -446,7 +340,6 @@ impl MetricsCollector {
             metrics.total_file_size += file_size;
         }
 
-        // 记录详细指标
         if self.config.enable_detailed_metrics {
             let mut labels = HashMap::new();
             labels.insert("success".to_string(), success.to_string());
@@ -461,7 +354,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录OCR调用原始指标（成功/失败/耗时）
     pub fn record_ocr_invocation(&self, success: bool, duration: Duration) {
         if let Ok(mut metrics) = self.ocr_metrics.write() {
             metrics.ocr_count += 1;
@@ -492,7 +384,6 @@ impl MetricsCollector {
         self.record_histogram("ocr_duration_seconds", duration.as_secs_f64(), labels);
     }
 
-    /// 记录预审请求统计
     pub fn record_preview_request(&self, status_code: u16, reason: &str, duration: Duration) {
         self.record_http_request("POST", "/api/preview", status_code, duration);
         self.record_business_metric("preview_requests", 1);
@@ -512,7 +403,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录预审下载结果
     pub fn record_preview_download(&self, success: bool, duration: Duration, source: &str) {
         if !success {
             self.record_business_metric("preview_download_failures", 1);
@@ -538,7 +428,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录预审OCR超时事件
     pub fn record_preview_ocr_timeout(&self, material: &str) {
         self.record_business_metric("preview_ocr_timeouts", 1);
 
@@ -549,7 +438,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录预审持久化失败事件
     pub fn record_preview_persistence_failure(&self, stage: &str) {
         self.record_business_metric("preview_persistence_failures", 1);
 
@@ -560,7 +448,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录规则执行耗时
     pub fn record_preview_rule_execution(&self, duration: Duration, success: bool) {
         self.record_business_metric("rule_executions", 1);
 
@@ -578,7 +465,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录后台预审任务最终结果
     pub fn record_preview_job(&self, success: bool, duration: Duration) {
         if success {
             self.record_business_metric("preview_success", 1);
@@ -600,7 +486,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 更新队列深度
     pub fn record_queue_depth(&self, queue: &str, depth: u64) {
         if !self.config.enable_detailed_metrics {
             return;
@@ -611,7 +496,6 @@ impl MetricsCollector {
         self.record_gauge("queue_depth", depth as f64, labels);
     }
 
-    /// 记录队列入队事件
     pub fn record_queue_enqueue(&self, queue: &str, depth: Option<u64>) {
         if !self.config.enable_detailed_metrics {
             return;
@@ -626,7 +510,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录队列出队事件
     pub fn record_queue_dequeue(&self, queue: &str, success: bool, depth: Option<u64>) {
         if !self.config.enable_detailed_metrics {
             return;
@@ -645,7 +528,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录队列重试事件
     pub fn record_queue_retry(&self, queue: &str) {
         if !self.config.enable_detailed_metrics {
             return;
@@ -656,7 +538,6 @@ impl MetricsCollector {
         self.record_counter("queue_retry_total", 1, labels);
     }
 
-    /// 记录 worker 实时处理中的任务数量
     pub fn record_worker_inflight(&self, worker: &str, inflight: u64) {
         if !self.config.enable_detailed_metrics {
             return;
@@ -667,7 +548,6 @@ impl MetricsCollector {
         self.record_gauge("worker_inflight_tasks", inflight as f64, labels);
     }
 
-    /// 记录 OCR 流水线阶段指标
     pub fn record_pipeline_stage(
         &self,
         stage: &str,
@@ -726,7 +606,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 获取当前流水线阶段指标快照
     pub fn get_pipeline_metrics(&self) -> HashMap<String, PipelineStageStats> {
         self.pipeline_metrics
             .read()
@@ -734,14 +613,12 @@ impl MetricsCollector {
             .unwrap_or_default()
     }
 
-    /// 记录 Worker 心跳成功
     pub fn record_worker_heartbeat_success(&self, worker: &str, duration: Duration) {
         let mut labels = HashMap::new();
         labels.insert("worker".to_string(), worker.to_string());
         self.record_pipeline_stage("heartbeat", true, duration, Some(labels), None);
     }
 
-    /// 记录 Worker 心跳失败
     pub fn record_worker_heartbeat_failure(&self, worker: &str, reason: &str, duration: Duration) {
         if let Ok(mut metrics) = self.system_metrics.write() {
             metrics.worker_heartbeat_failures += 1;
@@ -752,7 +629,6 @@ impl MetricsCollector {
         self.record_pipeline_stage("heartbeat", false, duration, Some(labels), Some(reason));
     }
 
-    /// 记录 Worker 心跳超时
     pub fn record_worker_heartbeat_timeout(&self, worker: &str) {
         if let Ok(mut metrics) = self.system_metrics.write() {
             metrics.worker_heartbeat_timeouts += 1;
@@ -770,7 +646,6 @@ impl MetricsCollector {
         );
     }
 
-    /// 记录NATS连接失败
     pub fn record_nats_connection_failure(&self) {
         if let Ok(mut metrics) = self.system_metrics.write() {
             metrics.nats_connection_failures += 1;
@@ -781,7 +656,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录NATS连接超时
     pub fn record_nats_connection_timeout(&self) {
         if let Ok(mut metrics) = self.system_metrics.write() {
             metrics.nats_connection_timeouts += 1;
@@ -792,7 +666,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录系统资源指标
     pub fn record_system_metrics(&self, cpu: f64, memory: f64, disk: f64) {
         if let Ok(mut metrics) = self.system_metrics.write() {
             metrics.cpu_usage = cpu;
@@ -807,7 +680,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 记录业务指标
     pub fn record_business_metric(&self, metric_name: &str, value: u64) {
         if let Ok(mut metrics) = self.business_metrics.write() {
             match metric_name {
@@ -829,7 +701,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 获取请求指标
     pub fn get_request_metrics(&self) -> RequestMetrics {
         let mut metrics = if let Ok(metrics) = self.request_metrics.read() {
             metrics.clone()
@@ -837,7 +708,6 @@ impl MetricsCollector {
             RequestMetrics::default()
         };
 
-        // 计算百分位数
         if let Ok(samples) = self.response_time_samples.read() {
             if !samples.is_empty() {
                 let mut sorted_samples = samples.clone();
@@ -854,7 +724,6 @@ impl MetricsCollector {
         metrics
     }
 
-    /// 获取OCR指标
     pub fn get_ocr_metrics(&self) -> OcrMetrics {
         if let Ok(metrics) = self.ocr_metrics.read() {
             metrics.clone()
@@ -863,7 +732,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 获取系统指标
     pub fn get_system_metrics(&self) -> SystemMetrics {
         if let Ok(metrics) = self.system_metrics.read() {
             metrics.clone()
@@ -872,7 +740,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 获取业务指标
     pub fn get_business_metrics(&self) -> BusinessMetrics {
         if let Ok(metrics) = self.business_metrics.read() {
             metrics.clone()
@@ -881,7 +748,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 获取所有指标样本
     pub fn get_all_samples(&self) -> Vec<MetricSample> {
         if let Ok(samples) = self.samples.read() {
             samples.clone()
@@ -890,7 +756,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 重置所有指标
     pub fn reset(&self) {
         if let Ok(mut samples) = self.samples.write() {
             samples.clear();
@@ -906,7 +771,6 @@ impl MetricsCollector {
         }
     }
 
-    /// 清理过期指标
     pub async fn cleanup_expired_metrics(&self) {
         let retention_period = self.config.retention_period;
         let cutoff_timestamp = current_timestamp() - retention_period * 1000;
@@ -917,7 +781,6 @@ impl MetricsCollector {
     }
 }
 
-/// 计算百分位数
 fn percentile(sorted_values: &[f64], p: f64) -> f64 {
     if sorted_values.is_empty() {
         return 0.0;
@@ -937,7 +800,6 @@ fn percentile(sorted_values: &[f64], p: f64) -> f64 {
     sorted_values[index]
 }
 
-/// 获取当前时间戳（毫秒）
 fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -945,7 +807,6 @@ fn current_timestamp() -> u64 {
         .as_millis() as u64
 }
 
-/// 默认实现
 impl Default for RequestMetrics {
     fn default() -> Self {
         Self {
@@ -1027,7 +888,6 @@ mod tests {
     fn test_metrics_collector() {
         let collector = MetricsCollector::new(MetricsConfig::default());
 
-        // 记录HTTP请求
         collector.record_http_request("GET", "/api/test", 200, Duration::from_millis(150));
         collector.record_http_request("POST", "/api/test", 500, Duration::from_millis(300));
 

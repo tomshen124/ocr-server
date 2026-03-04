@@ -1,12 +1,9 @@
 /**
- * 监控系统图表增强模块
- * 提供实时数据图表展示功能
  */
 
 (function() {
     'use strict';
 
-    // 图表实例存储
     window.MonitorCharts = {
         resourceTrend: null,
         loadTrend: null,
@@ -14,7 +11,6 @@
         durationTrend: null
     };
 
-    // 数据历史存储
     const dataHistory = {
         cpu: [],
         memory: [],
@@ -25,7 +21,6 @@
 
     const MAX_DATA_POINTS = 20;
 
-    // Chart.js 默认配置
     const chartDefaults = {
         responsive: true,
         maintainAspectRatio: false,
@@ -62,7 +57,6 @@
     };
 
     /**
-     * 初始化资源趋势图表 (CPU & 内存)
      */
     function initResourceTrendChart() {
         const canvas = document.getElementById('resourceTrendChart');
@@ -157,7 +151,6 @@
     }
 
     /**
-     * 初始化系统负载趋势图���
      */
     function initLoadTrendChart() {
         const canvas = document.getElementById('loadTrendChart');
@@ -227,7 +220,6 @@
     }
 
     /**
-     * 初始化状态分布饼图
      */
     function initStatusDistributionChart() {
         const canvas = document.getElementById('statusDistributionChart');
@@ -242,10 +234,10 @@
                 datasets: [{
                     data: [0, 0, 0, 0],
                     backgroundColor: [
-                        'rgba(82, 196, 26, 0.8)',    // 绿色 - 已完成
-                        'rgba(22, 119, 255, 0.8)',   // 蓝色 - 处理中
-                        'rgba(255, 77, 79, 0.8)',     // 红色 - 失败
-                        'rgba(250, 173, 20, 0.8)'     // 橙色 - 排队中
+                        'rgba(82, 196, 26, 0.8)',
+                        'rgba(22, 119, 255, 0.8)',
+                        'rgba(255, 77, 79, 0.8)',
+                        'rgba(250, 173, 20, 0.8)'
                     ],
                     borderColor: '#ffffff',
                     borderWidth: 2,
@@ -303,7 +295,6 @@
     }
 
     /**
-     * 初始化处理时长趋势图表
      */
     function initDurationTrendChart() {
         const canvas = document.getElementById('durationTrendChart');
@@ -375,7 +366,6 @@
     }
 
     /**
-     * 更新资源趋势图表数据
      */
     function updateResourceTrendChart(cpuUsage, memoryUsage, diskUsage) {
         if (!window.MonitorCharts.resourceTrend) return;
@@ -388,7 +378,6 @@
         dataHistory.memory.push(memoryUsage);
         dataHistory.disk.push(diskUsage);
 
-        // 保持最多20个数据点
         if (dataHistory.timestamps.length > MAX_DATA_POINTS) {
             dataHistory.timestamps.shift();
             dataHistory.cpu.shift();
@@ -400,9 +389,8 @@
         chart.data.labels = [...dataHistory.timestamps];
         chart.data.datasets[0].data = [...dataHistory.cpu];
         chart.data.datasets[1].data = [...dataHistory.memory];
-        chart.update('none'); // 使用'none'模式避免动画，提高性能
+        chart.update('none');
 
-        // 更新负载趋势图
         if (window.MonitorCharts.loadTrend) {
             window.MonitorCharts.loadTrend.data.labels = [...dataHistory.timestamps];
             window.MonitorCharts.loadTrend.data.datasets[0].data = [...dataHistory.disk];
@@ -411,7 +399,6 @@
     }
 
     /**
-     * 更新状态分布图表数据
      */
     function updateStatusDistributionChart(completed, processing, failed, queued) {
         if (!window.MonitorCharts.statusDistribution) return;
@@ -422,17 +409,15 @@
     }
 
     /**
-     * 更新处理时长趋势图表
      */
     function updateDurationTrendChart(durations) {
         if (!window.MonitorCharts.durationTrend) return;
 
         const chart = window.MonitorCharts.durationTrend;
 
-        // 提取最近10条数据
         const recentDurations = durations.slice(-10);
         const labels = recentDurations.map((_, index) => `#${index + 1}`);
-        const data = recentDurations.map(d => d / 1000); // 转换为秒
+        const data = recentDurations.map(d => d / 1000);
 
         chart.data.labels = labels;
         chart.data.datasets[0].data = data;
@@ -440,10 +425,8 @@
     }
 
     /**
-     * 初始化所有图表
      */
     function initAllCharts() {
-        // 等待Chart.js加载完成
         if (typeof Chart === 'undefined') {
             console.warn('Chart.js未加载，延迟初始化图表');
             setTimeout(initAllCharts, 500);
@@ -460,13 +443,11 @@
         console.log('✓ 所有监控图表初始化完成');
     }
 
-    // 暴露公共方法
     window.MonitorCharts.init = initAllCharts;
     window.MonitorCharts.updateResourceTrend = updateResourceTrendChart;
     window.MonitorCharts.updateStatusDistribution = updateStatusDistributionChart;
     window.MonitorCharts.updateDurationTrend = updateDurationTrendChart;
 
-    // DOM加载完成后自动初始化
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initAllCharts);
     } else {

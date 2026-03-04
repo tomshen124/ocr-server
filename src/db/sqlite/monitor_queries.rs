@@ -1,16 +1,12 @@
-//! 监控系统数据库查询方法
-//! 提供监控用户和会话的数据库操作
 
 use anyhow::Result;
 use sqlx::{Row, SqlitePool};
 
 use crate::db::models::{MonitorSession, MonitorUser};
 
-/// 监控查询管理器
 pub struct MonitorQueries;
 
 impl MonitorQueries {
-    /// 根据用户名查找用户
     pub async fn find_user_by_username(
         pool: &SqlitePool,
         username: &str,
@@ -36,7 +32,6 @@ impl MonitorQueries {
         }
     }
 
-    /// 获取用户密码哈希
     pub async fn get_user_password_hash(pool: &SqlitePool, user_id: &str) -> Result<String> {
         let row = sqlx::query("SELECT password_hash FROM monitor_users WHERE id = ?")
             .bind(user_id)
@@ -46,7 +41,6 @@ impl MonitorQueries {
         Ok(row.get("password_hash"))
     }
 
-    /// 根据ID查找监控用户
     pub async fn find_user_by_id(pool: &SqlitePool, user_id: &str) -> Result<Option<MonitorUser>> {
         let row = sqlx::query(
             "SELECT id, username, role, last_login_at, login_count, is_active \
@@ -70,7 +64,6 @@ impl MonitorQueries {
         }
     }
 
-    /// 列出所有监控用户
     pub async fn list_users(pool: &SqlitePool) -> Result<Vec<MonitorUser>> {
         let rows = sqlx::query(
             "SELECT id, username, role, last_login_at, login_count, is_active \
@@ -92,7 +85,6 @@ impl MonitorQueries {
             .collect())
     }
 
-    /// 创建会话
     pub async fn create_session(
         pool: &SqlitePool,
         session_id: &str,
@@ -119,7 +111,6 @@ impl MonitorQueries {
         Ok(())
     }
 
-    /// 根据会话ID查找会话
     pub async fn find_session_by_id(
         pool: &SqlitePool,
         session_id: &str,
@@ -154,7 +145,6 @@ impl MonitorQueries {
         }
     }
 
-    /// 更新登录信息
     pub async fn update_login_info(pool: &SqlitePool, user_id: &str, now: &str) -> Result<()> {
         sqlx::query(
             "UPDATE monitor_users SET last_login_at = ?, login_count = login_count + 1, updated_at = ? WHERE id = ?"
@@ -168,7 +158,6 @@ impl MonitorQueries {
         Ok(())
     }
 
-    /// 更新会话活动时间
     pub async fn update_session_activity(
         pool: &SqlitePool,
         session_id: &str,
@@ -183,7 +172,6 @@ impl MonitorQueries {
         Ok(())
     }
 
-    /// 删除会话（软删除）
     pub async fn delete_session(pool: &SqlitePool, session_id: &str) -> Result<()> {
         sqlx::query("UPDATE monitor_sessions SET is_active = 0 WHERE id = ?")
             .bind(session_id)
@@ -193,7 +181,6 @@ impl MonitorQueries {
         Ok(())
     }
 
-    /// 清理过期会话
     pub async fn cleanup_expired_sessions(pool: &SqlitePool, now: &str) -> Result<u64> {
         let result = sqlx::query(
             "UPDATE monitor_sessions SET is_active = 0 WHERE expires_at < ? AND is_active = 1",
@@ -205,7 +192,6 @@ impl MonitorQueries {
         Ok(result.rows_affected())
     }
 
-    /// 获取活跃会话数量
     pub async fn get_active_sessions_count(pool: &SqlitePool, now: &str) -> Result<i64> {
         let row = sqlx::query(
             "SELECT COUNT(*) as count FROM monitor_sessions WHERE expires_at > ? AND is_active = 1",
@@ -217,7 +203,6 @@ impl MonitorQueries {
         Ok(row.get("count"))
     }
 
-    /// 创建监控用户
     pub async fn create_user(
         pool: &SqlitePool,
         id: &str,
@@ -242,7 +227,6 @@ impl MonitorQueries {
         Ok(())
     }
 
-    /// 更新监控用户角色
     pub async fn update_user_role(
         pool: &SqlitePool,
         user_id: &str,
@@ -259,7 +243,6 @@ impl MonitorQueries {
         Ok(())
     }
 
-    /// 更新监控用户密码
     pub async fn update_user_password(
         pool: &SqlitePool,
         user_id: &str,
@@ -276,7 +259,6 @@ impl MonitorQueries {
         Ok(())
     }
 
-    /// 设置监控用户是否启用
     pub async fn set_user_active(
         pool: &SqlitePool,
         user_id: &str,
@@ -293,7 +275,6 @@ impl MonitorQueries {
         Ok(())
     }
 
-    /// 统计活跃管理员数量
     pub async fn count_active_admins(pool: &SqlitePool) -> Result<i64> {
         let row = sqlx::query(
             "SELECT COUNT(*) as count FROM monitor_users \

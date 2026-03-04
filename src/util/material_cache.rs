@@ -20,7 +20,6 @@ pub struct MaterialToken {
     pub content_type: Option<String>,
 }
 
-/// 根据 preview/material/attachment 获取缓存记录唯一ID
 pub fn cached_record_id(preview_id: &str, material_code: &str, attachment_index: usize) -> String {
     format!("{}:{}:{}", preview_id, material_code, attachment_index)
 }
@@ -240,7 +239,6 @@ pub async fn read_material(token: &str) -> Result<Vec<u8>> {
         .with_context(|| format!("读取缓存材料失败: {}", path.display()))
 }
 
-/// 获取缓存材料的本地路径
 pub async fn get_material_path(token: &str) -> Option<PathBuf> {
     let cache = ensure_initialized().ok()?;
     let guard = cache.read().await;
@@ -287,7 +285,7 @@ fn spawn_cleanup_task() {
 
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_secs(CLEANUP_INTERVAL_SECS));
-        ticker.tick().await; // 等待首个周期，避免刚启动就打扰
+        ticker.tick().await;
 
         loop {
             ticker.tick().await;

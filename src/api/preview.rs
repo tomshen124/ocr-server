@@ -1,5 +1,3 @@
-//! 预审处理模块
-//! 处理预审请求、状态查询、结果展示等核心业务逻辑
 
 use crate::api::enhancement::{maybe_enhance_error, RequestContext};
 use crate::db::traits::{
@@ -229,7 +227,6 @@ fn summarize_download_error(err: &anyhow::Error) -> String {
     msg
 }
 
-/// 主预审处理函数
 pub async fn preview(
     State(app_state): State<AppState>,
     req: axum::extract::Request,
@@ -266,11 +263,9 @@ async fn preview_internal(
     req: axum::extract::Request,
     request_start: Instant,
 ) -> Response {
-    // 提取请求体并保存headers和extensions以便后续使用
     let (parts, body) = req.into_parts();
     let headers = &parts.headers;
 
-    // 获取请求上下文（包含trace_id和功能开关）
     let request_ctx = parts
         .extensions
         .get::<RequestContext>()
@@ -280,7 +275,6 @@ async fn preview_internal(
             enhanced_features: false,
         });
 
-    // 从认证中间件获取SessionUser
     let session_user = parts.extensions.get::<SessionUser>().cloned();
     let mut resolved_user = session_user.clone();
     let bytes = match axum::body::to_bytes(body, usize::MAX).await {
@@ -296,15 +290,12 @@ async fn preview_internal(
         }
     };
 
-    //  开放格式解析：先尝试解析为通用JSON，然后容错处理
     let mut preview_body: PreviewBody = match serde_json::from_slice::<Value>(&bytes) {
         Ok(json_value) => {
-            // 策略1：尝试标准格式
             if let Ok(standard_body) = serde_json::from_value::<PreviewBody>(json_value.clone()) {
                 tracing::debug!(" 解析为标准PreviewBody格式成功");
                 standard_body
             }
-            // 策略2：尝试生产环境格式
             else if let Ok(prod_request) = serde_json::from_value::<
                 crate::model::preview::ProductionPreviewRequest,
             >(json_value.clone())
@@ -312,7 +303,6 @@ async fn preview_internal(
                 tracing::debug!(" 解析为生产环境格式成功，正在转换...");
                 prod_request.to_preview_body()
             }
-            // 策略3：创建最小化的兼容结构
             else {
                 tracing::warn!(" 无法解析为已知格式，创建兼容结构...");
                 create_fallback_preview_body(&json_value)
@@ -348,12 +338,10 @@ async fn preview_internal(
     )
     .await;
 
-    //  用户身份验证 - 根据环境模式决定严格程度
     let debug_mode = CONFIG.debug.enabled
         || CONFIG.runtime_mode.mode == "development"
         || std::env::var("ENABLE_AUTH_BYPASS").unwrap_or("false".to_string()) == "true";
 
-    //  记录API调用来源信息，用于审计和统计
     let api_source = headers
         .get("X-API-Source")
         .and_then(|v| v.to_str().ok())
@@ -363,7 +351,6 @@ async fn preview_internal(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("v1");
 
-    //  增强日志：记录用户状态传递相关信息
     let user_agent = headers
         .get("user-agent")
         .and_then(|v| v.to_str().ok())
@@ -543,10 +530,8 @@ async fn preview_internal(
         }
     }
 
-    // 保留第三方系统的原始requestId
     let third_party_request_id = preview_body.preview.request_id.clone();
 
-    // 服务端生成我们自己的安全previewId
     let our_preview_id = crate::api::utils::generate_secure_preview_id();
     tracing::Span::current().record("preview_id", &tracing::field::display(&our_preview_id));
     tracing::debug!(
@@ -555,10 +540,8 @@ async fn preview_internal(
         preview_id = %our_preview_id
     );
 
-    // 使用我们的previewId作为文件名（确保安全）
     preview_body.preview.request_id = our_preview_id.clone();
 
-    //  安全改进：验证第三方提供的用户ID格式
     if preview_body.user_id.is_empty() || preview_body.user_id.len() > 50 {
         tracing::warn!(
             " 无效的用户ID格式: {}",
@@ -570,8 +553,6 @@ async fn preview_internal(
         return finalize_preview_response(response, "invalid_user_id", request_start);
     }
 
-    // 计算材料指纹并对相同数据进行限流/折叠（持久化于 DM）
-    // 🔧 增加重复限制到 999999，允许更多重复请求处理
     let materials_hash = compute_materials_hash(&preview_body.preview.material_data);
     let fingerprint = build_dedup_fingerprint(
         &preview_body.user_id,
@@ -645,7 +626,6 @@ async fn preview_internal(
         }
     }
 
-    // 建立ID映射关系（使用数据库替代文件操作）
     if let Err(e) = save_id_mapping_to_database(
         &app_state.database,
         &our_preview_id,
@@ -663,7 +643,6 @@ async fn preview_internal(
         return finalize_preview_response(response, "id_mapping_failed", request_start);
     }
 
-    //  NEW: 保存原始请求数据和提取的材料信息
     let original_request_body = String::from_utf8_lossy(&bytes).to_string();
     if let Err(e) = save_original_request_to_database(
         &app_state.database,
@@ -675,10 +654,8 @@ async fn preview_internal(
     {
         tracing::warn!("保存原始请求数据失败: {}", e);
         METRICS_COLLECTOR.record_preview_persistence_failure("save_original_request");
-        // 不阻断流程，继续处理
     }
 
-    // 将任务推入材料下载队列
     if let Err(e) = app_state
         .database
         .enqueue_material_download(&our_preview_id, &original_request_body)
@@ -693,12 +670,10 @@ async fn preview_internal(
 
     tracing::info!(preview_id = %our_preview_id, "预审任务已入队(材料下载队列)");
 
-    // 立即返回预审访问URL，不等待预审完成
     let view_url = format!("{}/api/preview/view/{}", CONFIG.host, our_preview_id);
 
     tracing::debug!("立即返回预审访问URL: {}", view_url);
 
-    // 构建响应数据 - 第三方系统只需要知道提交成功
     let response_data = serde_json::json!({
         "success": true,
         "errorCode": 200,
@@ -711,8 +686,6 @@ async fn preview_internal(
     }
     });
 
-    // 预审访问URL是给用户的，不是给第三方系统的
-    // 用户会从政务系统跳转到: /api/preview/view/{previewId}
     tracing::debug!("用户预审访问URL: {}", view_url);
 
     let response = Json(response_data).into_response();
@@ -1830,7 +1803,6 @@ impl PreviewTaskHandler for LocalPreviewTaskHandler {
             "开始自动预审任务（并发控制）"
         );
 
-        // 规则配置已改为事项级别，与主题无关，沿用主题字段记录事项ID
         if preview_body.preview.theme_id.is_none() {
             preview_body.preview.theme_id = Some(preview_body.preview.matter_id.clone());
         }
@@ -2483,7 +2455,6 @@ pub(crate) async fn sync_preview_request_status_with_hint(
     sync_preview_request_status_inner(database, preview_id, third_party_request_id, status).await;
 }
 
-// 使用数据库保存ID映射关系（替代文件操作）
 pub async fn save_id_mapping_to_database(
     database: &Arc<dyn crate::db::Database>,
     preview_id: &str,
@@ -2506,7 +2477,7 @@ pub async fn save_id_mapping_to_database(
         user_id: user_id.to_string(),
         user_info_json,
         file_name: format!("{}.html", preview_id),
-        ocr_text: "".to_string(), // 将在后续处理中填充
+        ocr_text: "".to_string(),
         theme_id: None,
         evaluation_result: None,
         preview_url: CONFIG.preview_view_url(preview_id),
@@ -2545,7 +2516,6 @@ pub async fn save_id_mapping_to_database(
     Ok(())
 }
 
-///  增强版：保存完整的原始请求数据到数据库
 pub async fn save_original_request_to_database(
     database: &Arc<dyn crate::db::Database>,
     preview_id: &str,
@@ -2554,7 +2524,6 @@ pub async fn save_original_request_to_database(
 ) -> anyhow::Result<()> {
     tracing::debug!(" 保存原始请求数据到数据库: {}", preview_id);
 
-    // 创建材料数据摘要
     let materials_summary: Vec<String> = extracted_materials
         .iter()
         .map(|m| format!("{} ({}个附件)", m.code, m.attachment_list.len()))
@@ -2567,9 +2536,6 @@ pub async fn save_original_request_to_database(
         materials_summary
     );
 
-    // 尝试更新记录，添加原始请求数据
-    // 注意：这里需要扩展数据库schema支持原始请求数据存储
-    // 暂时通过OCR文本字段存储摘要信息
     let summary_text = format!(
         "原始请求长度: {} bytes\n材料数量: {}\n材料列表: {}\n提取时间: {}",
         original_request_body.len(),
@@ -2587,7 +2553,6 @@ pub async fn save_original_request_to_database(
     Ok(())
 }
 
-// 从数据库获取ID映射信息（替代文件操作）
 pub async fn get_id_mapping_from_database(
     database: &Arc<dyn crate::db::Database>,
     preview_id: &str,
@@ -2595,7 +2560,6 @@ pub async fn get_id_mapping_from_database(
     database.get_preview_record(preview_id).await
 }
 
-/// 提供固定路径的最新预审结果下载（PDF优先，HTML兜底）
 pub async fn download_latest_pdf(Path(preview_id): Path<String>) -> Response {
     let pdf_path = ocr_conn::CURRENT_DIR
         .join("preview")
@@ -2633,7 +2597,6 @@ pub async fn download_latest_pdf(Path(preview_id): Path<String>) -> Response {
     }
 }
 
-/// 通知第三方系统预审结果
 pub async fn notify_third_party_system(
     preview_id: &str,
     third_party_request_id: &str,
@@ -2712,12 +2675,8 @@ pub async fn notify_third_party_system(
     .await
 }
 
-// preview_submit测试占位符函数已删除 - 使用主要的preview函数
 
-///  灵活的JSON解析器：支持任意格式的JSON请求体
-/// 根据"开放所有请求体"的设计原则，智能提取和构造PreviewBody结构
 pub fn parse_flexible_json_to_preview_body(bytes: &[u8]) -> anyhow::Result<PreviewBody> {
-    // 先尝试解析为通用JSON对象
     let json_value: Value = match serde_json::from_slice(bytes) {
         Ok(value) => value,
         Err(e) => {
@@ -2732,16 +2691,13 @@ pub fn parse_flexible_json_to_preview_body(bytes: &[u8]) -> anyhow::Result<Previ
         serde_json::to_string_pretty(&json_value).unwrap_or("无法序列化".to_string())
     );
 
-    //  尝试三种解析策略，按优先级从高到低
 
-    // 策略1：标准PreviewBody格式（包含userId和preview字段）
     if let Ok(standard_body) = serde_json::from_value::<PreviewBody>(json_value.clone()) {
         tracing::debug!(" 策略1成功：标准PreviewBody格式");
         log_scene_data(&standard_body.preview.scene_data);
         return Ok(standard_body);
     }
 
-    // 策略2：生产环境格式（直接包含所有字段，无包装层）
     if let Ok(prod_request) = serde_json::from_value::<
         crate::model::preview::ProductionPreviewRequest,
     >(json_value.clone())
@@ -2752,7 +2708,6 @@ pub fn parse_flexible_json_to_preview_body(bytes: &[u8]) -> anyhow::Result<Previ
         return Ok(converted_body);
     }
 
-    // 策略3：通用智能解析（最灵活的方案）
     tracing::debug!(" 策略3：智能解析任意JSON结构...");
 
     let preview_body = build_preview_body_from_any_json(&json_value)?;
@@ -2762,7 +2717,6 @@ pub fn parse_flexible_json_to_preview_body(bytes: &[u8]) -> anyhow::Result<Previ
     Ok(preview_body)
 }
 
-/// 记录sceneData接收情况的辅助函数
 fn log_scene_data(scene_data: &Option<Vec<SceneValue>>) {
     if let Some(ref scene_data) = scene_data {
         tracing::debug!(" 收到sceneData: {} 个情形数据", scene_data.len());
@@ -2779,16 +2733,12 @@ fn log_scene_data(scene_data: &Option<Vec<SceneValue>>) {
     }
 }
 
-///  从任意JSON结构智能构造PreviewBody
-/// 这是最灵活的解析方案，能够处理各种未知格式
 fn build_preview_body_from_any_json(json: &Value) -> anyhow::Result<PreviewBody> {
     tracing::debug!(" 开始智能分析JSON结构...");
 
-    // 智能提取用户ID
     let user_id = extract_user_id(json)?;
     tracing::debug!(" 提取到用户ID: {}", user_id);
 
-    // 智能构造Preview对象
     let preview = build_preview_from_json(json)?;
     tracing::debug!(" 构造Preview对象完成");
 
@@ -2802,9 +2752,7 @@ fn build_preview_body_from_any_json(json: &Value) -> anyhow::Result<PreviewBody>
     Ok(preview_body)
 }
 
-/// 智能提取用户ID，支持多种命名约定
 fn extract_user_id(json: &Value) -> anyhow::Result<String> {
-    // 尝试多种可能的字段名
     let possible_user_id_fields = [
         "userId",
         "user_id",
@@ -2835,15 +2783,12 @@ fn extract_user_id(json: &Value) -> anyhow::Result<String> {
         }
     }
 
-    // 如果找不到有效的用户ID，生成一个临时ID
     let temp_user_id = format!("temp_user_{}", chrono::Utc::now().timestamp());
     tracing::warn!(" 无法提取用户ID，使用临时ID: {}", temp_user_id);
     Ok(temp_user_id)
 }
 
-/// 智能构造Preview对象
 fn build_preview_from_json(json: &Value) -> anyhow::Result<Preview> {
-    // 智能提取各个字段，如果找不到则使用默认值
 
     let matter_id = extract_string_field(json, &["matterId", "matter_id", "matterID"])
         .unwrap_or_else(|| format!("matter_{}", chrono::Utc::now().timestamp()));
@@ -2868,18 +2813,15 @@ fn build_preview_from_json(json: &Value) -> anyhow::Result<Preview> {
 
     let copy = extract_bool_field(json, &["copy", "isCopy"]).unwrap_or(false);
 
-    // 智能提取数组类型字段
     let form_data =
         extract_array_field(json, &["formData", "form_data", "forms"]).unwrap_or_else(Vec::new);
 
     let material_data = extract_material_data(json)?;
 
-    // 智能提取用户信息
     let agent_info = extract_user_info(json, &["agentInfo", "agent_info", "agent"])?;
     let subject_info = extract_user_info(json, &["subjectInfo", "subject_info", "subject"])
         .unwrap_or_else(|_| agent_info.clone());
 
-    // 智能提取sceneData
     let scene_data = extract_scene_data(json);
 
     Ok(Preview {
@@ -2894,12 +2836,11 @@ fn build_preview_from_json(json: &Value) -> anyhow::Result<Preview> {
         material_data,
         agent_info,
         subject_info,
-        theme_id: None, // 将在后续处理中设置
+        theme_id: None,
         scene_data,
     })
 }
 
-/// 按路径提取JSON字段（支持嵌套路径，如 "agentInfo.userId"）
 fn extract_field_by_path<'a>(json: &'a Value, path: &str) -> Option<&'a Value> {
     let parts: Vec<&str> = path.split('.').collect();
     let mut current = json;
@@ -2911,7 +2852,6 @@ fn extract_field_by_path<'a>(json: &'a Value, path: &str) -> Option<&'a Value> {
     Some(current)
 }
 
-/// 智能提取字符串字段
 fn extract_string_field(json: &Value, field_names: &[&str]) -> Option<String> {
     for field_name in field_names {
         if let Some(value) = extract_field_by_path(json, field_name) {
@@ -2925,7 +2865,6 @@ fn extract_string_field(json: &Value, field_names: &[&str]) -> Option<String> {
     None
 }
 
-/// 智能提取布尔字段
 fn extract_bool_field(json: &Value, field_names: &[&str]) -> Option<bool> {
     for field_name in field_names {
         if let Some(value) = extract_field_by_path(json, field_name) {
@@ -2937,7 +2876,6 @@ fn extract_bool_field(json: &Value, field_names: &[&str]) -> Option<bool> {
     None
 }
 
-/// 智能提取数组字段
 fn extract_array_field(json: &Value, field_names: &[&str]) -> Option<Vec<Value>> {
     for field_name in field_names {
         if let Some(value) = extract_field_by_path(json, field_name) {
@@ -2949,14 +2887,12 @@ fn extract_array_field(json: &Value, field_names: &[&str]) -> Option<Vec<Value>>
     None
 }
 
-/// 智能提取材料数据
 fn extract_material_data(json: &Value) -> anyhow::Result<Vec<MaterialValue>> {
     let field_names = ["materialData", "material_data", "materials", "attachments"];
 
     for field_name in &field_names {
         if let Some(value) = extract_field_by_path(json, field_name) {
             if let Some(arr) = value.as_array() {
-                // 尝试直接解析为MaterialValue数组
                 if let Ok(materials) =
                     serde_json::from_value::<Vec<MaterialValue>>(Value::Array(arr.clone()))
                 {
@@ -2968,7 +2904,6 @@ fn extract_material_data(json: &Value) -> anyhow::Result<Vec<MaterialValue>> {
                     return Ok(materials);
                 }
 
-                // 如果直接解析失败，尝试智能构造
                 let mut materials = Vec::new();
                 for (index, item) in arr.iter().enumerate() {
                     if let Ok(material) = build_material_from_json(item, index) {
@@ -2988,12 +2923,10 @@ fn extract_material_data(json: &Value) -> anyhow::Result<Vec<MaterialValue>> {
         }
     }
 
-    // 如果找不到材料数据，返回空数组
     tracing::debug!("未找到材料数据，返回空数组");
     Ok(Vec::new())
 }
 
-/// 从JSON智能构造单个MaterialValue
 fn build_material_from_json(json: &Value, index: usize) -> anyhow::Result<MaterialValue> {
     let code = extract_string_field(json, &["code", "materialCode", "material_code", "type"])
         .unwrap_or_else(|| format!("material_{}", index));
@@ -3035,7 +2968,6 @@ fn build_material_from_json(json: &Value, index: usize) -> anyhow::Result<Materi
     })
 }
 
-/// 从JSON智能构造单个Attachment
 fn build_attachment_from_json(
     json: &Value,
     index: usize,
@@ -3064,17 +2996,14 @@ fn build_attachment_from_json(
     })
 }
 
-/// 智能提取用户信息
 fn extract_user_info(json: &Value, field_names: &[&str]) -> anyhow::Result<UserInfo> {
     for field_name in field_names {
         if let Some(value) = extract_field_by_path(json, field_name) {
-            // 尝试直接解析
             if let Ok(user_info) = serde_json::from_value::<UserInfo>(value.clone()) {
                 tracing::debug!("通过字段 '{}' 解析到用户信息", field_name);
                 return Ok(user_info);
             }
 
-            // 智能构造用户信息
             if let Ok(user_info) = build_user_info_from_json(value) {
                 tracing::debug!("通过字段 '{}' 智能构造用户信息", field_name);
                 return Ok(user_info);
@@ -3082,12 +3011,10 @@ fn extract_user_info(json: &Value, field_names: &[&str]) -> anyhow::Result<UserI
         }
     }
 
-    // 如果找不到用户信息，创建默认用户信息
     tracing::warn!("未找到用户信息，创建默认用户信息");
     Ok(create_default_user_info())
 }
 
-/// 从JSON智能构造UserInfo
 fn build_user_info_from_json(json: &Value) -> anyhow::Result<UserInfo> {
     let user_id = extract_string_field(json, &["userId", "user_id", "userID", "id"])
         .unwrap_or_else(|| format!("user_{}", chrono::Utc::now().timestamp()));
@@ -3157,7 +3084,6 @@ fn build_user_info_from_json(json: &Value) -> anyhow::Result<UserInfo> {
     })
 }
 
-/// 智能提取用户信息的默认值版本
 fn create_default_user_info() -> UserInfo {
     let default_user_id = format!("user_{}", chrono::Utc::now().timestamp());
     UserInfo {
@@ -3179,14 +3105,12 @@ fn create_default_user_info() -> UserInfo {
     }
 }
 
-/// 智能提取场景数据
 fn extract_scene_data(json: &Value) -> Option<Vec<SceneValue>> {
     let field_names = ["sceneData", "scene_data", "scenes"];
 
     for field_name in &field_names {
         if let Some(value) = extract_field_by_path(json, field_name) {
             if let Some(arr) = value.as_array() {
-                // 尝试直接解析为SceneValue数组
                 if let Ok(scenes) =
                     serde_json::from_value::<Vec<SceneValue>>(Value::Array(arr.clone()))
                 {
@@ -3204,11 +3128,9 @@ fn extract_scene_data(json: &Value) -> Option<Vec<SceneValue>> {
     None
 }
 
-///  创建兼容的PreviewBody结构，确保任何JSON都不会报错
 fn create_fallback_preview_body(json: &Value) -> PreviewBody {
     tracing::debug!(" 容错模式：为未知JSON格式创建兼容结构");
 
-    // 尽力提取用户ID，找不到就生成一个
     let user_id = json
         .get("userId")
         .or_else(|| json.get("user_id"))
@@ -3218,14 +3140,12 @@ fn create_fallback_preview_body(json: &Value) -> PreviewBody {
         .unwrap_or("unknown_user")
         .to_string();
 
-    // 如果是空字符串，生成一个临时ID
     let user_id = if user_id.is_empty() || user_id == "unknown_user" {
         format!("fallback_user_{}", chrono::Utc::now().timestamp())
     } else {
         user_id
     };
 
-    // 尽力提取基本字段，找不到就用默认值
     let matter_id = json
         .get("matterId")
         .or_else(|| json.get("matter_id"))
@@ -3250,7 +3170,6 @@ fn create_fallback_preview_body(json: &Value) -> PreviewBody {
         .map(|s| s.to_string())
         .unwrap_or_else(|| format!("fallback_req_{}", chrono::Utc::now().timestamp()));
 
-    //  关键修复：智能提取材料数据，不能直接设为空！
     let material_data = extract_material_data_fallback(json);
     tracing::debug!(" 容错模式提取到 {} 个材料数据", material_data.len());
 
@@ -3262,7 +3181,6 @@ fn create_fallback_preview_body(json: &Value) -> PreviewBody {
         material_data.len()
     );
 
-    // 创建一个最小但有效的UserInfo
     let default_user_info = UserInfo {
         user_id: user_id.clone(),
         certificate_type: "身份证".to_string(),
@@ -3281,7 +3199,6 @@ fn create_fallback_preview_body(json: &Value) -> PreviewBody {
         extra: HashMap::new(),
     };
 
-    // 创建兼容的Preview结构
     let preview = Preview {
         matter_id,
         matter_type: "default".to_string(),
@@ -3290,8 +3207,8 @@ fn create_fallback_preview_body(json: &Value) -> PreviewBody {
         channel: "api".to_string(),
         request_id,
         sequence_no: "1".to_string(),
-        form_data: Vec::new(), // 空的form数据
-        material_data,         //  使用提取到的材料数据，而不是空数组
+        form_data: Vec::new(),
+        material_data,
         agent_info: default_user_info.clone(),
         subject_info: default_user_info,
         theme_id: None,
@@ -3306,11 +3223,9 @@ fn create_fallback_preview_body(json: &Value) -> PreviewBody {
     }
 }
 
-///  容错模式的材料数据提取 - 确保OCR功能不被丢失
 fn extract_material_data_fallback(json: &Value) -> Vec<MaterialValue> {
     tracing::debug!(" 开始容错模式材料数据提取...");
 
-    // 尝试多种可能的字段名和结构
     let possible_material_fields = [
         "materialData",
         "material_data",
@@ -3322,7 +3237,6 @@ fn extract_material_data_fallback(json: &Value) -> Vec<MaterialValue> {
         "documents",
     ];
 
-    // 首先在根级别查找
     for field_name in &possible_material_fields {
         tracing::debug!(" 尝试字段: {}", field_name);
         if let Some(materials) = try_extract_materials_from_value(json, field_name) {
@@ -3330,7 +3244,6 @@ fn extract_material_data_fallback(json: &Value) -> Vec<MaterialValue> {
         }
     }
 
-    // 然后在preview子对象中查找（针对测试数据格式）
     if let Some(preview_obj) = json.get("preview") {
         tracing::debug!(" 在preview子对象中查找材料数据...");
         for field_name in &possible_material_fields {
@@ -3341,7 +3254,6 @@ fn extract_material_data_fallback(json: &Value) -> Vec<MaterialValue> {
         }
     }
 
-    // 最后尝试在根级别查找文件URL
     let possible_url_fields = ["fileUrl", "file_url", "url", "link", "attachUrl", "attaUrl"];
     for url_field in &possible_url_fields {
         if let Some(url_value) = json.get(url_field) {
@@ -3369,13 +3281,11 @@ fn extract_material_data_fallback(json: &Value) -> Vec<MaterialValue> {
     Vec::new()
 }
 
-/// 尝试从JSON值中提取材料数据的辅助函数
 fn try_extract_materials_from_value(json: &Value, field_name: &str) -> Option<Vec<MaterialValue>> {
     if let Some(value) = json.get(field_name) {
         if let Some(arr) = value.as_array() {
             tracing::debug!(" 找到材料数组字段: {}, 长度: {}", field_name, arr.len());
 
-            // 尝试直接解析
             if let Ok(materials) =
                 serde_json::from_value::<Vec<MaterialValue>>(Value::Array(arr.clone()))
             {
@@ -3383,14 +3293,12 @@ fn try_extract_materials_from_value(json: &Value, field_name: &str) -> Option<Ve
                 return Some(materials);
             }
 
-            // 尝试智能构造 - 支持不同的数据结构
             let mut materials = Vec::new();
             for (index, item) in arr.iter().enumerate() {
                 if let Ok(material) = build_material_from_json_fallback(item, index) {
                     tracing::debug!(" 构造材料 {}: {}", index, material.code);
                     materials.push(material);
                 } else if let Ok(material) = build_material_from_test_format(item, index) {
-                    // 尝试测试数据格式
                     tracing::debug!(" 从测试格式构造材料 {}: {}", index, material.code);
                     materials.push(material);
                 }
@@ -3401,7 +3309,6 @@ fn try_extract_materials_from_value(json: &Value, field_name: &str) -> Option<Ve
                 return Some(materials);
             }
         } else if value.is_object() {
-            // 单个对象的情况
             if let Ok(material) = build_material_from_json_fallback(value, 0) {
                 tracing::debug!(" 单个材料对象解析成功: {}", material.code);
                 return Some(vec![material]);
@@ -3414,7 +3321,6 @@ fn try_extract_materials_from_value(json: &Value, field_name: &str) -> Option<Ve
     None
 }
 
-/// 容错模式的单个材料构造
 fn build_material_from_json_fallback(json: &Value, index: usize) -> anyhow::Result<MaterialValue> {
     let code = json
         .get("code")
@@ -3435,7 +3341,6 @@ fn build_material_from_json_fallback(json: &Value, index: usize) -> anyhow::Resu
 
     let mut attachment_list = Vec::new();
 
-    // 尝试提取附件列表
     if let Some(attachments) = json
         .get("attachmentList")
         .or_else(|| json.get("attachment_list"))
@@ -3451,7 +3356,6 @@ fn build_material_from_json_fallback(json: &Value, index: usize) -> anyhow::Resu
         }
     }
 
-    // 如果没有找到附件列表，尝试直接提取URL
     if attachment_list.is_empty() {
         if let Some(url) = json
             .get("url")
@@ -3490,10 +3394,7 @@ fn build_material_from_json_fallback(json: &Value, index: usize) -> anyhow::Resu
     })
 }
 
-/// 从测试数据格式构造材料对象
-/// 支持格式: {"materialId": "...", "materialName": "...", "fileData": "data:...", "fileType": "..."}
 fn build_material_from_test_format(json: &Value, index: usize) -> anyhow::Result<MaterialValue> {
-    // 提取材料ID作为code
     let code = json
         .get("materialId")
         .or_else(|| json.get("material_id"))
@@ -3510,7 +3411,6 @@ fn build_material_from_test_format(json: &Value, index: usize) -> anyhow::Result
 
     let mut attachment_list = Vec::new();
 
-    // 从fileData和fileType构造附件
     if let Some(file_data) = json.get("fileData").and_then(|v| v.as_str()) {
         if !file_data.is_empty() {
             let material_name = json
@@ -3525,7 +3425,6 @@ fn build_material_from_test_format(json: &Value, index: usize) -> anyhow::Result
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
 
-            // 构造文件名
             let file_name = if material_name.contains(".") {
                 material_name.to_string()
             } else {
@@ -3534,8 +3433,8 @@ fn build_material_from_test_format(json: &Value, index: usize) -> anyhow::Result
 
             attachment_list.push(crate::model::preview::Attachment {
                 attach_name: file_name,
-                attach_url: file_data.to_string(), // Base64数据直接作为URL
-                is_cloud_share: false,             // Base64数据不是云分享
+                attach_url: file_data.to_string(),
+                is_cloud_share: false,
                 extra: HashMap::new(),
             });
 
@@ -3560,7 +3459,6 @@ fn build_material_from_test_format(json: &Value, index: usize) -> anyhow::Result
     })
 }
 
-/// 容错模式的附件构造
 fn build_attachment_from_json_fallback(
     json: &Value,
     index: usize,
@@ -3590,7 +3488,7 @@ fn build_attachment_from_json_fallback(
         .or_else(|| json.get("is_cloud_share"))
         .or_else(|| json.get("cloudShare"))
         .and_then(|v| v.as_bool())
-        .unwrap_or(true); // 容错模式默认为云共享
+        .unwrap_or(true);
 
     if !attach_url.is_empty() {
         tracing::debug!(" 构造附件: {} -> {}", attach_name, attach_url);
@@ -3604,19 +3502,13 @@ fn build_attachment_from_json_fallback(
     })
 }
 
-/// 尝试通过浙江政务网免登录获取用户信息
 ///
-/// 这个函数模拟了浙江政务网免登录检测的过程：
-/// 1. 检查请求是否来自已登录的政务网用户
-/// 2. 如果是，尝试获取用户的ticketId
-/// 3. 使用ticketId换取完整的用户信息
 async fn try_auto_login_and_get_user(
     headers: &axum::http::HeaderMap,
     request_ctx: &RequestContext,
 ) -> anyhow::Result<SessionUser> {
     tracing::debug!(" 开始免登录检测流程...");
 
-    // 检查请求头中是否有浙江政务网的特征标识
     let zjzw_indicators = [
         ("X-ZJZW-User", "浙江政务网用户标识"),
         ("X-Portal-User", "门户用户标识"),
@@ -3637,8 +3529,6 @@ async fn try_auto_login_and_get_user(
                     }
                 );
 
-                // 这里可以根据实际的浙江政务网接口规范来处理
-                // 目前先作为演示实现
                 if !value_str.is_empty() && value_str != "none" {
                     return try_get_user_from_zjzw_token(value_str, request_ctx).await;
                 }
@@ -3646,24 +3536,21 @@ async fn try_auto_login_and_get_user(
         }
     }
 
-    // 检查Cookie中是否有政务网会话信息
     if let Some(cookie_header) = headers.get("cookie") {
         if let Ok(cookie_str) = cookie_header.to_str() {
             tracing::debug!(" 检查Cookie中的政务网会话标识");
 
-            // 查找可能的政务网会话Cookie
             let zjzw_cookie_patterns = [
                 "ZJZW_SESSION",
                 "PORTAL_SESSION",
                 "SSO_SESSION",
-                "JSESSIONID", // 常见的J2EE会话ID
+                "JSESSIONID",
             ];
 
             for pattern in &zjzw_cookie_patterns {
                 if cookie_str.contains(pattern) {
                     tracing::debug!(" 发现可能的政务网会话Cookie: {}", pattern);
 
-                    // 尝试解析Cookie值
                     if let Some(session_value) = extract_cookie_value(cookie_str, pattern) {
                         return try_get_user_from_zjzw_session(&session_value, request_ctx).await;
                     }
@@ -3672,7 +3559,6 @@ async fn try_auto_login_and_get_user(
         }
     }
 
-    // 检查Referer是否来自政务网域名
     if let Some(referer) = headers.get("referer") {
         if let Ok(referer_str) = referer.to_str() {
             let zjzw_domains = ["portal.zjzwfw.gov.cn", "zjzwfw.gov.cn", ".zj.gov.cn"];
@@ -3680,7 +3566,6 @@ async fn try_auto_login_and_get_user(
             for domain in &zjzw_domains {
                 if referer_str.contains(domain) {
                     tracing::debug!(" 检测到来自政务网域名的请求: {}", referer_str);
-                    // 可能是从政务网跳转过来的，尝试更深层的检测
                     return try_get_user_from_zjzw_referer(referer_str, request_ctx).await;
                 }
             }
@@ -3691,7 +3576,6 @@ async fn try_auto_login_and_get_user(
     Err(anyhow::anyhow!("无免登录标识"))
 }
 
-/// 从浙江政务网令牌获取用户信息
 async fn try_get_user_from_zjzw_token(
     token: &str,
     request_ctx: &RequestContext,
@@ -3699,17 +3583,11 @@ async fn try_get_user_from_zjzw_token(
     tracing::debug!(" 尝试从政务网令牌获取用户信息");
     tracing::debug!(" 检测到可能的政务网令牌，长度: {}", token.len());
 
-    // 检查token基本格式
     if token.len() < 10 {
         tracing::warn!(" 令牌长度过短，不符合政务网标准");
         return Err(anyhow::anyhow!("令牌格式无效"));
     }
 
-    //  实际实现：使用token作为ticketId调用真实的SSO接口
-    // 政务网免登录流程：
-    // 1. 前端检测到门户已登录状态
-    // 2. 门户会在请求头中携带ticketId或token信息
-    // 3. 后端使用这个ticketId调用SSO接口获取用户信息
 
     tracing::debug!(
         " 调用真实SSO接口获取用户信息，ticketId: {}...",
@@ -3720,7 +3598,6 @@ async fn try_get_user_from_zjzw_token(
         }
     );
 
-    // 直接使用现有的SSO接口，token就是ticketId
     match crate::api::auth::get_user_info_from_sso_with_retry(token).await {
         Ok(user) => {
             tracing::debug!(
@@ -3747,7 +3624,6 @@ async fn try_get_user_from_zjzw_token(
     }
 }
 
-/// 从政务网会话获取用户信息
 async fn try_get_user_from_zjzw_session(
     session_id: &str,
     request_ctx: &RequestContext,
@@ -3755,16 +3631,11 @@ async fn try_get_user_from_zjzw_session(
     tracing::debug!(" 尝试从政务网会话获取用户信息");
     tracing::debug!(" 检测到会话ID，长度: {}", session_id.len());
 
-    // 检查会话ID基本格式
     if session_id.len() < 16 {
         tracing::warn!(" 会话ID长度过短，不符合政务网标准");
         return Err(anyhow::anyhow!("会话ID格式无效"));
     }
 
-    //  实际实现方案：
-    // 政务网会话模式下，通常session_id可能包含或关联ticketId
-    // 如果session_id本身不是ticketId，需要调用政务网会话验证接口获取ticketId
-    // 目前我们先尝试直接作为ticketId使用，如果失败再考虑其他方案
 
     tracing::debug!(" 尝试将会话ID作为ticketId调用SSO接口");
 
@@ -3777,8 +3648,6 @@ async fn try_get_user_from_zjzw_session(
             tracing::warn!(" 会话ID作为ticketId验证失败: {}", e);
             tracing::warn!(" 需要实现专门的政务网会话验证接口");
 
-            // 这里可以扩展实现专门的会话验证API调用
-            // 例如：调用政务网的会话验证接口，获取真正的ticketId
             // let ticket_id = verify_zjzw_session(session_id).await?;
             // crate::api::auth::get_user_info_from_sso_with_retry(&ticket_id).await
 
@@ -3787,7 +3656,6 @@ async fn try_get_user_from_zjzw_session(
     }
 }
 
-/// 从政务网来源获取用户信息
 async fn try_get_user_from_zjzw_referer(
     referer: &str,
     request_ctx: &RequestContext,
@@ -3795,23 +3663,20 @@ async fn try_get_user_from_zjzw_referer(
     tracing::debug!(" 尝试从政务网来源获取用户信息");
     tracing::debug!(" 分析来源URL: {}", referer);
 
-    // 解析referer URL参数，查找ticketId
     if let Ok(url) = url::Url::parse(referer) {
         if let Some(query) = url.query() {
             tracing::debug!(" 解析来源URL参数: {}", query);
 
-            // 解析查询参数
             let query_pairs: std::collections::HashMap<String, String> = url
                 .query_pairs()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect();
 
-            // 按优先级查找可能的用户标识参数
             let user_param_priorities = [
-                "ticketId", // 最高优先级，直接可用的ticketId
-                "token",    // SSO令牌
-                "userId",   // 用户ID（可能需要转换）
-                "userCode", // 用户代码（可能需要转换）
+                "ticketId",
+                "token",
+                "userId",
+                "userCode",
             ];
 
             for param in &user_param_priorities {
@@ -3826,7 +3691,6 @@ async fn try_get_user_from_zjzw_referer(
                         }
                     );
 
-                    // 如果是ticketId或token，直接调用SSO接口
                     if *param == "ticketId" || *param == "token" {
                         tracing::debug!(" 使用{}调用SSO接口获取用户信息", param);
 
@@ -3851,8 +3715,6 @@ async fn try_get_user_from_zjzw_referer(
                         }
                     }
 
-                    // 其他参数类型可以在这里扩展处理
-                    // 例如：userId可能需要额外的转换步骤
                     tracing::debug!(" 参数{}需要进一步处理逻辑", param);
                 }
             }
@@ -3864,7 +3726,6 @@ async fn try_get_user_from_zjzw_referer(
     Err(anyhow::anyhow!("无法从来源URL中提取有效的用户标识"))
 }
 
-/// 从Cookie字符串中提取指定名称的Cookie值
 fn extract_cookie_value(cookie_str: &str, cookie_name: &str) -> Option<String> {
     for cookie_pair in cookie_str.split(';') {
         let cookie_pair = cookie_pair.trim();
@@ -3877,10 +3738,7 @@ fn extract_cookie_value(cookie_str: &str, cookie_name: &str) -> Option<String> {
     None
 }
 
-/// 保存用户登录记录到数据库
 ///
-/// 记录用户登录信息，包括免登录、SSO登录、调试登录等不同方式
-/// 用于审计跟踪和用户行为分析
 pub(crate) async fn save_user_login_record(
     database: &std::sync::Arc<dyn crate::db::Database>,
     user: &SessionUser,
@@ -3893,7 +3751,6 @@ pub(crate) async fn save_user_login_record(
         login_type
     );
 
-    // 提取请求信息
     let client_ip = headers
         .get("x-forwarded-for")
         .or_else(|| headers.get("x-real-ip"))
@@ -3922,7 +3779,6 @@ pub(crate) async fn save_user_login_record(
         })
         .unwrap_or("none".to_string());
 
-    // 构建登录记录数据
     let login_record = serde_json::json!({
         "user_id": user.user_id,
         "user_name": user.user_name,
@@ -3941,7 +3797,6 @@ pub(crate) async fn save_user_login_record(
         "created_at": chrono::Utc::now().to_rfc3339()
     });
 
-    // 保存到数据库
     match database
         .save_user_login_record(
             user.user_id.as_str(),

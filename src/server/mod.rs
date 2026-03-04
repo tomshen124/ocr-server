@@ -1,17 +1,8 @@
-//! 服务器模块
 //!
-//! 这个模块提供了完整的服务器设置和管理功能，包括：
-//! - 配置管理 (config.rs)
-//! - 数据库初始化 (database.rs)
-//! - 存储系统初始化 (storage.rs)
-//! - HTTP服务器设置 (http.rs)
-//! - 监控服务管理 (monitoring.rs)
 //!
-//! 使用示例：
 //! ```rust
 //! use crate::server::ServerBootstrap;
 //!
-//! // 启动完整的服务器
 //! let server = ServerBootstrap::new().await?;
 //! server.start().await?;
 //! ```
@@ -22,7 +13,6 @@ pub mod http;
 pub mod monitoring;
 pub mod storage;
 
-// 重新导出主要组件
 pub use config::{ConfigManager, ConfigValidationReport};
 pub use database::{DatabaseHealth, DatabaseInitializer};
 pub use http::{HttpServer, ServerManager, ServerStatus};
@@ -54,7 +44,6 @@ use tokio::time::{timeout, Duration};
 use tracing::{error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 
-/// 服务器引导程序 - 统一的服务器启动入口
 pub struct ServerBootstrap {
     config: Config,
     validation_report: ConfigValidationReport,
@@ -62,20 +51,15 @@ pub struct ServerBootstrap {
 }
 
 impl ServerBootstrap {
-    /// 创建新的服务器引导程序
     pub async fn new() -> Result<Self> {
         info!("[launch] 开始服务器引导程序...");
 
-        // 加载和验证配置
         let (config, validation_report) = ConfigManager::load_and_validate()?;
 
-        // 初始化日志系统
         let log_guard = ConfigManager::initialize_logging(&config)?;
 
-        // [launch] 初始化所有全局变量（在日志系统初始化之后）
         crate::initialize_globals();
 
-        // 记录配置验证结果
         if validation_report.has_errors() {
             return Err(anyhow::anyhow!(
                 "配置验证失败: {} 个错误",
@@ -92,38 +76,30 @@ impl ServerBootstrap {
         })
     }
 
-    /// 启动服务器
     pub async fn start(self) -> Result<()> {
         info!("=== OCR服务启动 ===");
         info!("版本信息: {}", build_info::summary());
         info!("服务端口: {}", self.config.get_port());
 
-        // 初始化系统启动时间
         init_start_time();
 
-        // 应用 OCR 池配置（需在首次使用前设置）
         apply_ocr_pool_config_for_role("master", &self.config);
 
-        // [config] 配置优化流水线
         crate::util::processing::optimized_pipeline::OPTIMIZED_PIPELINE.configure(&self.config);
 
-        // [search] 初始化分布式链路追踪
         self.initialize_distributed_tracing();
 
-        // 创建应用状态
         let app_state = self.create_app_state().await?;
         service_watchdog::spawn_master_watchdog(&app_state);
         adaptive_limiter::spawn_for_master(&app_state);
         material_cache_manager::spawn_material_cache_manager(&app_state);
 
-        // 启动 Worker 结果异步处理器
         let processor =
             crate::util::worker::result_processor::ResultProcessor::new(app_state.clone());
         tokio::spawn(async move {
             processor.run().await;
         });
 
-        // 启动材料下载服务
         let material_downloader =
             crate::util::material::downloader_service::MaterialDownloaderService::new(
                 app_state.database.clone(),
@@ -133,7 +109,6 @@ impl ServerBootstrap {
             material_downloader.run().await;
         });
 
-        // 预热OCR引擎池（可选，带超时保护）
         match timeout(Duration::from_secs(10), self.prewarm_ocr_engines()).await {
             Ok(_) => info!("[ok] OCR引擎预热完成"),
             Err(_) => {
@@ -142,7 +117,6 @@ impl ServerBootstrap {
             }
         }
 
-        // 启动监控服务（带软超时，防止阻塞HTTP启动）
         info!("[hourglass] 准备启动监控服务（软超时3s）...");
         let monitoring_services: Option<MonitoringServices> = match timeout(
             Duration::from_secs(3),
@@ -160,7 +134,6 @@ impl ServerBootstrap {
             }
             Err(_) => {
                 warn!("[warn] 监控服务启动超过3秒，后台延迟启动");
-                // 后台尝试启动，但不阻塞HTTP
                 let cfg = self.config.clone();
                 tokio::spawn(async move {
                     if let Err(e) = MonitoringManager::start_monitoring_services(&cfg).await {
@@ -173,13 +146,10 @@ impl ServerBootstrap {
             }
         };
 
-        // 创建HTTP服务器
         let server = ServerManager::create_server(&self.config, app_state).await?;
 
-        // 启动服务器（这会阻塞直到关闭）
         let server_result = ServerManager::start_server(server).await;
 
-        // 停止监控服务（如果已成功启动）
         if let Some(svcs) = monitoring_services {
             MonitoringManager::stop_monitoring_services(svcs).await?;
         }
@@ -187,14 +157,11 @@ impl ServerBootstrap {
         server_result
     }
 
-    /// 创建应用状态
     async fn create_app_state(&self) -> Result<AppState> {
         info!("[build] 创建应用状态...");
 
-        // 初始化数据库
         let database = self.initialize_database().await?;
 
-        // 初始化存储系统
         let storage = self.initialize_storage().await?;
 
         material_cache::init(
@@ -234,7 +201,6 @@ impl ServerBootstrap {
             }
         }
 
-        // 初始化HTTP客户端
         let http_client = Arc::new(
             crate::util::http_client::HttpClient::default_client()
                 .context("初始化HTTP客户端失败")?,
@@ -252,7 +218,6 @@ impl ServerBootstrap {
         let submission_semaphore = Arc::new(Semaphore::new(submission_permits));
         let download_semaphore = Arc::new(Semaphore::new(download_permits));
 
-        // 创建应用状态
         let app_state = AppState {
             database,
             storage,
@@ -280,7 +245,6 @@ impl ServerBootstrap {
         Ok(app_state)
     }
 
-    /// 启动动态Worker管理器
     async fn start_dynamic_worker_manager(
         &self,
         config: DynamicWorkerConfig,
@@ -325,50 +289,40 @@ impl ServerBootstrap {
         Ok(())
     }
 
-    /// 初始化数据库
     async fn initialize_database(&self) -> Result<Arc<dyn crate::db::Database>> {
         let database = DatabaseInitializer::create_from_config(&self.config).await?;
 
-        // 验证数据库连接
         DatabaseInitializer::validate_connection(&database).await?;
 
-        // 初始化数据库架构
         DatabaseInitializer::initialize_schema(&database).await?;
 
         Ok(database)
     }
 
-    /// 初始化存储系统
     async fn initialize_storage(&self) -> Result<Arc<dyn crate::storage::Storage>> {
         let storage = StorageInitializer::create_from_config(&self.config).await?;
 
-        // 验证存储系统连接
         StorageInitializer::validate_connection(&storage).await?;
 
-        // 初始化存储目录结构
         StorageInitializer::initialize_directories(&storage).await?;
 
         Ok(storage)
     }
 
-    /// 获取配置信息
     pub fn get_config(&self) -> &Config {
         &self.config
     }
 
-    /// 获取验证报告
     pub fn get_validation_report(&self) -> &ConfigValidationReport {
         &self.validation_report
     }
 
-    /// [search] 初始化分布式链路追踪
     fn initialize_distributed_tracing(&self) {
         if let Some(tracing_config) = &self.config.distributed_tracing {
             if tracing_config.enabled {
                 info!("[search] 分布式链路追踪配置检测到，但暂时禁用以确保编译稳定性");
                 warn!("分布式链路追踪将在后续版本中完全启用");
 
-                // 暂时注释掉分布式追踪的初始化，等编译稳定后再启用
                 /*
                 let tracing_config = crate::util::tracing::distributed_tracing::TracingConfig {
                     enabled: tracing_config.enabled,
@@ -392,12 +346,10 @@ impl ServerBootstrap {
                     tracing_config.retention_seconds
                 );
 
-                // 启动清理任务
                 tokio::spawn(async move {
-                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(300)); // 5分钟清理一次
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
                     loop {
                         interval.tick().await;
-                        // 暂时注释掉分布式追踪管理器调用
                         // if let Some(manager) = crate::util::tracing::distributed_tracing::get_tracing_manager() {
                         // manager.cleanup_expired().await;
                         // }
@@ -409,20 +361,17 @@ impl ServerBootstrap {
         } else {
             info!("[circle] 未配置分布式链路追踪，暂时跳过初始化");
 
-            // 暂时注释掉默认配置初始化
             // let default_config = crate::util::tracing::distributed_tracing::TracingConfig::default();
             // crate::util::tracing::distributed_tracing::init_tracing(default_config);
         }
     }
 
-    /// 预热OCR引擎池，减少首个请求延迟
     async fn prewarm_ocr_engines(&self) {
         let n = self.config.ocr_tuning.prewarm_engines;
         if n == 0 {
             return;
         }
         info!("[hot] 预热OCR引擎池: {} 个", n);
-        // 应用引擎启动参数（若配置提供）
         if let Some(cfg) = &self.config.ocr_engine {
             let work_dir = cfg.work_dir.as_ref().map(|s| std::path::PathBuf::from(s));
             let binary = cfg.binary.as_ref().map(|s| std::path::PathBuf::from(s));
@@ -435,13 +384,11 @@ impl ServerBootstrap {
             };
             GLOBAL_POOL.set_options_if_empty(opts);
         }
-        // 并行获取引擎句柄以触发进程启动，然后立即释放
         let mut tasks = Vec::new();
         for i in 0..n {
             tasks.push(tokio::spawn(async move {
-                // 为每个OCR引擎初始化添加3秒超时
                 match timeout(Duration::from_secs(3), GLOBAL_POOL.acquire()).await {
-                    Ok(Ok(_h)) => { /* drop 即释放 */ }
+                    Ok(Ok(_h)) => {  }
                     Ok(Err(e)) => tracing::warn!("预热获取OCR引擎 {} 失败: {}", i + 1, e),
                     Err(_) => tracing::warn!("预热OCR引擎 {} 超时（3秒）", i + 1),
                 }
@@ -457,21 +404,16 @@ impl ServerBootstrap {
         );
     }
 
-    /// 执行健康检查
     pub async fn health_check(&self) -> Result<SystemHealthReport> {
         info!("[search] 执行系统健康检查...");
 
-        // 创建临时的数据库和存储实例进行健康检查
         let database = DatabaseInitializer::create_from_config(&self.config).await?;
         let storage = StorageInitializer::create_from_config(&self.config).await?;
 
-        // 执行数据库健康检查
         let database_health = DatabaseInitializer::health_check(&database).await?;
 
-        // 执行存储系统健康检查
         let storage_health = StorageInitializer::health_check(&storage).await?;
 
-        // 验证服务器配置
         let server_validation = ServerManager::validate_server_config(&self.config)?;
 
         let overall_healthy =
@@ -487,7 +429,6 @@ impl ServerBootstrap {
         })
     }
 
-    /// 获取系统信息摘要
     pub fn get_system_summary(&self) -> SystemSummary {
         SystemSummary {
             service_name: "OCR智能预审系统".to_string(),
@@ -511,7 +452,6 @@ impl ServerBootstrap {
     }
 }
 
-/// 系统健康检查报告
 #[derive(Debug, Clone)]
 pub struct SystemHealthReport {
     pub overall_healthy: bool,
@@ -522,7 +462,6 @@ pub struct SystemHealthReport {
     pub check_time: chrono::DateTime<chrono::Utc>,
 }
 
-/// 系统信息摘要
 #[derive(Debug, Clone)]
 pub struct SystemSummary {
     pub service_name: String,
@@ -536,19 +475,16 @@ pub struct SystemSummary {
     pub third_party_access_enabled: bool,
 }
 
-/// 便捷函数：快速启动服务器
 pub async fn start_server() -> Result<()> {
     let bootstrap = ServerBootstrap::new().await?;
     bootstrap.start().await
 }
 
-/// 便捷函数：执行健康检查
 pub async fn check_system_health() -> Result<SystemHealthReport> {
     let bootstrap = ServerBootstrap::new().await?;
     bootstrap.health_check().await
 }
 
-/// 便捷函数：启动队列 worker（仅处理任务，不提供 HTTP 服务）
 pub async fn start_worker() -> Result<()> {
     info!("=== OCR Worker 启动 ===");
     info!("版本信息: {}", build_info::summary());
@@ -571,7 +507,6 @@ pub async fn start_worker() -> Result<()> {
 
     let _log_guard = ConfigManager::initialize_logging(&config)?;
 
-    // [launch] 初始化所有全局变量（在日志系统初始化之后）
     crate::initialize_globals();
 
     init_start_time();
@@ -580,7 +515,6 @@ pub async fn start_worker() -> Result<()> {
 
     apply_ocr_pool_config_for_role("worker", &config);
 
-    // [config] 配置优化流水线
     crate::util::processing::optimized_pipeline::OPTIMIZED_PIPELINE.configure(&config);
 
     let worker_settings = config
@@ -589,7 +523,6 @@ pub async fn start_worker() -> Result<()> {
         .clone()
         .ok_or_else(|| anyhow!("worker 节点缺少 deployment.worker 配置"))?;
 
-    // [init] 初始化材料缓存
     material_cache::init(
         &config.master.material_cache_dir,
         Duration::from_secs(config.master.material_token_ttl_secs),
@@ -658,7 +591,6 @@ fn compute_ocr_pool_recommendation() -> OcrPoolRecommendation {
 
     let memory = system_info::get_memory_usage();
     let available_mb = memory.total_mb.saturating_sub(memory.used_mb);
-    // 经验值：每个 OCR 进程大约占用 512MB 左右
     let memory_based = std::cmp::max(1, (available_mb / 512) as usize);
 
     let recommended = cpu_based.min(memory_based).clamp(1, 32);

@@ -7,7 +7,6 @@ use tokio::fs;
 
 use super::traits::{FileMetadata, Storage};
 
-/// 本地文件系统存储实现
 pub struct LocalStorage {
     base_path: PathBuf,
     base_url: String,
@@ -17,7 +16,6 @@ impl LocalStorage {
     pub fn new(base_path: impl AsRef<Path>, base_url: &str) -> Result<Self> {
         let base_path = base_path.as_ref().to_path_buf();
 
-        // 确保基础目录存在
         std::fs::create_dir_all(&base_path).context("Failed to create base directory")?;
 
         Ok(Self {
@@ -26,12 +24,10 @@ impl LocalStorage {
         })
     }
 
-    /// 获取文件的完整路径
     fn get_full_path(&self, key: &str) -> PathBuf {
         self.base_path.join(key.trim_start_matches('/'))
     }
 
-    /// 确保文件的父目录存在
     async fn ensure_parent_dir(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
@@ -47,10 +43,8 @@ impl Storage for LocalStorage {
     async fn put(&self, key: &str, data: &[u8]) -> Result<()> {
         let path = self.get_full_path(key);
 
-        // 确保父目录存在
         self.ensure_parent_dir(&path).await?;
 
-        // 写入文件
         fs::write(&path, data)
             .await
             .with_context(|| format!("Failed to write file: {}", path.display()))?;
@@ -89,7 +83,6 @@ impl Storage for LocalStorage {
 
         let mut files = Vec::new();
 
-        // 如果搜索路径是目录，列出其中的文件
         if search_path.is_dir() {
             let mut entries = fs::read_dir(&search_path).await?;
 
@@ -102,7 +95,6 @@ impl Storage for LocalStorage {
                 }
             }
         } else {
-            // 否则搜索匹配前缀的文件
             let parent = search_path.parent().unwrap_or(&self.base_path);
             let prefix_name = search_path
                 .file_name()
@@ -132,12 +124,10 @@ impl Storage for LocalStorage {
     }
 
     async fn get_public_url(&self, key: &str) -> Result<String> {
-        // 对于本地存储，返回基于base_url的URL
         Ok(format!("{}/{}", self.base_url, key.trim_start_matches('/')))
     }
 
     async fn get_presigned_url(&self, key: &str, _expires: Duration) -> Result<String> {
-        // 本地存储不支持临时URL，返回永久URL
         self.get_public_url(key).await
     }
 
@@ -158,12 +148,11 @@ impl Storage for LocalStorage {
             size: metadata.len(),
             content_type: mime_guess::from_path(&path).first().map(|m| m.to_string()),
             last_modified,
-            etag: None, // 本地文件系统不生成ETag
+            etag: None,
         })
     }
 
     async fn health_check(&self) -> Result<bool> {
-        // 检查基础目录是否可访问
         self.base_path
             .try_exists()
             .context("Failed to check base directory")
@@ -180,7 +169,6 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let storage = LocalStorage::new(temp_dir.path(), "http://localhost/files").unwrap();
 
-        // 测试存储和获取
         let key = "test/file.txt";
         let data = b"Hello, World!";
 
@@ -190,11 +178,9 @@ mod tests {
         let retrieved = storage.get(key).await.unwrap().unwrap();
         assert_eq!(retrieved, data);
 
-        // 测试URL生成
         let url = storage.get_public_url(key).await.unwrap();
         assert_eq!(url, "http://localhost/files/test/file.txt");
 
-        // 测试删除
         storage.delete(key).await.unwrap();
         assert!(!storage.exists(key).await.unwrap());
     }

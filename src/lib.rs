@@ -20,34 +20,21 @@ pub mod util;
 use util::config::loader::ConfigLoader;
 use util::config::Config;
 
-/// 应用状态结构
 #[derive(Clone)]
 pub struct AppState {
     pub database: Arc<dyn db::Database>,
     pub storage: Arc<dyn storage::Storage>,
     pub config: Config,
     pub task_queue: Arc<dyn util::task_queue::TaskQueue>,
-    /// HTTP客户端（支持依赖注入和配置管理）
     pub http_client: Arc<util::http_client::HttpClient>,
-    /// 控制后台提交并发的信号量
     pub submission_semaphore: Arc<Semaphore>,
-    /// 控制材料下载并发的信号量
     pub download_semaphore: Arc<Semaphore>,
 }
 
-/// 全局初始化状态标记
 static GLOBALS_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-/// 显式初始化所有全局变量
 ///
-/// 初始化顺序：
-/// 1. CONFIG - 配置文件（无依赖）
-/// 2. 日志系统 - 依赖CONFIG（在server模块中处理）
-/// 3. CLIENT - 依赖日志系统
-/// 4. OCR_SEMAPHORE - 依赖CONFIG和日志
-/// 5. OSS - 依赖CONFIG和日志
 ///
-/// 注意：必须在程序入口处调用，确保 tracing 初始化后再调用
 pub fn initialize_globals() {
     if GLOBALS_INITIALIZED.swap(true, AtomicOrdering::SeqCst) {
         tracing::debug!("全局变量已初始化，跳过");
@@ -77,7 +64,6 @@ pub fn initialize_globals() {
     );
 }
 
-/// [1] CONFIG - 配置文件（无依赖，最先初始化）
 pub static CONFIG: LazyLock<Config> = LazyLock::new(load_config_or_exit);
 
 fn load_config_or_exit() -> Config {
@@ -118,12 +104,10 @@ fn load_config_or_exit() -> Config {
     }
 }
 
-/// 智能查找配置文件路径，适应开发和生产环境
 pub fn find_config_file_path(filename: &str) -> std::path::PathBuf {
     server::config::ConfigManager::find_config_file_path(filename)
 }
 
-/// [2] CLIENT - HTTP客户端（依赖：日志系统）
 #[cfg(feature = "reqwest")]
 pub static CLIENT: LazyLock<Option<Client>> = LazyLock::new(|| {
     let mut client_builder = Client::builder()
@@ -163,7 +147,6 @@ pub static CLIENT: LazyLock<Option<Client>> = LazyLock::new(|| {
     }
 });
 
-/// [3] OCR_SEMAPHORE - 全局OCR并发控制信号量
 pub static OCR_SEMAPHORE: LazyLock<Arc<Semaphore>> = LazyLock::new(|| {
     let max_concurrent = CONFIG
         .concurrency
@@ -194,7 +177,6 @@ pub static OCR_SEMAPHORE: LazyLock<Arc<Semaphore>> = LazyLock::new(|| {
     Arc::new(Semaphore::new(max_concurrent as usize))
 });
 
-/// [4] OSS - OSS存储 Operator
 pub static OSS: LazyLock<Option<Operator>> = LazyLock::new(|| {
     info!(
         target: "storage.oss",

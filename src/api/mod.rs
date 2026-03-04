@@ -7,15 +7,14 @@ pub mod preview;
 mod rules;
 pub use preview::{LocalPreviewTaskHandler, RemotePreviewTaskHandler};
 mod utils;
-// Mock登录相关测试接口已移除，使用debug ticket进行开发环境测试
-mod dynamic_worker_status; // NEW 动态Worker状态API
-mod enhancement; // 新增：API增强功能
-mod failover_status; // [loop] 新增：故障转移状态查询API
+mod dynamic_worker_status;
+mod enhancement;
+mod failover_status;
 pub mod monitor_auth;
 pub mod monitor_routes;
-mod resource_monitoring; // [stats] 新增：资源监控API
-mod tracing_api; // [search] 新增：分布式链路追踪API (重命名避免冲突)
-pub mod worker_proxy; // [handshake] Worker 内部代理接口
+mod resource_monitoring;
+mod tracing_api;
+pub mod worker_proxy;
 
 use crate::model::evaluation::PreviewEvaluationResult;
 use crate::model::SessionUser;
@@ -35,11 +34,9 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_sessions::cookie::time::Duration;
 use tower_sessions::{Expiry, MemoryStore, SessionManagerLayer};
-use tracing::{debug, error, info, warn}; // [search] 添加tracing宏导入
+use tracing::{debug, error, info, warn};
 
-/// 创建安全的CORS配置
 fn create_cors_layer() -> CorsLayer {
-    // 从环境变量读取允许的域名，默认为本地开发
     let allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
         .unwrap_or_else(|_| "http://localhost:8964,http://127.0.0.1:8964".to_string());
 
@@ -47,7 +44,6 @@ fn create_cors_layer() -> CorsLayer {
 
     let origins: Vec<&str> = allowed_origins.split(',').collect();
 
-    // 构建CORS层
     CorsLayer::new()
         .allow_origin(
             origins
@@ -85,19 +81,16 @@ pub fn routes(app_state: AppState) -> Router {
         .with_expiry(Expiry::OnInactivity(Duration::seconds(
             CONFIG.session_timeout,
         )))
-        // [locked] 安全增强：添加会话安全配置
         .with_same_site(tower_sessions::cookie::SameSite::Lax)
         .with_http_only(true);
 
     worker_proxy::spawn_heartbeat_watchdog(&app_state);
 
-    // 获取可执行文件所在目录
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(|p| p.to_path_buf()))
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
 
-    // 智能检测静态文件路径：优先使用构建后的static-dist，降级到static
     let static_path = {
         let parent_static_dist = exe_dir.parent().unwrap_or(&exe_dir).join("static-dist");
         let local_static_dist = exe_dir.join("static-dist");
@@ -136,17 +129,15 @@ pub fn routes(app_state: AppState) -> Router {
 
     let images_path = exe_dir.join("images");
 
-    // 公开路由 - 不需要认证
     let public_routes = Router::new()
-        .route("/", get(config::root_redirect)) // 根路由重定向到登录页
+        .route("/", get(config::root_redirect))
         .route("/api/verify_user", post(auth::verify_user))
-        .route("/api/sso/login", get(auth::sso_login_redirect)) // SSO登录跳转端点
+        .route("/api/sso/login", get(auth::sso_login_redirect))
         .route("/api/sso/callback", get(auth::sso_callback))
         .route(
             "/api/third-party/callback",
             post(files::third_party_callback),
         )
-        // 外部分享一次性链接（免登录，仅token校验）
         .route("/api/share/:token", get(files::download_shared_preview_report))
         .route("/api/auth/status", get(auth::auth_status))
         .route("/api/auth/logout", post(auth::auth_logout))
@@ -162,18 +153,14 @@ pub fn routes(app_state: AppState) -> Router {
             "/api/health/components",
             get(monitoring::components_health_check),
         )
-        // 前端配置API - 公开访问
         .route("/api/config/frontend", get(config::get_frontend_config))
         .route("/api/config/debug", get(config::get_debug_config))
-        // 元数据接口（需要 X-API-Key）
         .route("/meta/tables", get(meta::list_tables))
-        // 监控系统认证API - 独立认证系统
         .nest("/api/monitor", monitor_routes::monitor_routes())
         .route(
             "/api/dynamic-worker/status",
             get(dynamic_worker_status::get_dynamic_worker_status),
         )
-        // [stats] API调用统计接口 (开放访问，用于查看调用情况)
         .route(
             "/api/stats/calls",
             get(crate::util::auth::get_api_call_stats),
@@ -182,23 +169,17 @@ pub fn routes(app_state: AppState) -> Router {
             "/api/stats/calls/recent",
             get(crate::util::auth::get_recent_api_calls),
         )
-        // [search] 分布式链路追踪接口 (开放访问，用于调试和监控)
         .merge(tracing_api::tracing_routes())
-        // [loop] 故障转移状态查询接口 (开放访问，用于监控系统状态)
         .merge(failover_status::configure_failover_status_routes())
-        // [stats] 资源监控接口 (开放访问，用于系统监控)
         .merge(resource_monitoring::create_resource_monitoring_routes());
 
-    // [loop] 预审接口 - 使用第三方认证中间件（支持最大兼容模式）
     let preview_routes = Router::new()
-        .route("/api/preview", post(preview::preview)) // 混合认证模式：开放+识别+完整认证
+        .route("/api/preview", post(preview::preview))
         .layer(from_fn(crate::util::auth::third_party_auth_middleware))
-        // 应用API增强中间件到核心接口
         .layer(axum::middleware::from_fn(
             enhancement::api_enhancement_middleware,
         ));
 
-    // 受保护路由 - 需要SSO认证或monitor_session_id认证
     let protected_routes = Router::new()
         .route("/api/upload", post(files::upload))
         .route("/api/download", get(files::download))
@@ -208,18 +189,13 @@ pub fn routes(app_state: AppState) -> Router {
             "/api/rules/matters/:matter_id/reload",
             post(rules::reload_matter_rule),
         )
-        // 预审页面访问接口（支持SSO和monitor_session_id双重认证）
         .route("/api/preview/view/:request_id", get(preview_view_page))
-        // 新增：预审数据获取接口（需要认证）
         .route("/api/preview/data/:request_id", get(get_preview_data))
-        // 新增：基于第三方requestId查找预审访问URL的接口
         .route(
             "/api/preview/lookup/:third_party_request_id",
             get(lookup_preview_url),
         )
-        // 新增：预审状态查询接口
         .route("/api/preview/status/:preview_id", get(query_preview_status))
-        // 新增：预审结果展示接口
         .route(
             "/api/preview/result/:preview_id",
             get(files::get_preview_result),
@@ -228,12 +204,10 @@ pub fn routes(app_state: AppState) -> Router {
             "/api/preview/download/:preview_id",
             get(files::download_preview_report),
         )
-        // 生成外部分享一次性链接（需要监控后台登录）
         .route(
             "/api/preview/share/:preview_id",
             post(files::create_preview_share_url),
         )
-        // 图片服务API - 新增OCR图片支持
         .route(
             "/api/files/ocr-image/:pdf_name/:page_index",
             get(files::get_ocr_image),
@@ -247,7 +221,6 @@ pub fn routes(app_state: AppState) -> Router {
             get(files::get_material_preview),
         )
         .route("/api/storage/files/*key", get(files::proxy_storage_file))
-        // 监控与日志接口（需要认证）
         .route("/api/logs/stats", get(monitoring::get_log_stats))
         .route("/api/logs/cleanup", post(monitoring::cleanup_logs))
         .route("/api/logs/health", get(monitoring::check_log_health))
@@ -282,37 +255,29 @@ pub fn routes(app_state: AppState) -> Router {
             "/api/monitoring/attachment-logging",
             post(monitoring::update_attachment_logging_settings),
         )
-        // 预审页面访问接口需要认证
         .route("/:preview_id.pdf", get(preview::download_latest_pdf))
         .layer(from_fn_with_state(
             app_state.clone(),
             middleware::auth_required,
         ));
 
-    // 第三方API路由已删除 - 重构后统一使用SSO认证
-    // AK/SK认证改为可选的统计标识功能
 
-    // NEW 集成用户管理和第三方平台集成路由
     // let admin_routes = user_admin_routes::create_user_admin_routes();
 
     Router::new()
         .nest_service("/static", ServeDir::new(static_path))
         .nest_service("/images", ServeDir::new(images_path))
         .merge(public_routes)
-        .merge(preview_routes) // [loop] 预审路由（第三方认证）
+        .merge(preview_routes)
         .merge(protected_routes)
         .merge(worker_proxy::routes())
-        // .merge(admin_routes) // NEW 集成管理路由
         .with_state(app_state)
-        // 全局中间件
-        // .layer(from_fn(crate::util::tracing::middleware::tracing_middleware)) // [search] 分布式链路追踪 - 暂时禁用
         .layer(from_fn(middleware::request_logging_middleware))
         .layer(session_layer)
         .layer(create_cors_layer())
 }
 
 // Auth-related functions moved to auth module
-// 旧版本的preview函数已删除 - 现在使用preview.rs中的模块化版本
 
 async fn preview_view_page(
     State(app_state): State<AppState>,
@@ -329,7 +294,6 @@ async fn preview_view_page(
         request_id = %request_id
     );
 
-    // 验证request_id格式（基本安全检查）
     if request_id.is_empty() || request_id.len() > 100 {
         warn!(
             target: "preview.view",
@@ -340,7 +304,6 @@ async fn preview_view_page(
         return (StatusCode::BAD_REQUEST, "无效的请求ID").into_response();
     }
 
-    // 从认证中间件获取SessionUser（支持SSO和monitor_session_id）
     let session_user = match req.extensions().get::<SessionUser>() {
         Some(user) => user.clone(),
         None => {
@@ -361,17 +324,14 @@ async fn preview_view_page(
         user_id = %session_user.user_id
     );
 
-    // 验证用户是否有权限访问该预审记录
     match verify_preview_access(&app_state.database, &request_id, &session_user).await {
         Ok(true) => {
-            // 从查询参数提取 monitor_session_id（如果有）
             let monitor_session_id = req.uri().query().and_then(|q| {
                 url::form_urlencoded::parse(q.as_bytes())
                     .find(|(key, _)| key == "monitor_session_id")
                     .map(|(_, value)| value.into_owned())
             });
 
-            // 重定向到单页面应用，用户已通过认证
             let redirect_url = if let Some(session_id) = monitor_session_id {
                 format!(
                     "/static/index.html?previewId={}&verified=true&monitor_session_id={}",
@@ -399,7 +359,6 @@ async fn preview_view_page(
                 reason = "preview_owner_mismatch"
             );
 
-            // 获取预审记录的真实归属用户（用于日志记录）
             if let Ok(Some(mapping)) =
                 preview::get_id_mapping_from_database(&app_state.database, &request_id).await
             {
@@ -428,7 +387,6 @@ async fn preview_view_page(
     }
 }
 
-// 获取预审数据接口（需要认证）
 async fn get_preview_data(
     State(app_state): State<AppState>,
     axum::extract::Path(request_id): axum::extract::Path<String>,
@@ -444,7 +402,6 @@ async fn get_preview_data(
         request_id = %request_id
     );
 
-    // 从认证中间件获取SessionUser
     let session_user = req.extensions().get::<SessionUser>().cloned();
 
     let Some(session_user) = session_user else {
@@ -583,7 +540,6 @@ async fn get_preview_data(
     }
 }
 
-// 验证用户是否有权限访问指定的预审记录
 async fn verify_preview_access(
     database: &Arc<dyn crate::db::Database>,
     preview_id: &str,
@@ -604,7 +560,6 @@ async fn verify_preview_access(
         preview_id = %preview_id
     );
 
-    // 监控系统账号具备全局查看能力
     if session_user
         .certificate_type
         .eq_ignore_ascii_case("monitor")
@@ -619,7 +574,6 @@ async fn verify_preview_access(
         return Ok(true);
     }
 
-    // 获取ID映射信息
     match preview::get_id_mapping_from_database(database, preview_id).await? {
         Some(mapping) => {
             let mapping_user_id = mapping.user_id;
@@ -633,7 +587,6 @@ async fn verify_preview_access(
                 status = %status
             );
 
-            // 检查用户ID是否匹配
             if mapping_user_id != session_user.user_id {
                 warn!(
                     target: "preview.access",
@@ -646,7 +599,6 @@ async fn verify_preview_access(
                 return Ok(false);
             }
 
-            // 检查记录状态（允许多种有效状态）
             let valid_statuses = ["pending", "processing", "completed", "failed"];
             if !valid_statuses.contains(&status.as_str()) {
                 warn!(
@@ -659,10 +611,8 @@ async fn verify_preview_access(
                 return Ok(false);
             }
 
-            // 检查预审文件是否存在（支持多种存储路径）
             let mut file_exists = false;
 
-            // 检查旧的preview目录
             let preview_dir = CURRENT_DIR.join("preview");
             let html_file = preview_dir.join(format!("{}.html", preview_id));
             let pdf_file = preview_dir.join(format!("{}.pdf", preview_id));
@@ -671,7 +621,6 @@ async fn verify_preview_access(
                 file_exists = true;
             }
 
-            // 检查新的存储系统路径
             if !file_exists {
                 let storage_dir = CURRENT_DIR
                     .join("runtime")
@@ -686,7 +635,6 @@ async fn verify_preview_access(
                 }
             }
 
-            // 检查主存储路径（如果配置了OSS等）
             if !file_exists {
                 let main_storage_dir = CURRENT_DIR.join("storage").join("previews");
                 let main_html = main_storage_dir.join(format!("{}.html", preview_id));
@@ -728,7 +676,6 @@ async fn verify_preview_access(
     }
 }
 
-// 获取预审记录数据
 async fn get_preview_record(
     app_state: &AppState,
     preview_id: &str,
@@ -747,7 +694,6 @@ async fn get_preview_record(
         preview_id = %preview_id
     );
 
-    // 获取ID映射信息
     let mut mapping =
         match preview::get_id_mapping_from_database(&app_state.database, preview_id).await? {
             Some(mapping) => mapping,
@@ -762,7 +708,6 @@ async fn get_preview_record(
             }
         };
 
-    // 已完成但 evaluation_result 为空时，尝试从 Worker 结果队列回补（防止“已完成但无预览”）
     if mapping.status == crate::db::PreviewStatus::Completed && mapping.evaluation_result.is_none()
     {
         match app_state
@@ -824,7 +769,6 @@ async fn get_preview_record(
     let html_file = preview_dir.join(format!("{}.html", preview_id));
     let pdf_file = preview_dir.join(format!("{}.pdf", preview_id));
 
-    // 如果文件尚未生成，也返回占位信息，避免前端收到404
     if !html_file.exists() && !pdf_file.exists() {
         warn!(
             target: "preview.data",
@@ -834,7 +778,6 @@ async fn get_preview_record(
         );
     }
 
-    // 构建预审数据响应
     let mut preview_data = serde_json::json!({
         "previewId": preview_id,
         "thirdPartyRequestId": mapping.third_party_request_id.unwrap_or_else(|| format!("third_party_{}", preview_id)),
@@ -844,9 +787,7 @@ async fn get_preview_record(
         "files": {}
     });
 
-    // 添加evaluation_result字段到返回数据中
     if let Some(ref evaluation_result_str) = mapping.evaluation_result {
-        // 尝试解析JSON字符串为对象
         match serde_json::from_str::<serde_json::Value>(evaluation_result_str) {
             Ok(mut evaluation_obj) => {
                 if let Ok(mut evaluation_struct) =
@@ -869,7 +810,6 @@ async fn get_preview_record(
                         );
                     }
 
-                    // 安全加固：清洗系统内部信息，避免前端直接展示路径/调试字段
                     crate::api::utils::sanitize_evaluation_result(&mut evaluation_struct);
                     evaluation_obj =
                         serde_json::to_value(&evaluation_struct).unwrap_or_else(|_| evaluation_obj);
@@ -902,11 +842,9 @@ async fn get_preview_record(
             stage = "evaluation_result_missing",
             preview_id = %preview_id
         );
-        // 设置为null，前端可以处理这种情况
         preview_data["evaluation_result"] = serde_json::Value::Null;
     }
 
-    // 添加文件信息
     let mut files = serde_json::Map::new();
 
     if html_file.exists() {
@@ -1034,7 +972,6 @@ async fn get_preview_record(
     Ok(Some(preview_data))
 }
 
-// 根据第三方requestId查找预审访问URL
 async fn lookup_preview_url(
     State(app_state): State<AppState>,
     axum::extract::Path(third_party_request_id): axum::extract::Path<String>,
@@ -1138,7 +1075,6 @@ async fn lookup_preview_url(
     }
 }
 
-// 根据第三方requestId和用户ID查找对应的previewId
 async fn find_preview_by_third_party_id(
     database: &Arc<dyn crate::db::Database>,
     third_party_request_id: &str,
@@ -1178,10 +1114,7 @@ async fn find_preview_by_third_party_id(
     Ok(None)
 }
 
-// 更新预审状态
-// 这个函数已经被移除，因为我们在处理器中直接使用数据库
 
-// 预审状态查询接口
 async fn query_preview_status(
     State(app_state): State<AppState>,
     axum::extract::Path(preview_id): axum::extract::Path<String>,
@@ -1288,7 +1221,6 @@ async fn query_preview_status(
     }
 }
 
-// 获取预审状态信息
 async fn get_preview_status_info(
     database: &Arc<dyn crate::db::Database>,
     preview_id: &str,
@@ -1300,7 +1232,6 @@ async fn get_preview_status_info(
         preview_id = %preview_id
     );
 
-    // 获取ID映射信息
     let mapping = match preview::get_id_mapping_from_database(database, preview_id).await? {
         Some(mapping) => mapping,
         None => {

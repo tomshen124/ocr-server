@@ -1,4 +1,3 @@
-/* Loading 遮罩 - 完整页面覆盖 */
 .loading-overlay {
     position: fixed;
     top: 0;
@@ -15,7 +14,6 @@
     display: flex;
 }
 
-/* Loading页面头部 */
 .loading-header {
     background: linear-gradient(135deg, #4a90e2 0%, #4a90e2 100%);
     color: white;
@@ -49,7 +47,6 @@
     font-weight: 500;
 }
 
-/* Loading主内容区 */
 .loading-content {
     flex: 1;
     display: flex;
@@ -77,7 +74,6 @@
     background: rgba(0, 229, 204, 0.05);
 }
 
-/* 扫描线动画 */
 .scanner-line {
     position: absolute;
     top: 0;
@@ -104,7 +100,6 @@
     }
 }
 
-/* 掃描框四個角落 */
 .scanner-frame::before,
 .scanner-frame::after {
     content: '';
@@ -114,7 +109,6 @@
     border: 3px solid #00E5CC;
 }
 
-/* 左上角 */
 .scanner-frame::before {
     top: 0;
     left: 0;
@@ -123,7 +117,6 @@
     border-top-left-radius: 4px;
 }
 
-/* 右上角 */
 .scanner-frame::after {
     top: 0;
     right: 0;
@@ -132,7 +125,6 @@
     border-top-right-radius: 4px;
 }
 
-/* 左下角和右下角 */
 .scanner-corners {
     position: absolute;
     width: 100%;
@@ -149,7 +141,6 @@
     border: 3px solid #00E5CC;
 }
 
-/* 左下角 */
 .scanner-corners::before {
     bottom: 0;
     left: 0;
@@ -158,7 +149,6 @@
     border-bottom-left-radius: 4px;
 }
 
-/* 右下角 */
 .scanner-corners::after {
     bottom: 0;
     right: 0;
@@ -167,7 +157,6 @@
     border-bottom-right-radius: 4px;
 }
 
-/* 文档图标 */
 .document-icon {
     width: 80px;
     height: 110px;
@@ -287,7 +276,6 @@
     margin-right: auto;
 }
 
-/* 錯誤彈窗 */
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -330,7 +318,6 @@
     margin-bottom: 24px;
 }
 
-/* 文檔預覽彈窗 */
 .document-modal {
     position: fixed;
     top: 0;
@@ -399,7 +386,6 @@
     border-radius: 6px;
 }
 
-/* 響應式設計 */
 @media (max-width: 768px) {
     .progress-bar {
         width: 80%;
@@ -447,7 +433,6 @@
     }
 }
 
-/* 🖼️ 增强文档预览模态框样式 */
 .document-preview-modal {
     position: fixed;
     top: 0;

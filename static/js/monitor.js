@@ -1,7 +1,6 @@
 (() => {
     'use strict';
 
-    // 全局状态
     let currentPage = 1;
     let pageSize = 20;
     let lastPaginationMeta = null;
@@ -17,10 +16,8 @@
     let autoRefreshTimer = null;
     let isAutoRefreshEnabled = false;
     const AUTO_REFRESH_INTERVAL = 5000;
-    // 业务耗时趋势历史（毫秒）
     const durationTrendHistory = [];
 
-    // 简单的 HTML 转义
     const h = (str) =>
         String(str ?? '')
             .replace(/&/g, '&amp;')
@@ -92,7 +89,6 @@
     // Helper to get API base URL
     function getApiUrl(path) {
         if (!path) return path;
-        // 绝对地址直接返回
         if (/^https?:\/\//.test(path)) return path;
 
         if (!storedApiBase) {
@@ -111,7 +107,6 @@
         const base = storedApiBase.replace(/\/+$/, '');
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
 
-        // 绝对 base（含协议），需要避免出现 /api/api/... 的重复前缀
         if (/^https?:\/\//.test(base)) {
             try {
                 const baseUrl = new URL(base, window.location.origin);
@@ -122,7 +117,6 @@
                 const mergedPath = hasPrefix
                     ? normalizedPath
                     : `${basePath}${normalizedPath}`;
-                // mergedPath 已包含前导 /，直接拼到 origin 上即可
                 return `${baseUrl.origin}${mergedPath}`;
             } catch (error) {
                 console.warn('解析 API Base 失败，回退使用相对路径:', error);
@@ -130,7 +124,6 @@
             }
         }
 
-        // 避免重复前缀，例如 base=/api 且 path=/api/...
         if (base && normalizedPath.startsWith(`${base}/`)) {
             return normalizedPath;
         }
@@ -140,7 +133,6 @@
 
     // Generic API fetch wrapper
     async function apiFetch(url, options = {}) {
-        // 统一在所有请求上附加 monitor_session_id，避免漏加导致 401
         const fullUrl = appendMonitorSessionParam(getApiUrl(url));
         const headers = {
             'Content-Type': 'application/json',
@@ -173,7 +165,6 @@
     function toggleAutoRefresh() {
         const toggle = document.getElementById('autoRefreshToggle');
         if (!toggle) return;
-        // 关闭自动刷新，避免并发请求堆积
         toggle.checked = false;
         isAutoRefreshEnabled = false;
         stopAutoRefresh();
@@ -505,7 +496,7 @@
 
     function getDefaultDateRange() {
         const today = new Date();
-        const dayOfWeek = today.getDay() || 7; // 将周日视为 7
+        const dayOfWeek = today.getDay() || 7;
         const monday = new Date(today);
         monday.setDate(today.getDate() - (dayOfWeek - 1));
         return {
@@ -641,7 +632,6 @@
                 return;
             }
 
-            // 先写入内存，保证请求会自动附加 monitor_session_id
             authSession = sessionId;
 
             const response = await apiFetch('/api/monitor/auth/status');
@@ -847,7 +837,6 @@
                 updateAuthDashboardFromUser(userInfo);
             }
         } else {
-            // 受限角色不具备用户管理权限，避免触发 403 导致误判会话失效
             monitorUsersCache = [];
             renderMonitorUsers([]);
         }
@@ -946,7 +935,6 @@
 
         setText('statisticsLastUpdate', formatDateTime(new Date()));
 
-        // [charts] 更新业务统计图表
         updateBusinessCharts(stats);
     }
 
@@ -2172,8 +2160,6 @@
 
         try {
             const parsed = new URL(target, window.location.origin);
-            // 允许跨域 API 调用携带 session_id
-            // 只要 URL 有效，我们就尝试附加 session_id
             if (!parsed.searchParams.has('monitor_session_id')) {
                 parsed.searchParams.set(
                     'monitor_session_id',
@@ -2287,7 +2273,6 @@
 
     async function loadSystemData() {
         try {
-            // 修复：使用正确的API端点
             const response = await apiFetch('/api/resources/status');
             if (response.ok) {
                 const data = await response.json();
@@ -2299,7 +2284,6 @@
     }
 
     function renderSystemStatus(data = {}) {
-        // 修复：使用正确的数据路径
         const systemRes = data.data?.system_resources;
         if (!systemRes) {
             console.warn('系统资源数据不可用');
@@ -2310,7 +2294,6 @@
         setText('memoryUsage', `${systemRes.memory_usage_percent?.toFixed(1) ?? '-'}%`);
         setText('diskUsage', `${systemRes.disk_usage_percent?.toFixed(1) ?? '-'}%`);
 
-        // OCR状态从ocr_pool获取
         const ocrPool = data.data?.ocr_pool;
         const ocrCapacity = ocrPool?.capacity ?? 0;
         const ocrAvailable = ocrPool?.available ?? 0;
@@ -2346,7 +2329,6 @@
         }
         setText('watchdogHint', watchdogHint);
 
-        // 渲染详细的系统监控表格
         updateSystemCharts(systemRes);
         renderSystemDetails(data.data);
     }
@@ -2385,7 +2367,6 @@
             return;
         }
 
-        // 构建详细信息HTML
         const workerRows = workerHeartbeats
             .map((worker) => {
                 const metrics = worker.metrics || {};
@@ -2651,7 +2632,6 @@
             const response = await apiFetch('/api/monitor/users');
             const data = await response.json().catch(() => null);
             if (response.status === 403) {
-                // 无权限查看用户列表时，不要清空会话
                 showToast('当前角色无权限查看用户列表', 'warning');
                 monitorUsersCache = [];
                 renderMonitorUsers([]);
@@ -2764,7 +2744,6 @@
         return isRoleFullAccess(getCurrentUserRole());
     }
 
-    // 兼容旧命名：管理员（含超管/系统管理员）
     function isCurrentUserAdmin() {
         return isCurrentUserFullAccess();
     }
@@ -2773,7 +2752,6 @@
         const fullAccess = isAuthenticated && isCurrentUserFullAccess();
         const limited = isAuthenticated && !fullAccess;
 
-        // 限制角色仅保留业务统计与认证入口
         ['system', 'failover', 'ocr', 'concurrency'].forEach((tab) => {
             const nav = document.getElementById(`tab-${tab}`);
             if (nav) nav.style.display = limited ? 'none' : '';
@@ -2804,7 +2782,6 @@
                 block.style.display = limited ? 'none' : '';
             });
 
-        // 若当前处于被隐藏的面板，自动切回业务统计
         if (limited) {
             const activePane = document.querySelector('.view-pane.active');
             if (activePane && activePane.id !== 'business-pane' && activePane.id !== 'auth-pane') {
@@ -2970,7 +2947,6 @@
                 },
             );
 
-            // 兼容旧后端：若 PUT /password 不存在，回退 POST /password/reset
             if (response.status === 404) {
                 response = await apiFetch(
                     `/api/monitor/users/${userId}/password/reset`,
@@ -3013,7 +2989,6 @@
                 method: 'POST',
             });
 
-            // 兼容旧后端：deactivate 404 时回退到 POST /users/{id}
             if (response.status === 404 && !enable) {
                 response = await apiFetch(`/api/monitor/users/${userId}`, {
                     method: 'POST',
@@ -3146,14 +3121,12 @@
         const status = data.data?.multi_stage_status;
         if (!status) return;
 
-        // 修复数据路径：应该从 stage_concurrency 中获取
         const ocrStage = status.stage_concurrency?.ocr_process;
         setText('poolCapacity', ocrStage?.max_concurrency ?? '-');
         const available = ocrStage ? (ocrStage.max_concurrency - ocrStage.active_tasks) : null;
         setText('poolAvailable', available !== null ? available : '-');
         setText('poolInUse', ocrStage?.active_tasks ?? '-');
 
-        // OCR池重启次数（从ocr_pool中获取，如果有的话）
         const ocrPool = data.data?.ocr_pool;
         setText('poolRestarted', ocrPool?.total_restarts ?? '0');
     }
@@ -3176,10 +3149,8 @@
         const status = data.data?.multi_stage_status;
         if (!status) return;
 
-        // 修复数据路径：应该从 stage_concurrency 中获取
         const stages = status.stage_concurrency;
 
-        // 下载阶段
         const download = stages?.download;
         setText('downloadMax', download?.max_concurrency ?? '-');
         setText('downloadUsed', download?.active_tasks ?? '-');
@@ -3192,7 +3163,6 @@
                 : '-',
         );
 
-        // PDF转换阶段
         const pdf = stages?.pdf_convert;
         setText('pdfMax', pdf?.max_concurrency ?? '-');
         setText('pdfUsed', pdf?.active_tasks ?? '-');
@@ -3205,7 +3175,6 @@
                 : '-',
         );
 
-        // OCR处理阶段
         const ocr = stages?.ocr_process;
         setText('ocrMax', ocr?.max_concurrency ?? '-');
         setText('ocrUsed', ocr?.active_tasks ?? '-');
@@ -3218,7 +3187,6 @@
                 : '-',
         );
 
-        // 存储阶段
         const storage = stages?.storage;
         setText('storageMax', storage?.max_concurrency ?? '-');
         setText('storageUsed', storage?.active_tasks ?? '-');
@@ -3231,7 +3199,6 @@
                 : '-',
         );
 
-        // 瓶颈分析
         const bottleneck = data.data?.multi_stage_status?.bottleneck_stage;
         const bottleneckText =
             bottleneck === 'none'
@@ -3293,7 +3260,6 @@
         return map[status] || status || '未知';
     }
 
-    // 暴露给全局的函数
     window.switchTab = switchTab;
     window.applyFilters = applyFilters;
     window.resetFilters = resetFilters;
@@ -3323,7 +3289,6 @@
     window.toggleMonitorUserStatus = toggleMonitorUserStatus;
     window.loadRecentFailures = loadRecentFailures;
 
-    // ============ 全局限流控制 ============
 
     function toggleAdvancedOps() {
         const content = document.getElementById('advancedOpsContent');

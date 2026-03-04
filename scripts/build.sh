@@ -1,19 +1,11 @@
 #!/bin/bash
 
 #================================================================
-# OCR服务器统一编译脚本
 # 
-# 功能：
-# 1. 多种编译模式（开发、生产、发布）
-# 2. 自动依赖检查
-# 3. 交叉编译支持
-# 4. 特性开关管理
-# 5. 编译产物打包
 #================================================================
 
 set -e
 
-# 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -21,14 +13,12 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 NC='\033[0m'
 
-# 全局变量
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 TARGET_DIR="$PROJECT_ROOT/target"
 BUILD_DIR="$PROJECT_ROOT/build"
 CARGO_TOML="$PROJECT_ROOT/Cargo.toml"
 
-# 编译配置
 MUSL_TARGET="x86_64-unknown-linux-musl"
 FEATURES=""
 BUILD_MODE="debug"
@@ -37,7 +27,6 @@ ENABLE_STRIP=false
 CREATE_PACKAGE=false
 HOST_OS="$(uname -s)"
 
-# 日志函数
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -58,7 +47,6 @@ log_step() {
     echo -e "${PURPLE}[>>]${NC} $1"
 }
 
-# 自动写入 VERSION（可通过 DISABLE_AUTO_VERSION=1 禁用）
 if [[ "${DISABLE_AUTO_VERSION:-0}" != "1" ]]; then
     VERSION_STR="${MANUAL_VERSION:-$(date +%Y%m%d%H%M%S)}"
     echo "$VERSION_STR" > "$PROJECT_ROOT/VERSION"
@@ -67,7 +55,6 @@ else
     log_info "DISABLE_AUTO_VERSION=1，跳过自动写入 VERSION"
 fi
 
-# 选择 Cargo 工具链（支持 CARGO_TOOLCHAIN=nightly）
 if [[ -n "${CARGO_TOOLCHAIN:-}" ]]; then
     CARGO_CMD=(cargo "+${CARGO_TOOLCHAIN}")
     log_info "使用 Cargo 工具链: +${CARGO_TOOLCHAIN}"
@@ -75,7 +62,6 @@ else
     CARGO_CMD=(cargo)
 fi
 
-# 显示帮助信息
 show_help() {
     cat << EOF
 OCR服务器统一编译脚本 - v1.3.4 (支持智能故障转移)
@@ -107,14 +93,14 @@ OCR服务器统一编译脚本 - v1.3.4 (支持智能故障转移)
     - MUSL环境请使用 HTTP 代理方案
 
 示例:
-    $0                           # 开发模式编译
-    $0 -m prod                   # 生产模式编译
-    $0 -m release -t musl -p     # 发布模式，musl静态编译，创建发布包
-    $0 -f monitoring             # 启用监控特性
-    $0 --prod                                        # 一键生产（MUSL静态）
-    $0 --prod-native                                 # 一键生产（glibc原生）
-    $0 -m release -t musl -p -f monitoring,dm_go     # 明确启用Go网关
-    $0 -c                        # 清理编译缓存
+    $0
+    $0 -m prod
+    $0 -m release -t musl -p
+    $0 -f monitoring
+    $0 --prod
+    $0 --prod-native
+    $0 -m release -t musl -p -f monitoring,dm_go
+    $0 -c
 
 注意事项:
     - MUSL静态链接与ODBC不兼容，建议使用native目标
@@ -124,13 +110,11 @@ OCR服务器统一编译脚本 - v1.3.4 (支持智能故障转移)
 EOF
 }
 
-# 检查依赖
 check_dependencies() {
     log_step "检查编译依赖..."
     
     local missing_deps=()
     
-    # 检查必需的工具
     if ! command -v cargo &> /dev/null; then
         missing_deps+=("cargo (Rust工具链)")
     fi
@@ -139,7 +123,6 @@ check_dependencies() {
         missing_deps+=("rustc (Rust编译器)")
     fi
     
-    # 检查musl工具链（如果需要）
     if [ "$1" == "musl" ]; then
         if ! rustup target list --installed | grep -q "$MUSL_TARGET"; then
             missing_deps+=("musl target (运行: rustup target add $MUSL_TARGET)")
@@ -156,7 +139,6 @@ check_dependencies() {
         fi
     fi
     
-    # 检查可选工具
     if [ "$ENABLE_STRIP" == "true" ]; then
         if ! command -v strip &> /dev/null; then
             if command -v llvm-strip &> /dev/null; then
@@ -179,11 +161,9 @@ check_dependencies() {
     log_success "依赖检查通过"
 }
 
-# 设置编译环境
 setup_build_env() {
     log_step "设置编译环境..."
     
-    # 🔧 智能特性处理：MUSL环境自动启用reqwest以确保HTTP下载功能
     if [ "$TARGET" == "musl" ] && [[ "$FEATURES" != *"reqwest"* ]]; then
         if [ -n "$FEATURES" ]; then
             FEATURES="$FEATURES,reqwest"
@@ -193,7 +173,6 @@ setup_build_env() {
         log_info "🚀 MUSL环境: 自动启用reqwest特性以支持HTTP下载"
     fi
     
-    # 检查MUSL+ODBC兼容性
     if [ "$TARGET" == "musl" ] && [[ "$FEATURES" == *"dm_odbc"* ]]; then
         log_warning "⚠️  检测到MUSL目标 + ODBC特性的不兼容组合"
         echo ""
@@ -213,11 +192,9 @@ setup_build_env() {
         fi
     fi
     
-    # 创建必要的目录
     mkdir -p "$BUILD_DIR"
     mkdir -p "$PROJECT_ROOT/runtime/logs"
     
-    # 设置Rust编译优化
     case "$BUILD_MODE" in
         "dev")
             export CARGO_BUILD_FLAGS=""
@@ -225,10 +202,8 @@ setup_build_env() {
             ;;
         "prod"|"release")
             export CARGO_BUILD_FLAGS="--release"
-            # 使用更兼容的优化选项
             export RUSTFLAGS="-C opt-level=3 -C codegen-units=1"
             
-            # musl静态链接额外设置
             if [ "$TARGET" == "musl" ]; then
                 export RUSTFLAGS="$RUSTFLAGS -C target-feature=+crt-static -C link-arg=-s"
                 if command -v x86_64-unknown-linux-musl-gcc &> /dev/null; then
@@ -240,13 +215,11 @@ setup_build_env() {
             ;;
     esac
     
-    # 如果未显式指定特性，则使用默认特性集（生产化简）
     if [ -z "$FEATURES" ]; then
-        FEATURES="monitoring"  # 默认启用监控
+        FEATURES="monitoring"
         log_info "未指定特性，使用默认特性: $FEATURES"
     fi
 
-    # 根据环境自动启用 dm_go（检测到 DM 网关配置时）
     if [ -z "${DISABLE_DM_GO_AUTO:-}" ]; then
         if [ -n "$DM_GATEWAY_URL" ] || [ -n "$DM_GATEWAY_API_KEY" ]; then
             if [[ ",$FEATURES," != *",dm_go,"* ]]; then
@@ -256,12 +229,10 @@ setup_build_env() {
         fi
     fi
 
-    # 设置特性标志
     if [ -n "$FEATURES" ]; then
         export CARGO_BUILD_FLAGS="$CARGO_BUILD_FLAGS --features $FEATURES"
     fi
     
-    # 设置目标平台
     if [ "$TARGET" == "musl" ]; then
         export CARGO_BUILD_FLAGS="$CARGO_BUILD_FLAGS --target $MUSL_TARGET"
         TARGET_TRIPLE=$MUSL_TARGET
@@ -318,20 +289,17 @@ setup_build_env() {
     fi
 }
 
-# 构建前端资源
 build_frontend() {
     log_step "构建前端资源..."
     
     local build_tools_dir="$PROJECT_ROOT/build-tools"
     
-    # 检查是否有Node.js环境
     if ! command -v node &> /dev/null; then
         log_warning "未找到Node.js，跳过前端构建，使用源码版本"
         ensure_static_fallback
         return
     fi
     
-    # 检查构建工具目录
     if [ ! -d "$build_tools_dir" ]; then
         log_warning "未找到前端构建工具，跳过前端构建，使用源码版本"
         ensure_static_fallback
@@ -340,7 +308,6 @@ build_frontend() {
     
     cd "$build_tools_dir"
     
-    # 安装依赖（如果需要）
     if [ ! -d "node_modules" ]; then
         log_info "安装前端构建依赖..."
         if ! npm install; then
@@ -350,7 +317,6 @@ build_frontend() {
         fi
     fi
     
-    # 根据构建模式选择前端构建方式
     local frontend_build_cmd="npm run build"
     if [ "$BUILD_MODE" == "dev" ]; then
         frontend_build_cmd="npm run build:dev"
@@ -360,11 +326,9 @@ build_frontend() {
         log_info "前端生产模式构建（混淆压缩）"
     fi
     
-    # 执行前端构建
     if $frontend_build_cmd; then
         log_success "前端构建成功"
         
-        # 如果是生产模式，显示压缩信息
         if [ "$BUILD_MODE" != "dev" ]; then
             local static_src="$PROJECT_ROOT/static"
             local static_dist="$PROJECT_ROOT/static-dist"
@@ -383,7 +347,6 @@ build_frontend() {
     cd "$PROJECT_ROOT"
 }
 
-# 确保有静态资源可用（降级处理）
 ensure_static_fallback() {
     local static_src="$PROJECT_ROOT/static"
     local static_dist="$PROJECT_ROOT/static-dist"
@@ -394,11 +357,9 @@ ensure_static_fallback() {
     fi
 }
 
-# 编译Rust后端
 build_rust_backend() {
     log_step "编译Rust后端..."
     
-    # 显示编译命令
     local build_cmd=("${CARGO_CMD[@]}" build)
     if [[ -n "$CARGO_BUILD_FLAGS" ]]; then
         # shellcheck disable=SC2206
@@ -407,7 +368,6 @@ build_rust_backend() {
     fi
     log_info "执行命令: ${build_cmd[*]}"
 
-    # 执行编译
     if "${build_cmd[@]}"; then
         log_success "后端编译成功"
     else
@@ -415,14 +375,11 @@ build_rust_backend() {
         exit 1
     fi
     
-    # 验证编译产物
     verify_build_output
 }
 
-# 验证编译产物
 verify_build_output() {
     
-    # 获取输出路径
     local output_dir="$TARGET_DIR"
     if [ "$TARGET" == "musl" ]; then
         output_dir="$output_dir/$MUSL_TARGET"
@@ -441,11 +398,9 @@ verify_build_output() {
         exit 1
     fi
     
-    # 显示二进制信息
     log_info "二进制文件: $binary_path"
     log_info "文件大小: $(du -h "$binary_path" | cut -f1)"
     
-    # 检查动态链接
     if command -v ldd &> /dev/null; then
         if ldd "$binary_path" 2>&1 | grep -q "not a dynamic executable"; then
             log_success "静态链接二进制"
@@ -457,7 +412,6 @@ verify_build_output() {
         log_warning "未检测到 ldd，跳过依赖检查 (建议在容器或Linux环境验证)"
     fi
     
-    # 裁剪符号
     if [ "$ENABLE_STRIP" == "true" ] && [ "$BUILD_MODE" != "dev" ]; then
         local strip_bin="strip"
         local strip_args="-s"
@@ -495,25 +449,20 @@ verify_build_output() {
         fi
     fi
     
-    # 复制到build目录
     cp "$binary_path" "$BUILD_DIR/ocr-server"
     log_success "二进制文件已复制到: $BUILD_DIR/ocr-server"
 }
 
-# 执行编译主流程
 do_build() {
     log_step "开始编译..."
     
     cd "$PROJECT_ROOT"
     
-    # 1. 构建前端资源
     build_frontend
     
-    # 2. 编译Rust后端
     build_rust_backend
 }
 
-# 创建发布包
 create_package() {
     if [ "$CREATE_PACKAGE" != "true" ]; then
         return
@@ -525,13 +474,10 @@ create_package() {
     local pkg_name="ocr-server-$(date +%Y%m%d-%H%M%S)"
     local pkg_dir="$BUILD_DIR/$pkg_name"
     
-    # 创建包目录结构
     mkdir -p "$pkg_dir"/{bin,config,scripts,static,data,runtime/{logs,preview,cache,temp,fallback/{db,storage}}}
     
-    # 复制文件
     cp "$BUILD_DIR/ocr-server" "$pkg_dir/bin/"
 
-    # 复制生产配置文件（优先使用config/config.yaml，其次使用config/config.template.yaml 并落地为config.yaml）
     if [ -f "$PROJECT_ROOT/config/config.yaml" ]; then
         cp "$PROJECT_ROOT/config/config.yaml" "$pkg_dir/" 2>/dev/null || true
         mkdir -p "$pkg_dir/config"
@@ -552,12 +498,9 @@ create_package() {
         log_info "已写入版本信息: $(cat "$PROJECT_ROOT/VERSION")"
     fi
 
-    # 规则配置已入库，发布包无需附带旧版主题或静态规则文件
 
-    # 复制生产环境脚本（排除开发调试脚本）
     cp "$PROJECT_ROOT/scripts"/ocr-server.sh "$pkg_dir/scripts/" 2>/dev/null || true
 
-    # 精简文档收集：仅包含 README + API + 部署说明（若存在）
     mkdir -p "$pkg_dir/docs"
     if [ -f "$PROJECT_ROOT/docs/API.md" ]; then
         cp "$PROJECT_ROOT/docs/API.md" "$pkg_dir/docs/" 2>/dev/null || true
@@ -568,11 +511,9 @@ create_package() {
         log_info "已包含部署文档: docs/DEPLOYMENT.md"
     fi
 
-    # 复制前端资源（优先使用混淆后的版本）
     local static_source_dir="$PROJECT_ROOT/static"
     local static_dist_dir="$PROJECT_ROOT/static-dist"
     
-    # 智能选择前端资源源目录：优先使用构建后的static-dist
     if [ -d "$static_dist_dir" ]; then
         log_info "使用混淆后的前端资源: static-dist/"
         static_source_dir="$static_dist_dir"
@@ -587,15 +528,12 @@ create_package() {
     if [ -d "$static_source_dir" ]; then
         mkdir -p "$pkg_dir/static"
         
-        # 复制所有前端资源（混淆版本或源码版本）
         cp -r "$static_source_dir"/* "$pkg_dir/static/" 2>/dev/null || true
         
-        # 排除测试和调试文件
         find "$pkg_dir/static" -name "test-*" -delete 2>/dev/null || true
         find "$pkg_dir/static" -name "*debug*" -delete 2>/dev/null || true
         find "$pkg_dir/static" -name "*-backup.*" -delete 2>/dev/null || true
         
-        # 显示前端资源状态
         local total_files=$(find "$pkg_dir/static" -type f | wc -l)
         local js_files=$(find "$pkg_dir/static" -name "*.js" | wc -l)
         local css_files=$(find "$pkg_dir/static" -name "*.css" | wc -l)
@@ -603,20 +541,16 @@ create_package() {
         
         log_success "前端资源已复制: $total_files 个文件 (JS:$js_files, CSS:$css_files, HTML:$html_files)"
         
-        # 如果使用的是混淆版本，显示额外信息
         if [ "$static_source_dir" = "$static_dist_dir" ]; then
             log_success "生产环境使用混淆压缩后的前端代码"
         fi
     fi
 
-    # 复制OCR引擎
     if [ -d "$PROJECT_ROOT/ocr" ]; then
         cp -r "$PROJECT_ROOT/ocr" "$pkg_dir/"
     fi
 
-    # 注意：根目录的rules已移动到config/rules，不再需要复制
 
-    # 验证关键文件是否复制成功
     log_step "验证关键配置文件..."
     local missing_files=()
 
@@ -633,14 +567,12 @@ create_package() {
         log_success "所有关键配置文件已复制"
     fi
     
-    # 创建启动脚本
     cat > "$pkg_dir/start.sh" << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 
 echo "=== OCR智能预审系统启动 ==="
 
-# 检查关键配置文件
 echo "正在检查配置文件..."
 missing_configs=()
 
@@ -658,7 +590,6 @@ fi
 
 echo "✅ 配置文件检查通过"
 
-# 确保数据库文件存在
 echo "正在检查数据库文件..."
 if [ ! -f "data/ocr.db" ]; then
     echo "创建主数据库文件: data/ocr.db"
@@ -674,7 +605,6 @@ fi
 
 echo "✅ 数据库文件检查完成"
 
-# 设置环境变量
 export RUST_LOG=${RUST_LOG:-info}
 
 echo "🚀 启动OCR服务..."
@@ -686,15 +616,12 @@ echo ""
 EOF
     chmod +x "$pkg_dir/start.sh"
     
-    # 创建README
     cat > "$pkg_dir/README.md" << EOF
-# OCR智能预审系统
 
 版本: $(date +%Y%m%d)
 编译模式: $BUILD_MODE
 目标平台: $TARGET_TRIPLE
 
-## 快速开始
 
 1. 配置系统
    - 编辑 config/config.yaml
@@ -709,7 +636,6 @@ EOF
    - 访问: http://localhost:8964/api/health
    - 查看日志: runtime/logs/
 
-## 目录结构
 
 - bin/         二进制文件
 - config/      配置文件模板  
@@ -721,7 +647,6 @@ EOF
 
 EOF
     
-    # 打包
     cd "$BUILD_DIR"
     tar -czf "$pkg_name.tar.gz" "$pkg_name"
     
@@ -729,7 +654,6 @@ EOF
     log_info "包大小: $(du -h "$BUILD_DIR/$pkg_name.tar.gz" | cut -f1)"
 }
 
-# 清理编译缓存
 clean_build() {
     log_step "清理编译缓存..."
     
@@ -740,7 +664,6 @@ clean_build() {
     log_success "清理完成"
 }
 
-# 解析命令行参数
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -748,7 +671,6 @@ parse_args() {
                 BUILD_MODE="release"
                 TARGET="musl"
                 CREATE_PACKAGE=true
-                # 默认特性由 setup_build_env 决定（monitoring + reqwest@musl + 可选dm_go）
                 shift
                 ;;
             --prod-native)
@@ -820,29 +742,24 @@ parse_args() {
     done
 }
 
-# 主函数
 main() {
     echo "================================"
     echo "OCR服务器统一编译脚本"
     echo "================================"
     echo ""
     
-    # 解析参数
     parse_args "$@"
     
-    # 默认值
     TARGET=${TARGET:-native}
 
     if [[ "$HOST_OS" == "Darwin" ]]; then
         log_warning "检测到 macOS 环境，如需生成生产包请优先使用 ./scripts/build-with-docker.sh"
     fi
     
-    # 根据模式设置默认值
     if [ "$BUILD_MODE" == "prod" ] || [ "$BUILD_MODE" == "release" ]; then
         TARGET=${TARGET:-musl}
     fi
     
-    # 执行编译流程
     check_dependencies "$TARGET"
     setup_build_env
     do_build
@@ -851,7 +768,6 @@ main() {
     echo ""
     log_success "编译完成！"
     
-    # 显示下一步提示
     echo ""
     echo "下一步："
     if [ "$BUILD_MODE" == "dev" ]; then
@@ -865,5 +781,4 @@ main() {
     fi
 }
 
-# 运行主函数
 main "$@"

@@ -63,7 +63,7 @@ base64 = "0.22"
 hmac = "0.12"
 sha2 = "0.10"
 hex = "0.4"
-aes-gcm = "0.10"  # AES加密库
+aes-gcm = "0.10"
 regex = "1"
 zen-engine = "0.29"
 build_html = "2"
@@ -80,7 +80,6 @@ pdf2image = "0.1"
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "chrono"] }
 async-trait = "0.1"
 
-# 监控模块依赖（可选）
 # Optional dependencies for monitoring (only when enabled)
 procfs = { version = "0.16", optional = true }
 psutil = { version = "3.2", optional = true }
@@ -90,15 +89,15 @@ actix-web = { version = "4", optional = true }
 bcrypt = { version = "0.15", optional = true }
 
 [features]
-default = ["reqwest"]  # 默认启用HTTP下载功能
+default = ["reqwest"]
 monitoring = ["procfs", "psutil", "actix-web", "bcrypt"]
-testing = []  # 测试功能特性
-dm_go = ["reqwest"]  # Go网关连接（HTTP网关）
-production_crypto = []  # 启用生产加密实现的占位特性
+testing = []
+dm_go = ["reqwest"]
+production_crypto = []
 
 [profile.release]
 opt-level = 3
-lto = "thin"  # 使用 thin LTO 而不是 fat LTO，更兼容
+lto = "thin"
 codegen-units = 1
 strip = true
 panic = "abort"

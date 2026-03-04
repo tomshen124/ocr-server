@@ -1,5 +1,3 @@
-//! SQLite数据库表结构定义
-//! 包含所有表的CREATE语句和索引定义
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -8,7 +6,6 @@ use uuid;
 
 use crate::api::monitor_auth::DEFAULT_MONITOR_ADMIN_PASSWORD;
 
-/// 数据库表结构管理器
 pub struct SchemaManager;
 
 impl SchemaManager {
@@ -25,7 +22,6 @@ impl SchemaManager {
         }
     }
 
-    /// 创建所有表结构
     pub async fn create_all_tables(pool: &SqlitePool) -> Result<()> {
         Self::create_preview_requests_table(pool).await?;
         Self::create_preview_records_table(pool).await?;
@@ -36,13 +32,9 @@ impl SchemaManager {
         Self::create_preview_material_files_table(pool).await?;
         Self::create_cached_materials_table(pool).await?;
         Self::create_matter_rule_configs_table(pool).await?;
-        // 新增监控系统表
         Self::create_monitor_tables(pool).await?;
-        // 新增用户登录记录表
         Self::create_user_login_records_table(pool).await?;
-        // 新增：回灌Outbox事件表（用于DM恢复后的回灌）
         Self::create_db_outbox_table(pool).await?;
-        // 新增：Worker结果异步处理队列
         Self::create_worker_results_queue_table(pool).await?;
         Ok(())
     }
@@ -86,7 +78,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建材料缓存状态表
     async fn create_cached_materials_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -141,7 +132,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建预审材料评估结果表
     async fn create_preview_material_results_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -203,7 +193,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建预审规则评估结果表
     async fn create_preview_rule_results_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -279,7 +268,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建预审请求表
     async fn create_preview_requests_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -342,7 +330,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建预审材料文件记录表
     async fn create_preview_material_files_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -369,7 +356,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_material_files_preview 
@@ -390,7 +376,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建事项规则配置表
     async fn create_matter_rule_configs_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -434,9 +419,7 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建预审记录表
     async fn create_preview_records_table(pool: &SqlitePool) -> Result<()> {
-        // 创建预审记录表
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS preview_records (
@@ -481,7 +464,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 尝试为旧表补充新增列
         let alter_statements = [
             "ALTER TABLE preview_records ADD COLUMN user_info_json TEXT",
             "ALTER TABLE preview_records ADD COLUMN queued_at TEXT",
@@ -516,9 +498,7 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建预审记录表索引
     async fn create_preview_records_indexes(pool: &SqlitePool) -> Result<()> {
-        // 创建用户ID索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_preview_records_user_id 
@@ -528,7 +508,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 创建第三方请求ID索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_preview_records_third_party_id 
@@ -538,7 +517,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 创建处理时间索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_preview_records_processing_started 
@@ -557,7 +535,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 创建状态索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_preview_records_status 
@@ -567,7 +544,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 创建创建时间索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_preview_records_created_at 
@@ -624,7 +600,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建API统计表
     async fn create_api_stats_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -650,9 +625,7 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建API统计表索引
     async fn create_api_stats_indexes(pool: &SqlitePool) -> Result<()> {
-        // 创建时间索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_api_stats_created_at 
@@ -662,7 +635,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 创建端点索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_api_stats_endpoint 
@@ -672,7 +644,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 创建客户端ID索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_api_stats_client_id 
@@ -682,7 +653,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 创建用户ID索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_api_stats_user_id 
@@ -695,7 +665,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建监控系统相关表
     async fn create_monitor_tables(pool: &SqlitePool) -> Result<()> {
         Self::create_monitor_users_table(pool).await?;
         Self::create_monitor_sessions_table(pool).await?;
@@ -703,7 +672,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建监控用户表
     async fn create_monitor_users_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -725,15 +693,12 @@ impl SchemaManager {
 
         Self::create_monitor_users_indexes(pool).await?;
 
-        // 初始化默认管理员用户
         Self::init_default_admin_user(pool).await?;
 
         Ok(())
     }
 
-    /// 初始化默认管理员用户
     async fn init_default_admin_user(pool: &SqlitePool) -> Result<()> {
-        // 检查是否已存在管理员用户
         let existing_admin =
             sqlx::query("SELECT COUNT(*) as count FROM monitor_users WHERE role = 'admin'")
                 .fetch_one(pool)
@@ -773,7 +738,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建监控用户表索引
     async fn create_monitor_users_indexes(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -805,7 +769,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建监控会话表
     async fn create_monitor_sessions_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -828,7 +791,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建监控会话表索引
     async fn create_monitor_sessions_indexes(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -851,9 +813,7 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 插入默认监控用户
     async fn insert_default_monitor_users(pool: &SqlitePool) -> Result<()> {
-        // 检查是否已存在admin用户
         let exists = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM monitor_users WHERE username = 'admin'",
         )
@@ -891,9 +851,7 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建用户登录记录表
     async fn create_user_login_records_table(pool: &SqlitePool) -> Result<()> {
-        // 创建用户登录记录表
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS user_login_records (
@@ -924,9 +882,7 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建用户登录记录表索引
     async fn create_user_login_records_indexes(pool: &SqlitePool) -> Result<()> {
-        // 用户ID索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_user_login_records_user_id 
@@ -936,7 +892,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 登录类型索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_user_login_records_login_type 
@@ -946,7 +901,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 创建时间索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_user_login_records_created_at 
@@ -956,7 +910,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 客户端IP索引
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_user_login_records_client_ip 
@@ -969,7 +922,6 @@ impl SchemaManager {
         Ok(())
     }
 
-    /// 创建回灌Outbox事件表（SQLite）
     async fn create_db_outbox_table(pool: &SqlitePool) -> Result<()> {
         sqlx::query(
             r#"
@@ -990,7 +942,6 @@ impl SchemaManager {
         .execute(pool)
         .await?;
 
-        // 索引：表名、创建时间、应用时间
         sqlx::query(
             r#"
             CREATE INDEX IF NOT EXISTS idx_db_outbox_table_name 

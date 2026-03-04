@@ -58,7 +58,6 @@ fn is_quiet_path(path: &str) -> bool {
     QUIET_EXACT.contains(&path) || QUIET_PREFIX.iter().any(|prefix| path.starts_with(prefix))
 }
 
-// 统一请求日志中间件
 pub async fn request_logging_middleware(mut request: Request, next: Next) -> Response {
     let start_time = Instant::now();
     let request_id = Uuid::new_v4().to_string();
@@ -224,7 +223,6 @@ pub async fn request_logging_middleware(mut request: Request, next: Next) -> Res
     response
 }
 
-// 认证中间件
 pub async fn auth_required(
     State(app_state): State<AppState>,
     mut session: Session,
@@ -255,7 +253,6 @@ pub async fn auth_required(
         session_present
     );
 
-    // 检查会话中是否有用户信息
     let monitor_session_id = extract_monitor_session_id(&request);
 
     match session.get::<SessionUser>("session_user").await {
@@ -269,7 +266,6 @@ pub async fn auth_required(
                 username = %user.user_name.as_deref().unwrap_or("unknown")
             );
 
-            // 将用户信息添加到请求扩展中，供后续处理使用
             request.extensions_mut().insert(user);
             Ok(next.run(request).await)
         }
@@ -382,7 +378,6 @@ pub async fn auth_required(
 }
 
 fn extract_monitor_session_id(request: &Request) -> Option<String> {
-    // 先从查询参数获取
     if let Some(query) = request.uri().query() {
         if let Some(value) = form_urlencoded::parse(query.as_bytes())
             .find(|(key, _)| key == "monitor_session_id")
@@ -394,7 +389,6 @@ fn extract_monitor_session_id(request: &Request) -> Option<String> {
         }
     }
 
-    // 尝试从请求头获取
     request
         .headers()
         .get("x-monitor-session-id")
@@ -402,11 +396,8 @@ fn extract_monitor_session_id(request: &Request) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-// CORS中间件
 pub async fn cors_middleware(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
 
-    // 这里可以添加CORS头部处理
-    // 目前保持简单，返回原始响应
     response
 }

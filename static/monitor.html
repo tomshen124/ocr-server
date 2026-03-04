@@ -6,11 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>运维管理中心 - OCR智能预审系统</title>
     <script>
-        // 静态资源版本号，便于缓存刷新
         window.__MONITOR_APP_VERSION = '20251210-01';
     </script>
     <link rel="stylesheet" href="css/monitor.css?v=20251210-01">
-    <!-- Chart.js (本地离线版本) -->
     <script src="js/chart.umd.min.js"></script>
     <script>
         (function () {
@@ -96,7 +94,6 @@
 
             <!-- Content Views -->
             <div class="content-body">
-                <!-- 业务统计 View -->
                 <div class="view-pane active" id="business-pane">
                     <!-- Overview Cards -->
                     <div class="overview-cards">
@@ -169,7 +166,6 @@
                         </div>
                     </div>
 
-                    <!-- 业务数据可视化图表 -->
                     <div class="charts-grid">
                         <div class="card">
                             <div class="card-header">
@@ -229,7 +225,6 @@
                     </div>
                 </div>
 
-                <!-- 系统监控 View -->
                 <div class="view-pane" id="system-pane">
                     <div class="overview-cards">
                         <div class="card metric-card">
@@ -262,7 +257,6 @@
                         </div>
                     </div>
 
-                    <!-- 实时资源趋势图 -->
                     <div class="charts-grid">
                         <div class="card">
                             <div class="card-header">
@@ -309,7 +303,6 @@
                         </div>
                     </div>
 
-                    <!-- 高级运维选项 (仅管理员可见) -->
                     <div class="card table-card mt-4 admin-only" id="advancedOpsCard" style="display: none;">
                         <div class="card-header" onclick="toggleAdvancedOps()" style="cursor: pointer;">
                             <h3>
@@ -351,7 +344,6 @@
                     </div>
                 </div>
 
-                <!-- 监控认证 View -->
                 <div class="view-pane" id="auth-pane">
                     <div class="auth-container">
                         <!-- Login Form -->
@@ -424,7 +416,6 @@
                     </div>
                 </div>
 
-                <!-- 故障转移 View -->
                 <div class="view-pane" id="failover-pane">
                     <div class="card">
                         <div class="card-header">
@@ -468,7 +459,6 @@
                     </div>
                 </div>
 
-                <!-- OCR池 View -->
                 <div class="view-pane" id="ocr-pane">
                     <div class="card">
                         <div class="card-header">
@@ -498,7 +488,6 @@
                     </div>
                 </div>
 
-                <!-- 并发控制 View -->
                 <div class="view-pane" id="concurrency-pane">
                     <div class="card">
                         <div class="card-header">

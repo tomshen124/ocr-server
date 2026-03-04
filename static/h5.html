@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>材料智能预审 - 移动版</title>
     <script>
-        // 进入移动版时清除强制电脑版标记
         localStorage.removeItem('forcePc');
     </script>
     <link rel="stylesheet" href="css/main.css">
@@ -13,7 +12,6 @@
     <link rel="stylesheet" href="css/modals.css">
 </head>
 <body>
-    <!-- 顶部导航 -->
     <header class="header">
         <div class="header-content">
             <h1 class="header-title">材料智能预审</h1>
@@ -27,22 +25,16 @@
         </div>
     </header>
 
-    <!-- 智能预审结果提示 -->
     <div class="result-notice">
         <span class="notice-icon">⚠️</span>
         <span class="notice-text">温馨提示：以下内容为系统根据申报材料自动比对政务服务事项办事指南，申报材料等，仅供参考。</span>
     </div>
 
-    <!-- 主要内容区域 -->
     <div class="main-container">
-        <!-- 左侧基本信息和材料列表 -->
         <div class="left-panel">
-            <!-- 基本信息 -->
             <div class="basic-info-card">
-                <!-- 由BasicInfoComponent渲染 -->
             </div>
 
-            <!-- 审核材料 -->
             <div class="materials-card">
                 <div class="materials-header">
                     <h3 class="card-title">审核材料</h3>
@@ -58,16 +50,12 @@
                 </div>
 
                 <div class="materials-list" id="materials-list">
-                    <!-- 由MaterialsListComponent渲染 -->
                 </div>
             </div>
 
-            <!-- 已通过材料 -->
             <div class="passed-materials-card">
-                <!-- 由PassedMaterialsComponent渲染 -->
             </div>
 
-            <!-- 下载按钮 -->
             <div class="download-actions">
                 <button class="download-btn" id="download-report-pdf" style="display: none;">
                     下载PDF报告
@@ -78,15 +66,11 @@
             </div>
         </div>
 
-        <!-- 右侧内容预览区域 -->
         <div class="right-panel" id="right-panel">
-            <!-- 由StatusDisplayComponent或DocumentPreviewComponent渲染 -->
         </div>
     </div>
 
-    <!-- Loading 遮罩层 -->
     <div class="loading-overlay" id="loading-overlay">
-        <!-- Loading页面头部 -->
         <div class="loading-header">
             <div class="loading-header-content">
                 <h1 class="loading-header-title">材料智能预审</h1>
@@ -94,7 +78,6 @@
             </div>
         </div>
         
-        <!-- Loading主内容区 -->
         <div class="loading-content">
             <div class="loading-scanner">
                 <div class="scanner-frame">
@@ -120,7 +103,6 @@
         </div>
     </div>
 
-    <!-- 异常提示弹窗 -->
     <div class="modal-overlay" id="error-modal">
         <div class="modal-content">
             <div class="error-icon">
@@ -135,7 +117,6 @@
         </div>
     </div>
 
-    <!-- 文档预览弹窗 -->
     <div class="document-modal" id="document-modal">
         <div class="document-modal-content">
             <div class="document-modal-header">
@@ -149,7 +130,6 @@
     </div>
 
     <script>
-        // 切换到电脑版
         function switchToPc() {
             localStorage.setItem('forcePc', '1');
             window.location.replace('index.html' + window.location.search + window.location.hash);
@@ -162,7 +142,6 @@
         });
     </script>
 
-    <!-- 脚本引入 -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/components.js"></script>

@@ -1,5 +1,3 @@
-//! 访问日志和安全审计模块
-//! 提供详细的访问记录、安全事件记录和审计功能
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -7,42 +5,26 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::{error, info, warn};
 
-/// 访问日志记录器
 pub struct AccessLogger {
-    /// 内存中的访问记录（生产环境应该使用数据库或日志文件）
     access_records: Arc<Mutex<Vec<AccessRecord>>>,
-    /// 安全事件记录
     security_events: Arc<Mutex<Vec<SecurityEvent>>>,
 }
 
-/// 访问记录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessRecord {
-    /// 访问时间
     pub timestamp: DateTime<Utc>,
-    /// 客户端ID
     pub client_id: String,
-    /// 客户端名称
     pub client_name: String,
-    /// API路径
     pub api_path: String,
-    /// 远程地址
     pub remote_addr: String,
-    /// 访问密钥
     pub access_key: String,
-    /// 请求结果
     pub result: AccessResult,
-    /// 响应时间（毫秒）
     pub response_time_ms: Option<u64>,
-    /// 用户代理
     pub user_agent: Option<String>,
-    /// 请求大小（字节）
     pub request_size: Option<u64>,
-    /// 响应大小（字节）
     pub response_size: Option<u64>,
 }
 
-/// 访问结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AccessResult {
     Success,
@@ -52,49 +34,30 @@ pub enum AccessResult {
     ServerError(String),
 }
 
-/// 安全事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityEvent {
-    /// 事件时间
     pub timestamp: DateTime<Utc>,
-    /// 事件类型
     pub event_type: SecurityEventType,
-    /// 严重级别
     pub severity: SecuritySeverity,
-    /// 客户端ID（如果适用）
     pub client_id: Option<String>,
-    /// 远程地址
     pub remote_addr: String,
-    /// 事件描述
     pub description: String,
-    /// 相关详情
     pub details: HashMap<String, String>,
-    /// 是否已处理
     pub handled: bool,
 }
 
-/// 安全事件类型
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SecurityEventType {
-    /// 认证失败
     AuthenticationFailure,
-    /// 权限拒绝
     PermissionDenied,
-    /// 频率限制触发
     RateLimitTriggered,
-    /// 可疑活动
     SuspiciousActivity,
-    /// 配置变更
     ConfigurationChange,
-    /// 异常访问模式
     AnomalousAccessPattern,
-    /// 签名验证失败
     SignatureVerificationFailure,
-    /// 时间戳异常
     TimestampAnomaly,
 }
 
-/// 安全事件严重程度
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum SecuritySeverity {
     Info,
@@ -105,7 +68,6 @@ pub enum SecuritySeverity {
 }
 
 impl AccessLogger {
-    /// 创建新的访问日志记录器
     pub fn new() -> Self {
         Self {
             access_records: Arc::new(Mutex::new(Vec::new())),
@@ -113,7 +75,6 @@ impl AccessLogger {
         }
     }
 
-    /// 记录成功访问
     pub fn log_successful_access(
         &self,
         client_id: String,
@@ -150,7 +111,6 @@ impl AccessLogger {
         );
     }
 
-    /// 记录访问失败
     pub fn log_failed_access(
         &self,
         client_id: Option<String>,
@@ -176,7 +136,6 @@ impl AccessLogger {
 
         self.add_access_record(record);
 
-        // 同时记录为安全事件
         let event_type = match result {
             AccessResult::AuthFailed(_) => SecurityEventType::AuthenticationFailure,
             AccessResult::PermissionDenied(_) => SecurityEventType::PermissionDenied,
@@ -194,7 +153,6 @@ impl AccessLogger {
         );
     }
 
-    /// 记录安全事件
     pub fn log_security_event(
         &self,
         event_type: SecurityEventType,
@@ -257,29 +215,24 @@ impl AccessLogger {
         }
     }
 
-    /// 添加访问记录
     fn add_access_record(&self, record: AccessRecord) {
         let mut records = self.access_records.lock().unwrap();
         records.push(record);
 
-        // 保持记录数量在合理范围内（生产环境应该持久化到数据库）
         if records.len() > 10000 {
-            records.drain(0..1000); // 移除最老的1000条记录
+            records.drain(0..1000);
         }
     }
 
-    /// 添加安全事件
     fn add_security_event(&self, event: SecurityEvent) {
         let mut events = self.security_events.lock().unwrap();
         events.push(event);
 
-        // 保持事件数量在合理范围内
         if events.len() > 5000 {
-            events.drain(0..500); // 移除最老的500个事件
+            events.drain(0..500);
         }
     }
 
-    /// 获取访问统计
     pub fn get_access_statistics(&self, time_range: TimeRange) -> AccessStatistics {
         let records = self.access_records.lock().unwrap();
         let now = Utc::now();
@@ -332,7 +285,6 @@ impl AccessLogger {
         }
     }
 
-    /// 获取安全事件统计
     pub fn get_security_statistics(&self, time_range: TimeRange) -> SecurityStatistics {
         let events = self.security_events.lock().unwrap();
         let now = Utc::now();
@@ -379,7 +331,6 @@ impl AccessLogger {
         }
     }
 
-    /// 获取指定客户端的访问历史
     pub fn get_client_access_history(&self, client_id: &str, limit: usize) -> Vec<AccessRecord> {
         let records = self.access_records.lock().unwrap();
         records
@@ -391,7 +342,6 @@ impl AccessLogger {
             .collect()
     }
 
-    /// 获取未处理的安全事件
     pub fn get_unhandled_security_events(&self) -> Vec<SecurityEvent> {
         let events = self.security_events.lock().unwrap();
         events
@@ -401,7 +351,6 @@ impl AccessLogger {
             .collect()
     }
 
-    /// 标记安全事件为已处理
     pub fn mark_security_event_handled(&self, event_index: usize) {
         let mut events = self.security_events.lock().unwrap();
         if let Some(event) = events.get_mut(event_index) {
@@ -409,7 +358,6 @@ impl AccessLogger {
         }
     }
 
-    /// 获取TOP条目
     fn get_top_entries(mut stats: HashMap<String, usize>, limit: usize) -> Vec<(String, usize)> {
         let mut entries: Vec<_> = stats.drain().collect();
         entries.sort_by(|a, b| b.1.cmp(&a.1));
@@ -417,7 +365,6 @@ impl AccessLogger {
     }
 }
 
-/// 时间范围
 #[derive(Debug, Clone, Copy)]
 pub enum TimeRange {
     LastHour,
@@ -426,7 +373,6 @@ pub enum TimeRange {
     LastMonth,
 }
 
-/// 访问统计信息
 #[derive(Debug, Clone)]
 pub struct AccessStatistics {
     pub time_range: TimeRange,
@@ -439,7 +385,6 @@ pub struct AccessStatistics {
     pub avg_response_time_ms: Option<u64>,
 }
 
-/// 安全统计信息
 #[derive(Debug, Clone)]
 pub struct SecurityStatistics {
     pub time_range: TimeRange,
@@ -501,7 +446,6 @@ mod tests {
     fn test_access_statistics() {
         let logger = AccessLogger::new();
 
-        // 添加一些测试数据
         for i in 0..5 {
             logger.log_successful_access(
                 format!("client_{}", i % 2),

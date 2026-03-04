@@ -1,4 +1,3 @@
-//! 动态Worker状态查询API
 
 use axum::{extract::State, Json};
 use serde::Serialize;

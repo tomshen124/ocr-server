@@ -1,4 +1,3 @@
-//! 元数据接口：表列表与行数估算（通过达梦 Go 网关）
 
 use crate::util::config::types::GoGatewayConfig;
 use crate::AppState;
@@ -70,7 +69,6 @@ pub async fn list_tables(
             .into_response();
     }
 
-    // 尝试缓存
     let cache_ttl = cache_ttl_secs();
     if let Some((payload, cache_header)) = {
         let cache = TABLES_CACHE.get_or_init(|| Mutex::new(None));
@@ -207,7 +205,6 @@ pub async fn list_tables(
 }
 
 fn resolve_go_gateway_config() -> Option<GoGatewayConfig> {
-    // 优先新配置 database.go_gateway，再回退 database.dm.go_gateway
     if let Some(db_cfg) = crate::CONFIG.database.as_ref() {
         if let Some(gw) = db_cfg.go_gateway.as_ref() {
             return Some(gw.clone());

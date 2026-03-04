@@ -93,7 +93,6 @@ impl User {
 
         #[cfg(feature = "reqwest")]
         {
-            // 检查HTTP客户端是否可用
             let client = match CLIENT.as_ref() {
                 Some(client) => client,
                 None => {
@@ -118,7 +117,6 @@ impl User {
 
         #[cfg(not(feature = "reqwest"))]
         {
-            // MUSL环境下不支持HTTP请求，返回错误
             tracing::warn!("HTTP请求功能在MUSL环境下未启用");
             Err(anyhow::anyhow!("HTTP请求功能未启用"))
         }

@@ -1,5 +1,3 @@
-//! 第三方客户端认证模块
-//! 负责客户端身份验证、权限检查和签名验证
 
 use crate::util::config::ThirdPartyClient;
 use crate::CONFIG;
@@ -11,16 +9,14 @@ use sha2::Sha256;
 use std::collections::HashMap;
 use tracing::{error, info, warn};
 
-/// 认证后的客户端信息
 #[derive(Debug, Clone)]
 pub struct AuthenticatedClient {
     pub client_id: String,
     pub client_name: String,
     pub source_type: String,      // "platform_gateway" | "direct_api"
-    pub permissions: Vec<String>, // 保留向后兼容
+    pub permissions: Vec<String>,
 }
 
-/// API请求认证信息
 #[derive(Debug, Deserialize, Clone)]
 pub struct ApiAuthRequest {
     pub access_key: String,
@@ -29,14 +25,12 @@ pub struct ApiAuthRequest {
     pub nonce: Option<String>,
 }
 
-/// 认证结果
 #[derive(Debug, Clone)]
 pub enum AuthResult {
     Success(AuthenticatedClient),
     Failed(AuthError),
 }
 
-/// 认证错误类型
 #[derive(Debug, Clone)]
 pub enum AuthError {
     MissingParameters(String),
@@ -60,11 +54,9 @@ impl AuthError {
     }
 }
 
-/// 第三方认证服务
 pub struct ThirdPartyAuthService;
 
 impl ThirdPartyAuthService {
-    /// 验证第三方客户端完整认证流程
     pub fn authenticate_client(
         auth_info: &ApiAuthRequest,
         api_path: &str,
@@ -78,7 +70,6 @@ impl ThirdPartyAuthService {
             "[lock] 开始第三方认证验证"
         );
 
-        // 1. 验证客户端身份
         let client = match Self::verify_client_identity(auth_info) {
             Ok(client) => client,
             Err(error) => {
@@ -94,8 +85,6 @@ impl ThirdPartyAuthService {
             }
         };
 
-        // 2. 简化权限验证 - 只要AK/SK验证通过就可以调用预审接口
-        // 不再需要复杂的权限检查，配了AK/SK就能调用
         info!(
             event = "third_party_auth",
             api_path = api_path,
@@ -110,7 +99,6 @@ impl ThirdPartyAuthService {
             }
         );
 
-        // 3. 验证签名（如果启用）
         if CONFIG.third_party_access.signature.required {
             if let Err(error) = Self::verify_signature(auth_info, &client.secret_key) {
                 warn!(
@@ -143,7 +131,6 @@ impl ThirdPartyAuthService {
         })
     }
 
-    /// 验证客户端身份
     fn verify_client_identity(auth_info: &ApiAuthRequest) -> Result<ThirdPartyClient, AuthError> {
         let clients = &CONFIG.third_party_access.clients;
 
@@ -159,9 +146,7 @@ impl ThirdPartyAuthService {
         Err(AuthError::InvalidClient("无效的访问密钥".to_string()))
     }
 
-    /// 验证HMAC-SHA256签名
     fn verify_signature(auth_info: &ApiAuthRequest, secret_key: &str) -> Result<(), AuthError> {
-        // 检查时间戳有效性
         let request_time = DateTime::parse_from_rfc3339(&auth_info.timestamp)
             .map_err(|_| AuthError::TimestampExpired("无效的时间戳格式".to_string()))?;
 
@@ -172,7 +157,6 @@ impl ThirdPartyAuthService {
             return Err(AuthError::TimestampExpired("请求时间戳已过期".to_string()));
         }
 
-        // 构建签名字符串
         let sign_string = format!(
             "access_key={}&timestamp={}&nonce={}",
             auth_info.access_key,
@@ -180,7 +164,6 @@ impl ThirdPartyAuthService {
             auth_info.nonce.as_deref().unwrap_or("")
         );
 
-        // 计算HMAC-SHA256签名
         type HmacSha256 = Hmac<Sha256>;
         let mut mac = HmacSha256::new_from_slice(secret_key.as_bytes())
             .map_err(|_| AuthError::SignatureVerificationFailed("无效的密钥".to_string()))?;
@@ -197,12 +180,10 @@ impl ThirdPartyAuthService {
         Ok(())
     }
 
-    /// 从请求中提取认证信息
     pub fn extract_auth_info(
         headers: &axum::http::HeaderMap,
         params: &HashMap<String, String>,
     ) -> Result<ApiAuthRequest, AuthError> {
-        // 优先从请求头获取（推荐方式）
         if let (Some(access_key), Some(timestamp), Some(signature)) = (
             headers.get("X-Access-Key").and_then(|v| v.to_str().ok()),
             headers.get("X-Timestamp").and_then(|v| v.to_str().ok()),
@@ -219,7 +200,6 @@ impl ThirdPartyAuthService {
             });
         }
 
-        // 否则从查询参数获取（兼容方式）
         if let (Some(access_key), Some(timestamp), Some(signature)) = (
             params.get("access_key"),
             params.get("timestamp"),
@@ -238,7 +218,6 @@ impl ThirdPartyAuthService {
         ))
     }
 
-    /// 生成API签名示例（供第三方系统参考）
     pub fn generate_signature_example(
         access_key: &str,
         secret_key: &str,
@@ -258,7 +237,6 @@ impl ThirdPartyAuthService {
         hex::encode(mac.finalize().into_bytes())
     }
 
-    /// 验证客户端配置有效性 - 简化版本
     pub fn validate_client_config(client: &ThirdPartyClient) -> Result<(), String> {
         if client.client_id.is_empty() {
             return Err("客户端ID不能为空".to_string());
@@ -272,7 +250,6 @@ impl ThirdPartyAuthService {
             return Err("客户端名称不能为空".to_string());
         }
 
-        // 验证来源类型
         if !["platform_gateway", "direct_api"].contains(&client.source_type.as_str()) {
             return Err(format!(
                 "无效的来源类型: {}，应为 'platform_gateway' 或 'direct_api'",
@@ -298,7 +275,7 @@ mod tests {
             ThirdPartyAuthService::generate_signature_example(access_key, secret_key, nonce);
 
         assert!(!signature.is_empty());
-        assert_eq!(signature.len(), 64); // HMAC-SHA256 hex长度
+        assert_eq!(signature.len(), 64);
     }
 
     #[test]
@@ -309,21 +286,17 @@ mod tests {
             name: "Test Client".to_string(),
             source_type: "direct_api".to_string(),
             enabled: true,
-            permissions: vec![], // 权限现在是可选的
+            permissions: vec![],
         };
 
-        // 有效配置
         assert!(ThirdPartyAuthService::validate_client_config(&client).is_ok());
 
-        // 测试平台网关类型
         client.source_type = "platform_gateway".to_string();
         assert!(ThirdPartyAuthService::validate_client_config(&client).is_ok());
 
-        // 无效来源类型
         client.source_type = "invalid_type".to_string();
         assert!(ThirdPartyAuthService::validate_client_config(&client).is_err());
 
-        // 空客户端ID
         client.source_type = "direct_api".to_string();
         client.client_id = "".to_string();
         assert!(ThirdPartyAuthService::validate_client_config(&client).is_err());

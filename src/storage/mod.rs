@@ -1,4 +1,3 @@
-// 存储抽象层模块
 
 pub mod factory;
 pub mod failover;

@@ -49,7 +49,6 @@ impl CacheState {
     }
 }
 
-/// Worker 节点规则缓存句柄，暴露给调用方使用
 #[derive(Clone)]
 pub struct WorkerCachedRuleHandle {
     pub json: Arc<Value>,
@@ -67,7 +66,6 @@ impl From<&CachedRule> for WorkerCachedRuleHandle {
     }
 }
 
-/// Worker 规则缓存，实现简单的 TTL + LRU 淘汰
 pub struct WorkerRuleCache {
     enabled: bool,
     ttl: Option<Duration>,
@@ -97,7 +95,6 @@ impl WorkerRuleCache {
             return Self::new(cache_cfg.enabled, ttl, cache_cfg.max_entries.max(1));
         }
 
-        // 默认开启缓存，但使用较小容量
         Self::new(
             true,
             Some(Duration::from_secs(FALLBACK_TTL_SECS)),
@@ -163,7 +160,6 @@ impl WorkerRuleCache {
         }
     }
 
-    /// 记忆最新的规则定义，返回可复用的句柄
     pub async fn remember(&self, matter_id: &str, value: Value) -> Result<WorkerCachedRuleHandle> {
         let definition: MatterRuleDefinition =
             serde_json::from_value(value.clone()).context("解析事项规则JSON失败")?;
@@ -181,7 +177,6 @@ impl WorkerRuleCache {
         Ok(handle)
     }
 
-    /// 尝试从缓存中读取规则定义
     pub async fn get(&self, matter_id: &str) -> Option<WorkerCachedRuleHandle> {
         if !self.enabled {
             return None;
@@ -206,7 +201,6 @@ impl WorkerRuleCache {
         None
     }
 
-    /// 清理全部缓存（测试或热更新使用）
     #[allow(dead_code)]
     pub async fn clear(&self) {
         let mut guard = self.state.lock().await;
@@ -215,7 +209,6 @@ impl WorkerRuleCache {
     }
 }
 
-/// 工具函数：判定失败原因是否命中OCR关键字
 pub fn matches_ocr_failure(reason: &str) -> bool {
     let lower = reason.to_ascii_lowercase();
     lower.contains("ocr")

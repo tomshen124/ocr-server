@@ -15,7 +15,6 @@ use crate::AppState;
 
 static OUTBOX_RUNTIME: OnceCell<Arc<OutboxManager>> = OnceCell::new();
 
-/// 初始化 Outbox 运行时
 pub fn initialize(app_state: &AppState) {
     if !app_state.config.outbox.enabled {
         tracing::info!("[outbox] Outbox 已禁用，跳过初始化");
@@ -29,7 +28,6 @@ pub fn initialize(app_state: &AppState) {
     }
 }
 
-/// 将第三方回调写入 Outbox
 pub async fn enqueue_third_party_callback_event(
     preview_id: &str,
     callback_url: &str,

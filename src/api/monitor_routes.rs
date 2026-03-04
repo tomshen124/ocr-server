@@ -1,5 +1,3 @@
-//! 监控系统HTTP API端点
-//! 提供登录、登出、会话验证等API
 
 use crate::api::monitor_auth::{LoginRequest, LoginResponse, MonitorAuthService};
 use crate::api::worker_proxy;
@@ -15,7 +13,6 @@ use axum::{
 use chrono::{Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 
-/// 会话验证查询参数
 #[derive(Debug, Deserialize)]
 pub struct SessionQuery {
     #[serde(
@@ -27,7 +24,6 @@ pub struct SessionQuery {
     session_id: String,
 }
 
-/// 预审修复查询参数
 #[derive(Debug, Deserialize)]
 pub struct PreviewRepairQuery {
     #[serde(
@@ -37,12 +33,10 @@ pub struct PreviewRepairQuery {
         alias = "session_id"
     )]
     session_id: String,
-    /// 允许修复的最大时间窗（小时），默认 168 小时（7 天）
     #[serde(default)]
     max_age_hours: Option<i64>,
 }
 
-/// 通用API响应
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T> {
     pub success: bool,
@@ -68,7 +62,6 @@ impl<T> ApiResponse<T> {
     }
 }
 
-/// 创建用户请求
 #[derive(Debug, Deserialize)]
 pub struct CreateUserRequest {
     pub username: String,
@@ -77,19 +70,16 @@ pub struct CreateUserRequest {
     pub role: Option<String>,
 }
 
-/// 更新角色请求
 #[derive(Debug, Deserialize)]
 pub struct UpdateUserRoleRequest {
     pub role: String,
 }
 
-/// 重置密码请求
 #[derive(Debug, Deserialize)]
 pub struct ResetPasswordRequest {
     pub password: String,
 }
 
-/// 监控API路由
 pub fn monitor_routes() -> Router<AppState> {
     Router::new()
         .route("/auth/login", post(login))
@@ -98,7 +88,6 @@ pub fn monitor_routes() -> Router<AppState> {
         .route("/auth/sessions/active", get(active_sessions))
         .route("/auth/cleanup", post(cleanup_sessions))
         .route("/users", get(list_users).post(create_user))
-        // 兼容旧前端：POST /users/{id} 直接视为禁用
         .route(
             "/users/{user_id}",
             delete(delete_user).post(deactivate_user_post),
@@ -112,13 +101,11 @@ pub fn monitor_routes() -> Router<AppState> {
         .route("/users/{user_id}/password", put(reset_user_password))
         .route("/users/{user_id}/activate", post(activate_user))
         .route("/previews/{preview_id}/repair", post(repair_preview_links))
-        // 全局限流控制 (仅 super_admin)
         .route("/system/throttle/status", get(throttle_status))
         .route("/system/throttle/enable", post(throttle_enable))
         .route("/system/throttle/disable", post(throttle_disable))
 }
 
-/// 用户登录
 pub async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -126,10 +113,8 @@ pub async fn login(
 ) -> Result<Json<LoginResponse>, StatusCode> {
     let auth_service = MonitorAuthService::new(state.database.clone());
 
-    // 获取客户端IP
     let ip = get_client_ip(&headers).unwrap_or_else(|| "unknown".to_string());
 
-    // 获取User-Agent
     let user_agent = headers
         .get("user-agent")
         .and_then(|h| h.to_str().ok())
@@ -152,7 +137,6 @@ pub async fn login(
     }
 }
 
-/// 用户登出
 pub async fn logout(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
@@ -168,7 +152,6 @@ pub async fn logout(
     }
 }
 
-/// 检查会话状态
 pub async fn check_status(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
@@ -185,7 +168,6 @@ pub async fn check_status(
     }
 }
 
-/// 获取当前活跃会话数量
 pub async fn active_sessions(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
@@ -207,17 +189,14 @@ pub async fn active_sessions(
     }
 }
 
-/// 清理过期会话 (管理员功能)
 pub async fn cleanup_sessions(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
 ) -> Result<Json<ApiResponse<u64>>, StatusCode> {
     let auth_service = MonitorAuthService::new(state.database.clone());
 
-    // 验证会话并检查超级管理员权限
     require_role(&auth_service, &query.session_id, &["super_admin"]).await?;
 
-    // 执行清理
     match auth_service.cleanup_expired_sessions().await {
         Ok(count) => {
             tracing::info!("清理了 {} 个过期会话", count);
@@ -265,7 +244,6 @@ async fn require_role(
     }
 }
 
-/// 获取监控用户列表
 pub async fn list_users(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
@@ -287,7 +265,6 @@ pub async fn list_users(
     }
 }
 
-/// 创建监控用户
 pub async fn create_user(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
@@ -310,7 +287,6 @@ pub async fn create_user(
     }
 }
 
-/// 更新监控用户角色
 pub async fn update_user_role(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
@@ -329,7 +305,6 @@ pub async fn update_user_role(
     }
 }
 
-/// 重置监控用户密码
 pub async fn reset_user_password(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
@@ -351,7 +326,6 @@ pub async fn reset_user_password(
     }
 }
 
-/// 重置监控用户密码（POST 兼容）
 pub async fn reset_user_password_post(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
@@ -373,7 +347,6 @@ pub async fn reset_user_password_post(
     }
 }
 
-/// 禁用监控用户
 pub async fn delete_user(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
@@ -391,7 +364,6 @@ pub async fn delete_user(
     }
 }
 
-/// 禁用监控用户（POST 兼容）
 pub async fn deactivate_user_post(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
@@ -409,7 +381,6 @@ pub async fn deactivate_user_post(
     }
 }
 
-/// 启用监控用户
 pub async fn activate_user(
     State(state): State<AppState>,
     Path(user_id): Path<String>,
@@ -427,7 +398,6 @@ pub async fn activate_user(
     }
 }
 
-/// 修复预审记录的附件链接并回填稳定URL
 pub async fn repair_preview_links(
     State(state): State<AppState>,
     Path(preview_id): Path<String>,
@@ -492,9 +462,7 @@ pub async fn repair_preview_links(
     }
 }
 
-/// 从请求头中获取客户端IP
 fn get_client_ip(headers: &HeaderMap) -> Option<String> {
-    // 按优先级检查各种可能的IP头
     let ip_headers = [
         "x-forwarded-for",
         "x-real-ip",
@@ -506,7 +474,6 @@ fn get_client_ip(headers: &HeaderMap) -> Option<String> {
     for header_name in &ip_headers {
         if let Some(value) = headers.get(*header_name) {
             if let Ok(ip_str) = value.to_str() {
-                // X-Forwarded-For 可能包含多个IP，取第一个
                 let ip = ip_str.split(',').next().unwrap_or(ip_str).trim();
                 if !ip.is_empty() && ip != "unknown" {
                     return Some(ip.to_string());
@@ -518,9 +485,7 @@ fn get_client_ip(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-// ============ 全局限流控制 API ============
 
-/// 限流启用请求
 #[derive(Debug, Deserialize)]
 pub struct ThrottleEnableRequest {
     pub max_requests: u32,
@@ -528,7 +493,6 @@ pub struct ThrottleEnableRequest {
     pub reason: Option<String>,
 }
 
-/// 获取限流状态
 pub async fn throttle_status(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
@@ -540,7 +504,6 @@ pub async fn throttle_status(
     Ok(Json(ApiResponse::success(status)))
 }
 
-/// 启用限流
 pub async fn throttle_enable(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
@@ -560,7 +523,6 @@ pub async fn throttle_enable(
     Ok(Json(ApiResponse::success(status)))
 }
 
-/// 解除限流
 pub async fn throttle_disable(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,

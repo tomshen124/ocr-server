@@ -1,5 +1,3 @@
-//! 监控和统计模块
-//! 处理系统状态监控、预审统计、队列状态等功能
 
 use crate::api::worker_proxy;
 use crate::build_info;
@@ -23,7 +21,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// 基本健康检查
 pub async fn basic_health_check() -> impl IntoResponse {
     let status = HealthStatus {
         status: "healthy".to_string(),
@@ -40,7 +37,6 @@ pub async fn basic_health_check() -> impl IntoResponse {
     resp
 }
 
-/// 获取系统监控状态
 pub async fn get_system_status() -> impl IntoResponse {
     let system_metrics = serde_json::json!({
         "cpu_usage": system_info::get_cpu_usage(),
@@ -55,9 +51,7 @@ pub async fn get_system_status() -> impl IntoResponse {
     Json(system_metrics)
 }
 
-/// 详细健康检查
 pub async fn detailed_health_check() -> impl IntoResponse {
-    // 使用 tokio::time::timeout 添加超时
     match tokio::time::timeout(
         std::time::Duration::from_secs(5),
         collect_detailed_health_info(),
@@ -90,14 +84,12 @@ pub async fn detailed_health_check() -> impl IntoResponse {
     }
 }
 
-/// 收集详细健康信息
 async fn collect_detailed_health_info() -> DetailedHealthStatus {
     let memory = system_info::get_memory_usage();
     let cpu = system_info::get_cpu_usage();
     let disk = system_info::get_disk_usage();
     let queue = system_info::get_queue_status().await;
 
-    // 确定服务状态
     let status = if cpu.usage_percent > 90.0 || memory.usage_percent > 90.0 {
         "degraded"
     } else {
@@ -117,7 +109,6 @@ async fn collect_detailed_health_info() -> DetailedHealthStatus {
     }
 }
 
-/// 组件健康检查
 pub async fn components_health_check() -> impl IntoResponse {
     let db_connection = system_info::check_database_connection().await;
 
@@ -146,13 +137,11 @@ pub async fn components_health_check() -> impl IntoResponse {
             details: Some("Read/Write operations normal".to_string()),
             response_time_ms: None,
         },
-        // 可以添加更多组件状态
     ];
 
     Json(ComponentsHealth { components })
 }
 
-/// 获取日志统计信息
 pub async fn get_log_stats() -> impl IntoResponse {
     use crate::util::log::get_log_stats;
 
@@ -176,7 +165,6 @@ pub async fn get_log_stats() -> impl IntoResponse {
     }
 }
 
-/// 手动清理日志
 pub async fn cleanup_logs() -> impl IntoResponse {
     use crate::util::log::cleanup_old_logs;
 
@@ -208,7 +196,6 @@ pub async fn cleanup_logs() -> impl IntoResponse {
     }
 }
 
-/// 检查日志系统健康状态
 pub async fn check_log_health() -> impl IntoResponse {
     use crate::util::log::check_log_health;
 
@@ -232,44 +219,38 @@ pub async fn check_log_health() -> impl IntoResponse {
     }
 }
 
-/// 获取预审统计数据 - 简化版本
 pub async fn get_preview_stats(
     State(app_state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
     tracing::info!("获取预审统计数据");
 
-    // 解析查询参数
     let limit = params
         .get("limit")
         .and_then(|s| s.parse::<u32>().ok())
-        .unwrap_or(100); // 默认返回最近100条记录
+        .unwrap_or(100);
 
     let offset = params
         .get("offset")
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0);
 
-    // 构建查询过滤条件
     let filter = PreviewFilter {
-        user_id: None,  // 不过滤用户，显示所有记录
-        status: None,   // 不过滤状态
-        theme_id: None, // 不过滤主题
+        user_id: None,
+        status: None,
+        theme_id: None,
         third_party_request_id: None,
-        start_date: None, // 不过滤开始时间
-        end_date: None,   // 不过滤结束时间
+        start_date: None,
+        end_date: None,
         limit: Some(limit),
         offset: Some(offset),
     };
 
-    // 从数据库获取预审记录
     match app_state.database.list_preview_records(&filter).await {
         Ok(records) => {
-            // 构建简化的统计数据：只包含ID、事项名称、时间
             let stats_data: Vec<serde_json::Value> = records
                 .iter()
                 .map(|record| {
-                    // 尝试从评估结果中提取事项名称
                     let matter_name = if let Some(eval_result) = &record.evaluation_result {
                         if let Ok(eval_data) =
                             serde_json::from_str::<serde_json::Value>(eval_result)
@@ -283,7 +264,6 @@ pub async fn get_preview_stats(
                             record.file_name.clone()
                         }
                     } else {
-                        // 如果没有评估结果，使用文件名作为事项名称
                         record.file_name.clone()
                     };
 
@@ -331,14 +311,12 @@ pub async fn get_preview_stats(
     }
 }
 
-/// 获取预审统计数据
 pub async fn get_preview_statistics(State(app_state): State<AppState>) -> impl IntoResponse {
     tracing::info!(
         target: "monitoring.preview",
         event = "monitoring.preview_stats.fetch"
     );
 
-    // 获取各状态的统计数据
     let statistics = match calculate_preview_statistics(&app_state.database).await {
         Ok(stats) => stats,
         Err(e) => {
@@ -368,12 +346,10 @@ pub async fn get_preview_statistics(State(app_state): State<AppState>) -> impl I
     resp
 }
 
-/// 获取预审记录列表
 pub async fn get_preview_records_list(
     State(app_state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
-    // 解析查询参数
     let page = params
         .get("page")
         .and_then(|p| p.parse::<u32>().ok())
@@ -382,7 +358,7 @@ pub async fn get_preview_records_list(
         .get("size")
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(20)
-        .min(100); // 限制最大页面大小
+        .min(100);
 
     tracing::info!(
         target: "monitoring.preview",
@@ -392,7 +368,6 @@ pub async fn get_preview_records_list(
         has_filters = !params.is_empty()
     );
 
-    // 构建过滤条件
     let mut filter = PreviewFilter {
         user_id: None,
         status: None,
@@ -404,7 +379,6 @@ pub async fn get_preview_records_list(
         offset: None,
     };
 
-    // 状态过滤
     if let Some(status_str) = params.get("status") {
         if !status_str.is_empty() {
             filter.status = match status_str.as_str() {
@@ -418,7 +392,6 @@ pub async fn get_preview_records_list(
         }
     }
 
-    // 日期过滤
     if let Some(date_from) = params.get("date_from") {
         if !date_from.is_empty() {
             if let Ok(dt) = chrono::NaiveDate::parse_from_str(date_from, "%Y-%m-%d") {
@@ -435,11 +408,9 @@ pub async fn get_preview_records_list(
         }
     }
 
-    // 设置分页参数
     filter.limit = Some(size);
     filter.offset = Some((page - 1) * size);
 
-    // 首先获取总数（不带分页的查询）
     let total_filter = PreviewFilter {
         user_id: filter.user_id.clone(),
         status: filter.status.clone(),
@@ -451,7 +422,6 @@ pub async fn get_preview_records_list(
         offset: None,
     };
 
-    // 查询数据
     match app_state.database.list_preview_records(&filter).await {
         Ok(records) => {
             let mut request_cache: HashMap<String, PreviewRequestRecord> = HashMap::new();
@@ -470,15 +440,13 @@ pub async fn get_preview_records_list(
                 }
             }
 
-            // 获取总数用于分页计算
             let total = match app_state.database.list_preview_records(&total_filter).await {
                 Ok(all_records) => all_records.len() as u32,
-                Err(_) => records.len() as u32, // 降级处理
+                Err(_) => records.len() as u32,
             };
 
             let total_pages = (total + size - 1) / size;
 
-            // 增强记录信息
             let enhanced_records: Vec<_> = records
                 .into_iter()
                 .map(|record| {
@@ -538,7 +506,6 @@ pub async fn get_preview_records_list(
     }
 }
 
-/// 获取预审请求列表（聚合视图）
 pub async fn get_preview_requests_list(
     State(app_state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
@@ -684,7 +651,6 @@ pub async fn get_preview_requests_list(
     }))
 }
 
-/// 获取单个预审请求详情（含历史尝试）
 pub async fn get_preview_request_detail(
     State(app_state): State<AppState>,
     Path(request_id): Path<String>,
@@ -771,7 +737,6 @@ pub async fn get_preview_request_detail(
     }))
 }
 
-/// 脱敏用户信息，移除敏感字段
 fn redact_user_info(value: serde_json::Value) -> Option<serde_json::Value> {
     let mut obj = value.as_object()?.clone();
     for key in [
@@ -825,7 +790,6 @@ fn mask_str(input: &str, prefix: usize, suffix: usize) -> String {
     res
 }
 
-/// 获取最近失败的预审记录
 pub async fn get_recent_failed_previews(
     State(app_state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
@@ -870,7 +834,6 @@ pub async fn get_recent_failed_previews(
     }
 }
 
-/// 计算预审统计数据
 pub async fn calculate_preview_statistics(
     database: &Arc<dyn crate::db::Database>,
 ) -> anyhow::Result<serde_json::Value> {
@@ -893,7 +856,6 @@ pub async fn calculate_preview_statistics(
     }))
 }
 
-/// 增强预审记录信息（从evaluation_result中提取matter_name和matter_id）
 pub fn enhance_preview_record(record: PreviewRecord) -> serde_json::Value {
     let user_info = record
         .user_info_json
@@ -924,7 +886,6 @@ pub fn enhance_preview_record(record: PreviewRecord) -> serde_json::Value {
         "matter_id": None::<String>
     });
 
-    // 尝试从evaluation_result中提取matter信息
     if let Some(eval_result) = &record.evaluation_result {
         if let Ok(eval_data) = serde_json::from_str::<serde_json::Value>(eval_result) {
             if let Some(matter_name) = eval_data.get("matter_name").and_then(|v| v.as_str()) {
@@ -1029,7 +990,7 @@ fn format_preview_request_summary(record: PreviewRequestRecord) -> serde_json::V
 
     serde_json::json!({
         "request_id": record.id,
-        "preview_id": record.latest_preview_id, // 预审ID
+        "preview_id": record.latest_preview_id,
         "third_party_request_id": record.third_party_request_id,
         "matter_name": record.matter_name,
         "matter_id": record.matter_id,
@@ -1040,7 +1001,7 @@ fn format_preview_request_summary(record: PreviewRequestRecord) -> serde_json::V
         "user_name": user_name,
         "user_certificate_number": certificate_number,
         "user_phone_number": phone_number,
-        "user_info": None::<serde_json::Value>, // 摘要中不返回完整用户信息
+        "user_info": None::<serde_json::Value>,
         "latest_preview_id": record.latest_preview_id,
         "latest_status": record.latest_status.map(|s| s.as_str().to_string()),
         "created_at": record.created_at.to_rfc3339(),
@@ -1048,10 +1009,9 @@ fn format_preview_request_summary(record: PreviewRequestRecord) -> serde_json::V
     })
 }
 
-/// 获取信号量追踪状态
 pub async fn get_permit_tracker_status() -> impl IntoResponse {
     let active_permits = crate::util::permit_tracker::get_active_permits().await;
-    let leaked_permits = crate::util::permit_tracker::check_leaked_permits(5).await; // 5分钟阈值
+    let leaked_permits = crate::util::permit_tracker::check_leaked_permits(5).await;
 
     let (status_code, recommendations) = if !leaked_permits.is_empty() {
         (
@@ -1110,25 +1070,20 @@ pub async fn get_permit_tracker_status() -> impl IntoResponse {
     Json(status)
 }
 
-/// 获取系统队列状态 - 并发控制监控
-/// 提供OCR处理队列的实时状态信息
 pub async fn get_queue_status(State(app_state): State<AppState>) -> impl IntoResponse {
     tracing::info!(
         target: "monitoring.queue",
         event = "monitoring.queue.fetch"
     );
 
-    // 获取当前信号量状态
     let available_permits = crate::OCR_SEMAPHORE.available_permits();
-    // 从配置获取最大并发数，与实际信号量保持一致
     let max_concurrent = crate::CONFIG
         .concurrency
         .as_ref()
         .map(|c| c.ocr_processing.max_concurrent_tasks as usize)
-        .unwrap_or(6); // 默认6个，与main.rs保持一致
+        .unwrap_or(6);
     let processing_tasks = max_concurrent.saturating_sub(available_permits);
 
-    // 计算系统负载百分比
     let system_load_percent = if max_concurrent > 0 {
         (processing_tasks as f64 / max_concurrent as f64 * 100.0).round()
     } else {
@@ -1164,7 +1119,6 @@ pub async fn get_queue_status(State(app_state): State<AppState>) -> impl IntoRes
     );
 
     let mut data = Map::new();
-    // 入口并发（提交/下载） + OCR池并发
     let (submit_max, submit_available) = {
         let cfg_max = app_state
             .config
@@ -1223,8 +1177,8 @@ pub async fn get_queue_status(State(app_state): State<AppState>) -> impl IntoRes
     data.insert(
         "system_info".to_string(),
         json!({
-            "cpu_cores": num_cpus::get(),  // 动态 CPU 核心数
-            "memory_gb": (crate::util::system_info::get_memory_usage().total_mb as f64 / 1024.0).round(),  // 物理内存
+            "cpu_cores": num_cpus::get(),
+            "memory_gb": (crate::util::system_info::get_memory_usage().total_mb as f64 / 1024.0).round(),
             "concurrency_strategy": "信号量控制"
         }),
     );
@@ -1242,7 +1196,6 @@ pub async fn get_queue_status(State(app_state): State<AppState>) -> impl IntoRes
         }),
     );
 
-    // 如配置启用 NATS，追加 JetStream 队列指标
     if let Some(nats_config) = app_state.config.task_queue.nats.as_ref() {
         let mut jetstream_detail = Map::new();
         jetstream_detail.insert("stream".to_string(), json!(nats_config.stream));
@@ -1310,7 +1263,6 @@ pub async fn get_queue_status(State(app_state): State<AppState>) -> impl IntoRes
         data.insert("jetstream".to_string(), Value::Object(jetstream_detail));
     }
 
-    // Worker 心跳信息
     let heartbeat_snapshot = worker_proxy::collect_worker_heartbeat_snapshot().await;
     let active_worker_ids: HashSet<String> = heartbeat_snapshot
         .iter()
@@ -1353,7 +1305,6 @@ pub async fn get_queue_status(State(app_state): State<AppState>) -> impl IntoRes
         Value::Array(worker_statuses),
     );
 
-    // OCR 流水线阶段指标
     let pipeline_metrics = METRICS_COLLECTOR.get_pipeline_metrics();
     let mut pipeline_entries: Vec<(String, _)> = pipeline_metrics.into_iter().collect();
     pipeline_entries.sort_by(|a, b| a.0.cmp(&b.0));
@@ -1410,7 +1361,6 @@ pub struct AttachmentLoggingUpdateRequest {
     pub slow_threshold_ms: Option<u64>,
 }
 
-/// 动态调整附件日志采样/阈值
 pub async fn update_attachment_logging_settings(
     Json(payload): Json<AttachmentLoggingUpdateRequest>,
 ) -> impl IntoResponse {

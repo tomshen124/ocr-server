@@ -1,4 +1,3 @@
-/* 材料列表样式 */
 .material-item {
     border: 1px solid #e8e8e8;
     border-radius: 6px;
@@ -33,7 +32,6 @@
     gap: 8px;
 }
 
-/* 🖼️ 材料图标样式 - 根据设计稿优化 */
 .material-icon {
     width: 20px;
     height: 20px;
@@ -42,7 +40,6 @@
     border-radius: 3px;
 }
 
-/* 预览图标样式 */
 .preview-icon {
     margin-left: auto;
     cursor: pointer;
@@ -56,7 +53,6 @@
     opacity: 1;
 }
 
-/* 🖼️ 文档预览缩略图 */
 .preview-thumbnail {
     max-width: 200px;
     max-height: 150px;
@@ -72,7 +68,6 @@
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
-/* 材料预览区域 */
 .material-preview {
     padding: 10px 16px;
     border-bottom: 1px solid #eee;
@@ -141,7 +136,6 @@
     background: #f5222d;
 }
 
-/* 增強藍色元素的飽和度 */
 .material-count {
     background: #4a90e2;
     color: white;
@@ -163,7 +157,6 @@
     stroke: #4a90e2;
 }
 
-/* 已通過材料 */
 .passed-item {
     display: flex;
     align-items: center;
@@ -177,7 +170,6 @@
     font-weight: 600;
 }
 
-/* 狀態顯示 */
 .status-display {
     text-align: center;
     padding: 40px;
@@ -210,7 +202,6 @@
     font-size: 14px;
 }
 
-/* 文檔預覽 */
 .document-preview {
     padding: 20px;
     text-align: center;
@@ -229,7 +220,6 @@
     color: #333;
 }
 
-/* 表格預覽 */
 .table-preview {
     padding: 20px;
     overflow-x: auto;
@@ -286,7 +276,6 @@
     font-weight: bold;
 }
 
-/* 營業執照預覽 */
 .license-preview {
     width: 100%;
     max-width: 600px;
@@ -367,7 +356,6 @@
     color: #666;
 }
 
-/* 默認文檔預覽 */
 .default-preview {
     display: flex;
     flex-direction: column;
@@ -382,7 +370,6 @@
     margin-bottom: 20px;
 }
 
-/* 表格摘要 */
 .table-summary {
     margin-top: 20px;
     padding: 16px;
@@ -399,13 +386,11 @@
     margin-bottom: 0;
 }
 
-/* 文檔圖標 */
 .document-icon {
     color: #4a90e2;
     font-size: 14px;
 }
 
-/* 檢查點圖標 */
 .check-point-icon {
     color: #fa8c16;
     font-size: 14px;
@@ -413,7 +398,6 @@
     cursor: help;
 }
 
-/* 輔助樣式 */
 .hover-effect:hover {
     background-color: #f8f9fa;
     transform: translateX(2px);
