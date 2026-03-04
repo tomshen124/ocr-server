@@ -1,73 +1,39 @@
 # OCR Server (Archive)
 
-Rust-based OCR pre-review service. This repository is now archived and is no longer actively maintained.
+Rust OCR pre-review service. This repository is archived.
 
-## 1. Architecture Overview
+## Architecture
+- Flow: request -> download -> OCR -> rule evaluation -> result.
+- API: `src/api/`
+- Processing: `src/util/`
+- Data: `src/db/` (SQLite default, DM via Go gateway)
+- Storage: `src/storage/` (OSS + local fallback)
+- Runtime modes: `standalone` or `master/worker` (NATS)
 
-Core flow: receive preview request -> download source files -> OCR processing -> rule evaluation -> persist/return result.
-
-- API layer: `src/api/` for routing, auth, and request orchestration.
-- Processing layer: `src/util/` for OCR, rule engine, and shared processing utilities.
-- Data layer: `src/db/` with SQLite (default) and DM support through Go Gateway.
-- Storage layer: `src/storage/` with OSS and local fallback.
-- Bootstrap layer: `src/server/` and `src/main.rs` for startup and runtime mode control.
-
-Runtime modes:
-- `standalone`: single-node mode (default).
-- `master/worker`: distributed mode with NATS JetStream task distribution.
-
-## 2. Build and Packaging
-
-Only one build script is retained:
-- `scripts/build.sh`
-
-Common build commands:
+## Build
+Only retained build script: `scripts/build.sh`
 
 ```bash
-# Local release build
 cargo build --release
-
-# Unified script (native build)
 ./scripts/build.sh --prod-native
-
-# Unified script (musl static build)
 ./scripts/build.sh --prod
-
-# Build and package release output
 ./scripts/build.sh -m release -t native -p
-
-# Container-based build (run build.sh inside image)
-docker run --rm -it -v "$(pwd)":/workspace -w /workspace rust:1.82 \
-  bash -lc "./scripts/build.sh --prod-native"
 ```
 
-Main output locations:
-- `target/` (compiler output)
-- `build/` (script-generated package output)
+Build outputs:
+- `target/`
+- `build/`
 
-## 3. Deployment
-
-### Single-node Deployment (recommended minimal setup)
-
-1. Copy template config: `cp config/config.template.yaml config/config.yaml`
-2. Update settings for your environment (database, OSS, concurrency, auth).
-3. Override sensitive values with environment variables (for example `DB_PASSWORD`, `OSS_ACCESS_SECRET`, `DM_GATEWAY_API_KEY`).
-4. Start the binary:
-
+## Deploy
 ```bash
+cp config/config.template.yaml config/config.yaml
 ./target/release/ocr-server
 ```
 
-Default port: `8964`  
-Health endpoint: `GET /api/health`
+- Default port: `8964`
+- Health: `GET /api/health`
+- Use env vars for secrets (`DB_PASSWORD`, `DM_GATEWAY_API_KEY`, `OSS_ACCESS_SECRET`)
 
-### Distributed Deployment (optional)
-
-- Enable `distributed.enabled=true` in config.
-- Set role to `master` or `worker`.
-- Configure NATS server address (for example `nats://host:4222`).
-
-## 4. Retained Repository Scope
-
-- Retained: core source code, config templates, OCR assets, build script.
-- Removed: test pages/scripts, non-essential operation/helper scripts, and split documentation files.
+## Scope
+- Retained: core source, config templates, OCR assets, `scripts/build.sh`
+- Removed: test pages/scripts and non-essential helper scripts/docs
