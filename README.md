@@ -19,8 +19,8 @@ This project is designed to support AI-powered automation workflows and develope
 - Preview/report workflow with HTML and PDF outputs
 - Health, monitoring, queue, and failover endpoints
 - Standalone, master, worker, and hybrid deployment roles
-- Bundled OCR runtime assets under [`ocr/`](/Users/xiaopang/ocr-server-src/ocr)
-- Config templates and production build script under [`scripts/build.sh`](/Users/xiaopang/ocr-server-src/scripts/build.sh)
+- Bundled OCR runtime assets under [`ocr/`](./ocr)
+- Config templates and production build script under [`scripts/build.sh`](./scripts/build.sh)
 
 ## Installation
 
@@ -70,7 +70,7 @@ The service reads `config/config.yaml` when present and supports environment ove
 - `DM_GATEWAY_API_KEY`
 - `OSS_ACCESS_SECRET`
 
-See [`config/config.template.yaml`](/Users/xiaopang/ocr-server-src/config/config.template.yaml) for the full template.
+See [`config/config.template.yaml`](./config/config.template.yaml) for the full template.
 
 ## API Example
 
@@ -82,7 +82,7 @@ curl http://127.0.0.1:8964/api/health
 
 ### Preview Workflow Request
 
-Use the sample payload in [`examples/preview-request.json`](/Users/xiaopang/ocr-server-src/examples/preview-request.json):
+Use the sample payload in [`examples/preview-request.json`](./examples/preview-request.json):
 
 ```bash
 curl -X POST \
@@ -93,7 +93,7 @@ curl -X POST \
 
 ### OCR Upload Request
 
-The repository includes a sample image at [`examples/test.png`](/Users/xiaopang/ocr-server-src/examples/test.png):
+The repository includes a sample image at [`examples/test.png`](./examples/test.png):
 
 ```bash
 curl -X POST \
@@ -103,7 +103,7 @@ curl -X POST \
 
 In the current server layout, `/api/upload` is part of the authenticated application routes.
 
-Additional endpoint notes are documented in [`docs/api.md`](/Users/xiaopang/ocr-server-src/docs/api.md).
+Additional endpoint notes are documented in [`docs/api.md`](./docs/api.md).
 
 ## Docker Deployment
 
@@ -156,8 +156,8 @@ ocr-server-src/
 
 ## Contributing
 
-Pull requests are welcome. See [`CONTRIBUTING.md`](/Users/xiaopang/ocr-server-src/CONTRIBUTING.md) for the expected workflow.
+Pull requests are welcome. See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the expected workflow.
 
 ## License
 
-This project is available under the [`MIT License`](/Users/xiaopang/ocr-server-src/LICENSE).
+This project is available under the [`MIT License`](./LICENSE).

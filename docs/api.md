@@ -46,7 +46,7 @@ Creates a preview/OCR processing task from structured document metadata and atta
 Input:
 
 - JSON body
-- See [`examples/preview-request.json`](/Users/xiaopang/ocr-server-src/examples/preview-request.json)
+- See [`examples/preview-request.json`](../examples/preview-request.json)
 - Main fields: `agentInfo`, `subjectInfo`, `materialData`, `matterId`, `matterName`, `matterType`, `sequenceNo`
 
 Auth behavior:
@@ -105,5 +105,5 @@ The repository also exposes operational endpoints such as:
 
 ## Example Assets
 
-- Sample OCR input image: [`examples/test.png`](/Users/xiaopang/ocr-server-src/examples/test.png)
-- Sample preview request body: [`examples/preview-request.json`](/Users/xiaopang/ocr-server-src/examples/preview-request.json)
+- Sample OCR input image: [`examples/test.png`](../examples/test.png)
+- Sample preview request body: [`examples/preview-request.json`](../examples/preview-request.json)
