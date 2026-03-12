@@ -1,0 +1,51 @@
+{
+  "agentInfo": {
+    "userId": "7609052",
+    "certificateType": "ID_CARD",
+    "certificateNumber": "330682199001241434",
+    "phoneNumber": "15906690637",
+    "name": "沈刚",
+    "nickName": "xiyue1",
+    "companyName": "浙江熙唐智慧城市科技有限公司",
+    "creditCode": "91330106MA2HXFY97H",
+    "address": "浙江省杭州市西湖区紫荆花路108号251室",
+    "authLevel": "3",
+    "userType": "LEGAL_UAA",
+    "loginType": "zlbscan",
+    "extInfos": {
+      "CompanyLegRep": "奚跃"
+    }
+  },
+  "subjectInfo": {
+    "userId": "7609052",
+    "certificateType": "ID_CARD",
+    "certificateNumber": "330682199001241434",
+    "phoneNumber": "15906690637",
+    "name": "沈刚",
+    "companyName": "浙江熙唐智慧城市科技有限公司",
+    "creditCode": "91330106MA2HXFY97H"
+  },
+  "channel": "pc",
+  "copy": true,
+  "formData": [],
+  "materialData": [
+    {
+      "code": "self.105100813",
+      "name": "营业执照（社会统一信用代码证）",
+      "attachmentList": [
+        {
+          "attaName": "license.jpg",
+          "attaUrl": "https://example.com/license.jpg",
+          "isCloudShare": true
+        }
+      ],
+      "required": true
+    }
+  ],
+  "matterId": "MATTER-001",
+  "matterName": "企业设立登记",
+  "matterType": "审批",
+  "requestId": "REQ-20260312-0001",
+  "sequenceNo": "SEQ-20260312-0001",
+  "sceneData": []
+}

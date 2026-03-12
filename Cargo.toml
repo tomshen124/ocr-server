@@ -3,6 +3,10 @@ name = "ocr-server"
 version = "1.4.0"
 edition = "2021"
 build = "build.rs"
+license = "MIT"
+description = "Lightweight OCR API server for image text extraction and automation workflows."
+keywords = ["ocr", "api", "automation", "document-processing"]
+categories = ["web-programming::http-server", "multimedia::images"]
 
 [[bin]]
 name = "ocr-server"
